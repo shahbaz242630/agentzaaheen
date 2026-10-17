@@ -1,0 +1,63 @@
+# Yaqzan: this repository holds CODE ONLY (ADR-014).
+# Docs, plans, handoffs, research, runbooks, project configs and secrets
+# live outside this repo and must never be committed.
+
+# --- never commit: documentation and admin material ---
+*.md
+!src/yaqzan/plugins/skills/**/SKILL.md
+!src/yaqzan/plugins/agents/**/prompt.md
+docs/
+research/
+runbooks/
+notes/
+*.docx
+*.pdf
+*.pptx
+*.xlsx
+*.html
+HANDOFF*
+PRD*
+BRD*
+
+# --- never commit: secrets and credentials ---
+.env
+.env.*
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.age
+*secret*
+*credential*
+!src/yaqzan/core/vault/**
+service-account*.json
+*.local.*
+
+# --- never commit: real project configuration and recorded vendor data ---
+projects/
+*.project.yaml
+recordings/
+
+# --- build, cache, tooling ---
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.json
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+node_modules/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/
