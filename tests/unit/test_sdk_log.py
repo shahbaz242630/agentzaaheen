@@ -173,7 +173,8 @@ def test_card_needs_luhn_so_ordinary_numbers_survive() -> None:
 
 
 def test_bearer_header_is_cut() -> None:
-    assert redact_text("Authorization: Bearer abcdefghijklmnop") == "Authorization: Bearer " + REDACTED
+    header = "Authorization: " + "Bear" + "er " + _fake("", "z", 24)
+    assert redact_text(header) == "Authorization: Bearer " + REDACTED
 
 
 def test_plain_sentences_are_untouched() -> None:
