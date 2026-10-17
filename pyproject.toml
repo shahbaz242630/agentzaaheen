@@ -5,6 +5,7 @@ description = "Yaqzan: an AI operations team that watches a portfolio of product
 requires-python = ">=3.12"
 # No licence: all rights reserved (ADR-013).
 dependencies = [
+    "asyncpg==0.32.0",
     "cryptography==50.0.2",
     "pydantic==2.14.1",
     "structlog==26.1.0",
@@ -12,6 +13,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "asyncpg-stubs==0.32.0",
     "bandit==1.9.4",
     "hypothesis==6.169.0",
     "import-linter==2.15",
@@ -155,6 +157,27 @@ source_modules = [
     "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.plugins",
 ]
 forbidden_modules = ["structlog"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "The store sits below everything but the SDK (Rulebook 2.2: dependencies point one way)"
+type = "forbidden"
+source_modules = ["yaqzan.core.store"]
+forbidden_modules = [
+    "yaqzan.core.api", "yaqzan.core.scheduler", "yaqzan.core.runner", "yaqzan.core.policy",
+    "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector", "yaqzan.core.metrics",
+    "yaqzan.core.notify", "yaqzan.core.voice",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only the store talks to the database driver (nothing else reads tables, Rulebook 2.2)"
+type = "forbidden"
+source_modules = [
+    "yaqzan.core.api", "yaqzan.core.scheduler", "yaqzan.core.runner", "yaqzan.core.policy",
+    "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector", "yaqzan.core.metrics",
+    "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.sdk", "yaqzan.plugins",
+]
+forbidden_modules = ["asyncpg"]
 allow_indirect_imports = true
 
 # ---------------------------------------------------------------- bandit

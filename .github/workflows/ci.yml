@@ -45,7 +45,11 @@ jobs:
         run: uv run mypy
       - name: Module boundaries
         run: uv run lint-imports
-      - name: Tests
+      - name: Start throwaway Postgres (same hardened container as on the laptop)
+        run: uv run python -m tools.dev_db up
+      - name: Tests (database tests must run here, never skip)
+        env:
+          YAQZAN_REQUIRE_DB: "1"
         run: uv run pytest
       - name: Coverage floors per file
         run: uv run python -m tools.coverage_gate
