@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from uuid import uuid4
 
 import asyncpg
@@ -172,7 +173,8 @@ def test_every_table_carries_a_tenant(test_db: ScratchDb) -> None:
 
 
 def test_wrong_password_is_unavailable_and_leaks_nothing(test_db: ScratchDb) -> None:
-    bad = test_db.server.url("yaqzan_app_test", "wrong-password-123", test_db.name)
+    wrong = secrets.token_hex(8)
+    bad = test_db.server.url("yaqzan_app_test", wrong, test_db.name)
 
     async def body() -> None:
         await Database.open(DatabaseSettings(dsn=SecretStr(bad), connect_timeout_s=5))
@@ -180,11 +182,11 @@ def test_wrong_password_is_unavailable_and_leaks_nothing(test_db: ScratchDb) -> 
     with pytest.raises(StoreError) as caught:
         run(body())
     assert caught.value.code is StoreErrorCode.UNAVAILABLE
-    assert "wrong-password-123" not in str(caught.value)
+    assert wrong not in str(caught.value)
 
 
 def test_nothing_listening_is_unavailable() -> None:
-    url = f"postgresql://nobody:pw@127.0.0.1:1/{uuid4().hex}"
+    url = f"postgresql://nobody:{secrets.token_hex(4)}@127.0.0.1:1/{uuid4().hex}"
 
     async def body() -> None:
         await Database.open(DatabaseSettings(dsn=SecretStr(url), connect_timeout_s=2))
