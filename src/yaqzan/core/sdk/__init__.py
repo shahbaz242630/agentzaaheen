@@ -2,14 +2,17 @@
 
 What it does:
     Defines the shared shapes (events, findings, actions, run records, tool
-    declarations), the small rules that travel with them (data class only goes
-    up, taint spreads) and the one redacting logger every module and plugin uses.
+    declarations, the revenue shapes Subscription/Payment/Refund and the
+    protocols a connector implements), the small rules that travel with them
+    (data class only goes up, taint spreads) and the one redacting logger
+    every module and plugin uses.
 
 Public interface:
     Everything listed in ``__all__`` below. Nothing else is public.
 
 How to test:
     ``uv run pytest tests/unit/test_sdk_models.py tests/unit/test_sdk_log.py``
+    ``uv run pytest tests/unit/test_sdk_revenue.py``
 
 Must never:
     Import any other core module, touch the database, the network or secrets.
@@ -37,6 +40,22 @@ from yaqzan.core.sdk.models import (
     make_idempotency_key,
     max_data_class,
 )
+from yaqzan.core.sdk.revenue import (
+    BillingCycle,
+    Interval,
+    JsonGetter,
+    Payment,
+    PaymentStatus,
+    Refund,
+    RefundKind,
+    RefundStatus,
+    RevenueBatch,
+    RevenueSource,
+    SourceError,
+    SourceErrorCode,
+    Subscription,
+    SubscriptionStatus,
+)
 from yaqzan.core.sdk.tools import ToolLevel, ToolSpec
 
 __all__ = [
@@ -45,16 +64,30 @@ __all__ = [
     "Action",
     "ActionLevel",
     "ActionStatus",
+    "BillingCycle",
     "DataClass",
     "Event",
     "Evidence",
     "Finding",
     "FindingKind",
     "FindingStatus",
+    "Interval",
+    "JsonGetter",
     "ModelInfo",
+    "Payment",
+    "PaymentStatus",
+    "Refund",
+    "RefundKind",
+    "RefundStatus",
+    "RevenueBatch",
+    "RevenueSource",
     "RunOutcome",
     "RunRecord",
     "Severity",
+    "SourceError",
+    "SourceErrorCode",
+    "Subscription",
+    "SubscriptionStatus",
     "ToolLevel",
     "ToolSpec",
     "Trust",

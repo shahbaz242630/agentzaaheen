@@ -123,7 +123,7 @@ def call(tool: str, target: Target | None = None, **args: object) -> ToolCall:
     return ToolCall(run_id=RUN, tool=tool, args=args, target=target)
 
 
-def run(  # noqa: PLR0913  # test helper mirroring decide()'s inputs
+def run(  # test helper mirroring decide()'s inputs
     the_call: ToolCall,
     *,
     the_agent: AgentPolicy | None = None,
