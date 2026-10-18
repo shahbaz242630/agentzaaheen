@@ -53,6 +53,7 @@ export function ProjectList({ projects, selected, onSelect }: Props) {
                     title={`${project.escalations} escalated to you`}
                   >
                     {project.escalations}
+                    <span className="sr-only"> escalated to you</span>
                   </span>
                 )}
               </button>

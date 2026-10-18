@@ -84,7 +84,10 @@ export function App() {
               Could not load the projects. Is the dashboard server running?
             </p>
           )}
-          {projects.state === "ready" && (
+          {projects.state === "ready" && projects.data.length === 0 && (
+            <p className="p-3 text-sm text-muted">No projects yet.</p>
+          )}
+          {projects.state === "ready" && projects.data.length > 0 && (
             <ProjectList projects={projects.data} selected={selected} onSelect={select} />
           )}
         </aside>

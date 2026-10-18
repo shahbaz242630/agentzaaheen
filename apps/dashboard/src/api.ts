@@ -26,16 +26,27 @@ export type Metric = z.infer<typeof Metric>;
 export const Entry = z.strictObject({ text: z.string(), tone: Tone, at: time.nullable() });
 export type Entry = z.infer<typeof Entry>;
 
-export const Card = z.strictObject({
-  id: slug,
-  title: z.string(),
-  source: z.string(),
-  freshness: Freshness,
-  last_success_at: time.nullable(),
-  sample: z.boolean(),
-  metrics: z.array(Metric),
-  entries: z.array(Entry),
-});
+// The UI enforces the same two card rules as the API (PRD F1.7), so a stale
+// number can never be shown even if a future server forgets to check.
+export const Card = z
+  .strictObject({
+    id: slug,
+    title: z.string(),
+    source: z.string(),
+    freshness: Freshness,
+    last_success_at: time.nullable(),
+    sample: z.boolean(),
+    metrics: z.array(Metric),
+    entries: z.array(Entry),
+  })
+  .superRefine((card, ctx) => {
+    if (card.freshness !== "fresh" && card.metrics.some((m) => m.value.kind !== "unknown")) {
+      ctx.addIssue({ code: "custom", message: `card ${card.id} is ${card.freshness}: numbers must be unknown` });
+    }
+    if (card.freshness === "never" && card.last_success_at !== null) {
+      ctx.addIssue({ code: "custom", message: `card ${card.id} never synced but has a last success time` });
+    }
+  });
 export type Card = z.infer<typeof Card>;
 
 export const Health = z.enum(["ok", "warn", "alert", "unknown"]);
@@ -64,7 +75,14 @@ export const ModelChoice = z.strictObject({
 });
 export type ModelChoice = z.infer<typeof ModelChoice>;
 
-export const ModelList = z.strictObject({ models: z.array(ModelChoice) });
+// Exactly one default model, and it is local (ADR-023).
+export const ModelList = z.strictObject({ models: z.array(ModelChoice) }).refine(
+  ({ models }) => {
+    const defaults = models.filter((m) => m.default);
+    return defaults.length === 1 && defaults[0]?.where === "local";
+  },
+  { message: "there must be exactly one default model, and it must be local" },
+);
 
 export class ApiError extends Error {
   constructor(readonly path: string, readonly status: number | null) {

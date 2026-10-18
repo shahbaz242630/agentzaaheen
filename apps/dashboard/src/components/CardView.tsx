@@ -35,10 +35,10 @@ export function CardView({ card, now }: Props) {
 
       {card.metrics.length > 0 && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-          {card.metrics.map((metric) => {
+          {card.metrics.map((metric, index) => {
             const unknown = metric.value.kind === "unknown";
             return (
-              <div key={metric.label} className="min-w-0">
+              <div key={`${index}-${metric.label}`} className="min-w-0">
                 <dt className="truncate text-xs text-muted">{metric.label}</dt>
                 <dd
                   className={`mt-0.5 text-2xl font-semibold tracking-tight tabular ${unknown ? "text-unknown" : "text-ink"}`}

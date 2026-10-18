@@ -33,7 +33,8 @@ interface Props {
 }
 
 export function ChatPanel({ models, projectName }: Props) {
-  const fallback = models.find((m) => m.default) ?? models[0];
+  // Never fall back to an arbitrary (possibly cloud) model: only the local default.
+  const fallback = models.find((m) => m.default && m.where === "local");
   const [modelId, setModelId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -86,7 +87,11 @@ export function ChatPanel({ models, projectName }: Props) {
               </option>
             ))}
           </select>
-          {model && <p className="text-xs text-faint">{model.note}</p>}
+          {model ? (
+            <p className="text-xs text-faint">{model.note}</p>
+          ) : (
+            <p className="text-xs text-faint">No model list yet. The chat still answers that it is not connected.</p>
+          )}
         </div>
       </header>
 

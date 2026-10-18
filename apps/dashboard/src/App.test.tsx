@@ -83,6 +83,53 @@ describe("the dashboard", () => {
   });
 });
 
+describe("the UI enforces the API's rules too", () => {
+  const zaaheen = sample.details.zaaheen;
+
+  it("refuses a stale card that carries a number", async () => {
+    const stale = {
+      ...zaaheen,
+      cards: zaaheen.cards.map((card) => (card.id === "paddle" ? { ...card, freshness: "stale" } : card)),
+    };
+    serve((path) =>
+      path === "/api/projects/zaaheen" ? new Response(JSON.stringify(stale), { status: 200 }) : undefined,
+    );
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load this project");
+    expect(screen.queryByText("$1,240")).not.toBeInTheDocument();
+  });
+
+  it("refuses a card that never synced but claims a last success", async () => {
+    const eva = sample.details.eva;
+    const odd = {
+      ...eva,
+      cards: eva.cards.map((card) => ({ ...card, last_success_at: "2026-10-18T11:00:00Z" })),
+    };
+    serve((path) => (path === "/api/projects/eva" ? new Response(JSON.stringify(odd), { status: 200 }) : undefined));
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: /Eva/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load this project");
+  });
+
+  it.each([
+    ["a cloud default", (m: { id: string }) => ({ default: m.id === "cloud-claude" })],
+    ["no default", () => ({ default: false })],
+  ])("refuses a model list with %s and never pre-selects a cloud model", async (_name, change) => {
+    const models = { models: sample.models.models.map((m) => ({ ...m, ...change(m) })) };
+    serve((path) => (path === "/api/models" ? new Response(JSON.stringify(models), { status: 200 }) : undefined));
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Zaaheen" });
+    expect(screen.queryByRole("option", { name: /Claude/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/No model list yet/)).toBeInTheDocument();
+  });
+
+  it("says so when there are no projects", async () => {
+    serve((path) => (path === "/api/projects" ? new Response("[]", { status: 200 }) : undefined));
+    render(<App />);
+    expect(await screen.findByText("No projects yet.")).toBeInTheDocument();
+  });
+});
+
 describe("the chat", () => {
   it("defaults to the local model and lists cloud ones as not connected", async () => {
     render(<App />);
