@@ -7,9 +7,11 @@ requires-python = ">=3.12"
 dependencies = [
     "asyncpg==0.32.0",
     "cryptography==50.0.2",
+    "fastapi==0.143.0",
     "httpx==0.28.1",
     "pydantic==2.14.1",
     "structlog==26.1.0",
+    "uvicorn==0.54.0",
 ]
 
 [dependency-groups]
@@ -82,7 +84,11 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q --strict-markers --cov=yaqzan --cov=tools --cov-branch --cov-report=term-missing --cov-report=json"
 norecursedirs = [".*", "*.egg", "build", "dist", "node_modules", ".venv", "tests/gate_proofs/fixtures"]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # Starlette 1.8 asks for its httpx fork in the test client; plain httpx still works (tests only).
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 [tool.coverage.run]
 branch = true
@@ -197,6 +203,17 @@ source_modules = [
 ]
 forbidden_modules = ["httpx", "httpcore", "urllib3", "http", "socket", "ssl"]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Only the API serves the web (one place with routes, headers and the host allowlist)"
+type = "forbidden"
+source_modules = [
+    "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner", "yaqzan.core.policy",
+    "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector", "yaqzan.core.metrics",
+    "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net", "yaqzan.core.broker",
+    "yaqzan.core.sdk", "yaqzan.plugins",
+]
+forbidden_modules = ["fastapi", "starlette", "uvicorn"]
 
 [[tool.importlinter.contracts]]
 name = "The network module never opens credentials: keys reach it only as secret headers"

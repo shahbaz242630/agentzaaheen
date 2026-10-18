@@ -22,6 +22,14 @@ from tools import path_guard
         ".github/workflows/ci.yml",
         "./pyproject.toml",
         "src\\yaqzan\\core\\sdk\\models.py",
+        "apps/dashboard/index.html",
+        "apps/dashboard/package-lock.json",
+        "apps/dashboard/.npmrc",
+        "apps/dashboard/src/App.tsx",
+        "apps/dashboard/src/components/ChatPanel.tsx",
+        "apps/dashboard/src/index.css",
+        "apps/dashboard/src/contract/sample.json",
+        "apps/dashboard/public/favicon.svg",
     ],
 )
 def test_code_is_allowed(path: str) -> None:
@@ -54,6 +62,14 @@ def test_code_is_allowed(path: str) -> None:
         "random.txt",
         ".github/workflows/ci.yaml.bak",
         "src/yaqzan/plugins/agents/support/extra/prompt.md",
+        # the dashboard: build output, notes and stray data stay out
+        "apps/dashboard/dist/index.html",
+        "apps/dashboard/dist/assets/index.js",
+        "apps/dashboard/README.md",
+        "apps/dashboard/src/notes.md",
+        "apps/dashboard/src/data/customers.json",
+        "apps/dashboard/node_modules/react/index.js",
+        "apps/dashboard/.env",
     ],
 )
 def test_everything_else_is_rejected(path: str) -> None:

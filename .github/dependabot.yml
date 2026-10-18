@@ -20,3 +20,14 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  - package-ecosystem: "npm"
+    directory: "/apps/dashboard"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      dashboard-dependencies:
+        patterns: ["*"]
+    open-pull-requests-limit: 5

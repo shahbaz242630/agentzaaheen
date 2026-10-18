@@ -15,6 +15,7 @@ notes/
 *.pptx
 *.xlsx
 *.html
+!apps/dashboard/index.html
 HANDOFF*
 PRD*
 BRD*
@@ -56,6 +57,7 @@ dist/
 build/
 *.egg-info/
 node_modules/
+.playwright-mcp/
 .DS_Store
 Thumbs.db
 .idea/

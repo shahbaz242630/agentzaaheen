@@ -1,0 +1,137 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { App } from "./App";
+import { notConnectedReply } from "./components/ChatPanel";
+import sample from "./contract/sample.json";
+
+function answer(path: string): unknown {
+  if (path === "/api/projects") return sample.projects;
+  if (path === "/api/models") return sample.models;
+  const id = decodeURIComponent(path.replace("/api/projects/", ""));
+  return (sample.details as Record<string, unknown>)[id];
+}
+
+function serve(override?: (path: string) => Response | undefined) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((path: string) => {
+      const custom = override?.(path);
+      if (custom) return Promise.resolve(custom);
+      return Promise.resolve(new Response(JSON.stringify(answer(path)), { status: 200 }));
+    }),
+  );
+}
+
+beforeEach(() => {
+  serve();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("the dashboard", () => {
+  it("lists the projects and opens the first one", async () => {
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Projects" });
+    const names = within(nav)
+      .getAllByRole("button")
+      .map((button) => button.textContent);
+    expect(names).toEqual([
+      expect.stringContaining("Zaaheen"),
+      expect.stringContaining("Sandoq Kin"),
+      expect.stringContaining("Agent X"),
+      expect.stringContaining("Eva"),
+    ]);
+    expect(await screen.findByRole("heading", { level: 1, name: "Zaaheen" })).toBeInTheDocument();
+    expect(screen.getByText(/Sample data/)).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Support email" })).toHaveTextContent("Responded23");
+  });
+
+  it("switches project when one is clicked", async () => {
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: /Agent X/ }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Agent X" })).toBeInTheDocument();
+    expect(screen.getByText("99.95%")).toBeInTheDocument();
+  });
+
+  it("shows unknown, never 0, for a source that is not connected", async () => {
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: /Eva/ }));
+    const revenue = await screen.findByRole("article", { name: "Revenue" });
+    expect(revenue).toHaveTextContent("Not connected yet");
+    expect(within(revenue).getAllByText("unknown")).toHaveLength(2);
+    expect(revenue).not.toHaveTextContent(/\b0\b/);
+  });
+
+  it("says so when the server cannot be reached", async () => {
+    serve(() => new Response("{}", { status: 500 }));
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load the projects");
+  });
+
+  it("refuses an answer that breaks the contract", async () => {
+    serve((path) =>
+      path === "/api/projects"
+        ? new Response(JSON.stringify([{ ...sample.projects[0], email: "a@b.c" }]), { status: 200 })
+        : undefined,
+    );
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load the projects");
+  });
+});
+
+describe("the chat", () => {
+  it("defaults to the local model and lists cloud ones as not connected", async () => {
+    render(<App />);
+    await screen.findByRole("option", { name: /Gemma/ });
+    expect(screen.getByLabelText("Model")).toHaveDisplayValue(/Gemma \(our server\) · default/);
+    expect(screen.getByRole("option", { name: /Claude \(cloud\) · not connected/ })).toBeInTheDocument();
+  });
+
+  it("answers honestly that no model is connected yet", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Zaaheen" });
+    await userEvent.type(screen.getByLabelText("Message"), "Summarise yesterday's actions{Enter}");
+    expect(screen.getByText("Summarise yesterday's actions")).toBeInTheDocument();
+    expect(screen.getByText(/so I can.t answer for real/)).toHaveTextContent("Zaaheen");
+    expect(screen.getByLabelText("Message")).toHaveValue("");
+  });
+
+  it("follows the model picked in the menu", async () => {
+    render(<App />);
+    await screen.findByRole("option", { name: /Claude/ });
+    await userEvent.selectOptions(screen.getByLabelText("Model"), "cloud-claude");
+    await userEvent.type(screen.getByLabelText("Message"), "hello{Enter}");
+    expect(screen.getByText(/^Claude \(cloud\) is not connected yet/)).toBeInTheDocument();
+  });
+
+  it("sends a suggestion with one click and keeps voice switched off", async () => {
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "What is escalated to me?" }));
+    expect(screen.getByText("What is escalated to me?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Voice (coming later)" })).toBeDisabled();
+  });
+
+  it("ignores an empty message", async () => {
+    render(<App />);
+    const input = await screen.findByLabelText("Message");
+    await userEvent.type(input, "   {Enter}");
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.queryByText(/so I can.t answer for real/)).not.toBeInTheDocument();
+  });
+
+  it("shows text exactly as written, never as HTML", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Zaaheen" });
+    await userEvent.type(screen.getByLabelText("Message"), "<b>bold</b>{Enter}");
+    expect(screen.getByText("<b>bold</b>")).toBeInTheDocument();
+    expect(document.querySelector("b")).toBeNull();
+  });
+
+  it("words the reply without a model or a project", () => {
+    expect(notConnectedReply(undefined, null)).toMatch(/^The model is not connected yet.*your projects/);
+  });
+});
