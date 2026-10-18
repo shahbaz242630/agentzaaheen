@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from yaqzan.core.metrics import Freshness
+from yaqzan.core.broker import BrokerErrorCode
+from yaqzan.core.metrics import Freshness, KeyHealth
 from yaqzan.core.net import NetErrorCode
 from yaqzan.core.scheduler.collect import _CRASHED, _where
 from yaqzan.core.sdk import KNOWN_CODES, SourceError, SourceErrorCode, explain
@@ -12,7 +13,8 @@ from yaqzan.core.store import StoreError, StoreErrorCode
 from yaqzan.core.vault import VaultErrorCode
 
 RAISED = sorted(
-    {c.value for c in (*NetErrorCode, *SourceErrorCode, *StoreErrorCode, *VaultErrorCode)}
+    {c.value for c in (*NetErrorCode, *SourceErrorCode, *StoreErrorCode, *VaultErrorCode, *BrokerErrorCode)}
+    | {h.code for h in KeyHealth if h.severity is not None}
     | {f"freshness.{f.value}" for f in Freshness if not f.usable}
     | {_CRASHED, "policy.bad_switch_row"}
 )

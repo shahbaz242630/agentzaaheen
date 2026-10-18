@@ -200,6 +200,32 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
         "It was sealed by a newer or damaged version.",
         "Save the secret again. " + _TELL_IF_REPEATS,
     ),
+    # ---- credentials: the key-expiry check and the broker
+    "credential.expiring": (
+        "The {vendor} API key expires within 14 days.",
+        "Vendor keys are issued with an end date; after it, every sync will fail.",
+        _NEW_KEY + " Do it before the date shown.",
+    ),
+    "credential.expired": (
+        "The {vendor} API key has expired, so {vendor} numbers will stop updating.",
+        "The key passed its end date.",
+        _NEW_KEY,
+    ),
+    "credential.refused": (
+        "{vendor} refused our API key on the last sync.",
+        "The key has expired, was revoked, or lost read permission.",
+        _NEW_KEY,
+    ),
+    "credential.no_date": (
+        "We do not know when the {vendor} API key expires.",
+        "No end date was recorded when the key was saved.",
+        "Look up the key's end date in {vendor} and save the key again with that date.",
+    ),
+    "credential.missing": (
+        "No {vendor} API key is saved, so {vendor} cannot be read.",
+        "The key was never saved for this project, or was removed.",
+        _NEW_KEY,
+    ),
     # ---- collector, freshness, policy
     "collect.crashed": (
         "The {vendor} sync crashed.",

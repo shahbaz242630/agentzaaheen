@@ -162,6 +162,8 @@ def test_sealed_secrets_table_has_no_place_for_plaintext(test_db: ScratchDb) -> 
         "wrapped_dek": "bytea",
         "ciphertext": "bytea",
         "updated_at": "timestamp with time zone",
+        "expires_at": "timestamp with time zone",
+        "access": "text",  # a fixed choice (CHECK), not free text
     }
 
 
