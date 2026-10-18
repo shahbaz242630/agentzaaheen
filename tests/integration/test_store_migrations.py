@@ -37,7 +37,7 @@ def test_app_can_check_the_schema_at_start_up(test_db: ScratchDb) -> None:
 
 
 def test_changed_past_migration_is_refused(test_db: ScratchDb) -> None:
-    edited = (Migration(1, MIGRATIONS[0].name, MIGRATIONS[0].sql + "\n-- quietly edited"),)
+    edited = (Migration(1, MIGRATIONS[0].name, MIGRATIONS[0].sql + "\n-- quietly edited"), *MIGRATIONS[1:])
 
     async def body() -> None:
         async with open_db(test_db.owner_url) as db:

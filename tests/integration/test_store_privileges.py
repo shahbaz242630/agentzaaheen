@@ -32,6 +32,11 @@ async def _app_executes(url: str, statement: str) -> None:
         "DELETE FROM yaqzan.runs",
         "UPDATE yaqzan.actions SET status = 'approved'",
         "DELETE FROM yaqzan.kill_switches",
+        "DELETE FROM yaqzan.revenue_subscriptions",
+        "DELETE FROM yaqzan.revenue_payments",
+        "DELETE FROM yaqzan.revenue_refunds",
+        "DELETE FROM yaqzan.source_syncs",
+        "TRUNCATE yaqzan.revenue_payments",
         "INSERT INTO yaqzan.schema_migrations (version, name, checksum) VALUES (99, 'x', 'y')",
         "CREATE TABLE yaqzan.sneaky (id int)",
         "ALTER TABLE yaqzan.audit_log DISABLE TRIGGER ALL",
@@ -93,6 +98,7 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         return granted
 
     read_add = {"SELECT", "INSERT"}
+    mirror = {"SELECT", "INSERT", "UPDATE"}  # vendor state changes; history is never deleted
     assert run(body()) == {
         "schema_migrations": {"SELECT"},
         "events": read_add,
@@ -102,6 +108,10 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "audit_log": read_add,
         "sealed_secrets": {"SELECT", "INSERT", "UPDATE", "DELETE"},
         "kill_switches": {"SELECT", "INSERT", "UPDATE"},
+        "revenue_subscriptions": mirror,
+        "revenue_payments": mirror,
+        "revenue_refunds": mirror,
+        "source_syncs": mirror,
     }
 
 
