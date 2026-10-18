@@ -4,12 +4,13 @@ What it does (so far):
     Runs one revenue collector (:func:`sync_revenue`): fetch, save, and record
     success or the failure reason; and builds a project's revenue numbers from
     stored rows (:func:`revenue_snapshot`), all ``Unknown`` when the data is
-    stale; and checks every saved key's expiry once a day (:func:`check_keys`).
+    stale (:func:`snapshot_from_rows` does the same for rows already in hand);
+    and checks every saved key's expiry once a day (:func:`check_keys`).
     The clock and job queue arrive with the scheduler feature (ADR-018).
 
 Public interface:
     ``sync_revenue``, ``SyncOutcome``, ``revenue_snapshot``,
-    ``RevenueSnapshot``, ``CURSOR_OVERLAP``, ``check_keys``, ``KeyAlert``.
+    ``RevenueSnapshot``, ``snapshot_from_rows``, ``CURSOR_OVERLAP``, ``check_keys``, ``KeyAlert``.
 
 How to test:
     ``uv run python -m tools.dev_db up`` then
@@ -25,6 +26,7 @@ from yaqzan.core.scheduler.collect import (
     RevenueSnapshot,
     SyncOutcome,
     revenue_snapshot,
+    snapshot_from_rows,
     sync_revenue,
 )
 from yaqzan.core.scheduler.keys import KeyAlert, check_keys
@@ -36,5 +38,6 @@ __all__ = [
     "SyncOutcome",
     "check_keys",
     "revenue_snapshot",
+    "snapshot_from_rows",
     "sync_revenue",
 ]

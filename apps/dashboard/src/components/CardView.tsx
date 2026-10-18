@@ -30,7 +30,14 @@ export function CardView({ card, now }: Props) {
             {freshnessLabel(card.freshness, card.last_success_at, now)}
           </p>
         </div>
-        <span className="shrink-0 rounded-md bg-raised px-2 py-1 text-xs font-medium text-muted">{card.source}</span>
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <span className="rounded-md bg-raised px-2 py-1 text-xs font-medium text-muted">{card.source}</span>
+          {card.sample && (
+            <span className="rounded-md border border-dashed border-warn px-1.5 py-0.5 text-[0.7rem] font-medium text-warn">
+              Sample
+            </span>
+          )}
+        </span>
       </header>
 
       {card.metrics.length > 0 && (

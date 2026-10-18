@@ -27,7 +27,9 @@ export function ProjectView({ detail }: Props) {
       {project.sample && (
         <p className="flex items-center gap-2 rounded-xl border border-dashed border-warn bg-warn-soft px-4 py-2.5 text-sm text-ink">
           <FlaskConical className="size-4 shrink-0 text-warn" aria-hidden="true" />
-          Sample data: these numbers are made up to show the layout. Real numbers come next.
+          {cards.every((card) => card.sample)
+            ? "Sample data: these numbers are made up to show the layout. Real numbers come next."
+            : "Cards marked Sample use made-up numbers. The others are real."}
         </p>
       )}
 
