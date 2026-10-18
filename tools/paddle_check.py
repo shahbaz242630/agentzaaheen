@@ -26,7 +26,7 @@ from pydantic import SecretStr
 
 from yaqzan.core import metrics
 from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.sdk import RevenueBatch, SourceError
+from yaqzan.core.sdk import RevenueBatch, SourceError, explain
 from yaqzan.plugins.connectors.paddle import ALLOWED_HOSTS, API_VERSION_HEADER, SANDBOX_BASE_URL, PaddleSource
 
 
@@ -87,7 +87,13 @@ def main(
     try:
         batch = asyncio.run(fetch(SecretStr(raw), moment, transport))
     except SourceError as exc:
-        print(f"paddle-check: failed with {exc.code.value}")
+        said = explain(exc.reason_code, vendor="paddle")
+        where = f" at {exc.operation}" if exc.operation else ""
+        status = f", http {exc.status}" if exc.status is not None else ""
+        print(f"paddle-check: failed with {exc.reason_code}{where}{status}.")
+        print(f"  What: {said.what}")
+        print(f"  Why: {said.why}")
+        print(f"  What to do: {said.fix}")
         return 1
     for line in report(batch, moment, ns.days):
         print(line)

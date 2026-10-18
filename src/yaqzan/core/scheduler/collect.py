@@ -4,6 +4,10 @@ A sync never half-succeeds: the rows and the "last success" mark land in one
 transaction, and a failure only records its reason code, so freshness keeps
 counting from the last real success. Payments are re-read from a little
 before the last cursor, because a vendor's clock and ours are never exact.
+
+A failure is logged in plain English (the error catalogue): what broke, where,
+which attempt, the HTTP status, why, and what to do. The most precise code
+(``net.timeout`` rather than ``source.unavailable``) is the one stored.
 """
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ from uuid import UUID
 
 from yaqzan.core import metrics
 from yaqzan.core.metrics import CountAndAmounts, Freshness, Unknown
-from yaqzan.core.sdk import RevenueSource, SourceError, SourceErrorCode, get_logger
+from yaqzan.core.sdk import RevenueSource, SourceError, SourceErrorCode, explain, get_logger
 from yaqzan.core.store import Database, RevenueRows, StoreError
 
 CURSOR_OVERLAP = timedelta(hours=1)
@@ -41,24 +45,46 @@ async def sync_revenue(
     state = await rows.sync_state(tenant_id, project_id, source.source)
     since = None if state is None or state.cursor_at is None else state.cursor_at - CURSOR_OVERLAP
     await rows.mark_attempt(tenant_id, project_id, source.source, at=now)
+    stage = f"fetch from {source.source}"
     try:
         batch = await source.fetch(payments_since=since, now=now)
         if batch.source != source.source:
             raise SourceError(SourceErrorCode.BAD_RESPONSE, "the batch names another source")
+        stage = "save to the database"
         await rows.save_batch(tenant_id, project_id, batch, at=now)
     except (SourceError, StoreError) as exc:
-        code = exc.code.value
+        code = exc.reason_code if isinstance(exc, SourceError) else exc.code.value
         await rows.mark_failure(tenant_id, project_id, source.source, at=now, error_code=code)
-        log.warning("revenue_sync_failed", reason_code=code)
+        log.warning("revenue_sync_failed", stage=stage, **_where(exc), **_words(code, source.source))
         return SyncOutcome(ok=False, error_code=code)
     except Exception:
         # A bug, not an outage: record it so the tile goes grey, then fail loudly.
         await rows.mark_failure(tenant_id, project_id, source.source, at=now, error_code=_CRASHED)
-        log.error("revenue_sync_crashed", reason_code=_CRASHED)
+        log.error("revenue_sync_crashed", stage=stage, **_words(_CRASHED, source.source))
         raise
     counts = (len(batch.subscriptions), len(batch.payments), len(batch.refunds))
     log.info("revenue_synced", subscriptions=counts[0], payments=counts[1], refunds=counts[2])
     return SyncOutcome(True, None, *counts)
+
+
+def _where(exc: SourceError | StoreError) -> dict[str, object]:
+    """Where a source failed: the operation, the attempt (``3/4``) and the HTTP status, when known."""
+    if not isinstance(exc, SourceError):
+        return {}
+    where: dict[str, object] = {}
+    if exc.operation is not None:
+        where["operation"] = exc.operation
+    if exc.attempt is not None:
+        where["attempt"] = f"{exc.attempt}/{exc.attempts}"
+    if exc.status is not None:
+        where["http_status"] = exc.status
+    return where
+
+
+def _words(code: str, vendor: str) -> dict[str, object]:
+    """The code with its catalogue text: what broke, why, and what to do."""
+    said = explain(code, vendor=vendor)
+    return {"reason_code": code, "what": said.what, "why": said.why, "fix": said.fix}
 
 
 @dataclass(frozen=True)

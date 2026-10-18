@@ -46,8 +46,7 @@ class NetError(SourceError):
     """
 
     def __init__(self, net_code: NetErrorCode, message: str, *, status: int | None = None) -> None:
-        super().__init__(_AS_SOURCE[net_code], message)
+        super().__init__(_AS_SOURCE[net_code], message, detail_code=net_code.value, status=status)
         suffix = f" (http {status})" if status is not None else ""
         self.args = (f"{net_code.value}: {message}{suffix}",)
         self.net_code = net_code
-        self.status = status

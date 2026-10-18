@@ -29,7 +29,7 @@ from yaqzan.core.store.errors import StoreError, StoreErrorCode
 from yaqzan.core.store.migrations import LATEST_VERSION, MIGRATIONS, Migration, check_schema, migrate
 from yaqzan.core.store.records import MAX_PAGE, Records
 from yaqzan.core.store.revenue import MAX_ROWS, RevenueRows, SyncState
-from yaqzan.core.store.sealed import SealedRow, SealedSecrets, SlotKey
+from yaqzan.core.store.sealed import Access, CredentialDates, SealedRow, SealedSecrets, SlotKey
 from yaqzan.core.store.switches import EngagedSwitch, KillSwitchRows, SwitchScope
 
 __all__ = [
@@ -37,8 +37,10 @@ __all__ = [
     "MAX_PAGE",
     "MAX_ROWS",
     "MIGRATIONS",
+    "Access",
     "AuditRow",
     "AuditRows",
+    "CredentialDates",
     "Database",
     "DatabaseSettings",
     "EngagedSwitch",

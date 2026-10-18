@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, Self
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
@@ -189,11 +189,42 @@ class SourceErrorCode(StrEnum):
 
 
 class SourceError(Exception):
-    """A source failed. ``code`` says why; the message never carries vendor data or keys."""
+    """A source failed. ``code`` says why; the message never carries vendor data or keys.
 
-    def __init__(self, code: SourceErrorCode, message: str) -> None:
+    Where it failed travels with it, so a log line can say what, where and
+    which try: ``detail_code`` is a more precise reason from a lower layer
+    (``net.timeout`` under ``source.unavailable``), ``status`` the HTTP status,
+    and :meth:`at` records the operation (``GET /subscriptions``) and attempt.
+    """
+
+    def __init__(
+        self,
+        code: SourceErrorCode,
+        message: str,
+        *,
+        detail_code: str | None = None,
+        status: int | None = None,
+    ) -> None:
         super().__init__(f"{code.value}: {message}")
         self.code = code
+        self.detail_code = detail_code
+        self.status = status
+        self.operation: str | None = None
+        self.attempt: int | None = None
+        self.attempts: int | None = None
+
+    @property
+    def reason_code(self) -> str:
+        """The most precise code known: the lower layer's if there is one."""
+        return self.detail_code or self.code.value
+
+    def at(self, operation: str, attempt: int | None = None, attempts: int | None = None) -> Self:
+        """Record where this failed. The innermost caller wins: a set operation is never overwritten."""
+        if self.operation is None:
+            self.operation = operation
+            self.attempt = attempt
+            self.attempts = attempts
+        return self
 
 
 class RevenueSource(Protocol):
