@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/* Design tokens. Light by default, dark when the system asks for it.
+   System fonts only: the CSP allows nothing from outside our server. */
+@theme {
+  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Code", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --color-canvas: oklch(0.975 0.004 240);
+  --color-panel: oklch(1 0 0);
+  --color-raised: oklch(0.955 0.006 240);
+  --color-line: oklch(0.9 0.008 240);
+  --color-ink: oklch(0.24 0.02 250);
+  --color-muted: oklch(0.52 0.02 250);
+  --color-faint: oklch(0.68 0.015 250);
+
+  --color-brand: oklch(0.52 0.1 185);
+  --color-brand-soft: oklch(0.95 0.035 185);
+  --color-brand-ink: oklch(0.38 0.08 185);
+  --color-on-brand: oklch(1 0 0);
+
+  --color-ok: oklch(0.6 0.14 155);
+  --color-ok-soft: oklch(0.95 0.04 155);
+  --color-info: oklch(0.56 0.09 245);
+  --color-info-soft: oklch(0.95 0.025 245);
+  --color-warn: oklch(0.7 0.15 70);
+  --color-warn-soft: oklch(0.96 0.05 85);
+  --color-alert: oklch(0.58 0.2 25);
+  --color-alert-soft: oklch(0.95 0.035 25);
+  --color-unknown: oklch(0.7 0.01 250);
+  --color-unknown-soft: oklch(0.94 0.005 250);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: oklch(0.17 0.012 250);
+    --color-panel: oklch(0.21 0.014 250);
+    --color-raised: oklch(0.25 0.015 250);
+    --color-line: oklch(0.3 0.015 250);
+    --color-ink: oklch(0.94 0.008 250);
+    --color-muted: oklch(0.72 0.015 250);
+    --color-faint: oklch(0.56 0.015 250);
+
+    --color-brand: oklch(0.72 0.11 185);
+    --color-brand-soft: oklch(0.3 0.05 185);
+    --color-brand-ink: oklch(0.85 0.08 185);
+    --color-on-brand: oklch(0.18 0.02 200);
+
+    --color-ok-soft: oklch(0.3 0.05 155);
+    --color-info-soft: oklch(0.3 0.04 245);
+    --color-warn-soft: oklch(0.32 0.05 75);
+    --color-alert-soft: oklch(0.3 0.06 25);
+    --color-unknown-soft: oklch(0.28 0.01 250);
+  }
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

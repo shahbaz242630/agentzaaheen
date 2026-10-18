@@ -1,0 +1,598 @@
+{
+  "projects": [
+    {
+      "id": "zaaheen",
+      "name": "Zaaheen",
+      "summary": "Memory Vault desktop app",
+      "health": "warn",
+      "escalations": 2,
+      "sample": true
+    },
+    {
+      "id": "sandoq-kin",
+      "name": "Sandoq Kin",
+      "summary": "Family mobile app",
+      "health": "ok",
+      "escalations": 0,
+      "sample": true
+    },
+    {
+      "id": "agent-x",
+      "name": "Agent X",
+      "summary": "Payments platform (our own ops data only)",
+      "health": "ok",
+      "escalations": 0,
+      "sample": true
+    },
+    {
+      "id": "eva",
+      "name": "Eva",
+      "summary": "AI agent SaaS",
+      "health": "unknown",
+      "escalations": 0,
+      "sample": true
+    }
+  ],
+  "details": {
+    "zaaheen": {
+      "project": {
+        "id": "zaaheen",
+        "name": "Zaaheen",
+        "summary": "Memory Vault desktop app",
+        "health": "warn",
+        "escalations": 2,
+        "sample": true
+      },
+      "cards": [
+        {
+          "id": "paddle",
+          "title": "Revenue",
+          "source": "Paddle",
+          "freshness": "fresh",
+          "last_success_at": "2026-10-18T11:48:00Z",
+          "sample": true,
+          "metrics": [
+            {
+              "label": "MRR",
+              "value": {
+                "kind": "money",
+                "minor": 124000,
+                "currency": "USD"
+              },
+              "detail": null
+            },
+            {
+              "label": "Active subscribers",
+              "value": {
+                "kind": "count",
+                "value": 87
+              },
+              "detail": null
+            },
+            {
+              "label": "Trials",
+              "value": {
+                "kind": "count",
+                "value": 14
+              },
+              "detail": null
+            },
+            {
+              "label": "Failed payments",
+              "value": {
+                "kind": "count",
+                "value": 2
+              },
+              "detail": "Last 7 days, USD 58.00"
+            },
+            {
+              "label": "Refunds",
+              "value": {
+                "kind": "count",
+                "value": 1
+              },
+              "detail": "Last 30 days, USD 19.00"
+            }
+          ],
+          "entries": []
+        },
+        {
+          "id": "stripe",
+          "title": "Revenue",
+          "source": "Stripe",
+          "freshness": "fresh",
+          "last_success_at": "2026-10-18T11:35:00Z",
+          "sample": true,
+          "metrics": [
+            {
+              "label": "MRR",
+              "value": {
+                "kind": "money",
+                "minor": 31500,
+                "currency": "USD"
+              },
+              "detail": null
+            },
+            {
+              "label": "Active subscribers",
+              "value": {
+                "kind": "count",
+                "value": 21
+              },
+              "detail": null
+            },
+            {
+              "label": "Failed payments",
+              "value": {
+                "kind": "count",
+                "value": 0
+              },
+              "detail": "Last 7 days"
+            }
+          ],
+          "entries": []
+        },
+        {
+          "id": "clients",
+          "title": "Clients",
+          "source": "Paddle + Stripe",
+          "freshness": "fresh",
+          "last_success_at": "2026-10-18T11:48:00Z",
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Signed up",
+              "value": {
+                "kind": "count",
+                "value": 412
+              },
+              "detail": null
+            },
+            {
+              "label": "New this week",
+              "value": {
+                "kind": "count",
+                "value": 23
+              },
+              "detail": null
+            },
+            {
+              "label": "Cancelled",
+              "value": {
+                "kind": "count",
+                "value": 3
+              },
+              "detail": "Last 30 days"
+            }
+          ],
+          "entries": []
+        },
+        {
+          "id": "support",
+          "title": "Support email",
+          "source": "Support inbox",
+          "freshness": "fresh",
+          "last_success_at": "2026-10-18T11:52:00Z",
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Responded",
+              "value": {
+                "kind": "count",
+                "value": 23
+              },
+              "detail": "Yesterday"
+            },
+            {
+              "label": "Escalated to you",
+              "value": {
+                "kind": "count",
+                "value": 2
+              },
+              "detail": null
+            },
+            {
+              "label": "Waiting",
+              "value": {
+                "kind": "count",
+                "value": 1
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Escalated: a customer asks for a refund. Money always comes to you.",
+              "tone": "alert",
+              "at": "2026-10-18T09:00:00Z"
+            },
+            {
+              "text": "Escalated: an email tried to give the AI instructions.",
+              "tone": "warn",
+              "at": "2026-10-18T03:00:00Z"
+            },
+            {
+              "text": "Autopilot is in practice mode: it drafts, it does not send (ADR-021).",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
+          "id": "github",
+          "title": "Open issues",
+          "source": "GitHub",
+          "freshness": "fresh",
+          "last_success_at": "2026-10-18T11:30:00Z",
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Open issues",
+              "value": {
+                "kind": "count",
+                "value": 5
+              },
+              "detail": null
+            },
+            {
+              "label": "Open pull requests",
+              "value": {
+                "kind": "count",
+                "value": 2
+              },
+              "detail": null
+            },
+            {
+              "label": "Failing builds",
+              "value": {
+                "kind": "count",
+                "value": 0
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "New issue: sync stops after laptop sleep",
+              "tone": "warn",
+              "at": "2026-10-18T07:00:00Z"
+            },
+            {
+              "text": "Security alert closed: dependency updated",
+              "tone": "ok",
+              "at": "2026-10-17T12:00:00Z"
+            }
+          ]
+        },
+        {
+          "id": "uptime",
+          "title": "Uptime",
+          "source": "Uptime checker",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Uptime (30 days)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Incidents",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Uptime checker is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
+          "id": "activity",
+          "title": "Yesterday's agent activity",
+          "source": "Audit log",
+          "freshness": "fresh",
+          "last_success_at": "2026-10-18T11:55:00Z",
+          "sample": true,
+          "metrics": [],
+          "entries": [
+            {
+              "text": "Revenue checked 24 times, all fine",
+              "tone": "ok",
+              "at": "2026-10-17T22:00:00Z"
+            },
+            {
+              "text": "Support agent drafted 25 replies, 2 escalated",
+              "tone": "info",
+              "at": "2026-10-17T20:00:00Z"
+            },
+            {
+              "text": "Key check: Paddle key expires 16 Jan 2027",
+              "tone": "info",
+              "at": "2026-10-17T18:00:00Z"
+            },
+            {
+              "text": "Morning briefing sent at 06:30",
+              "tone": "ok",
+              "at": "2026-10-17T16:00:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    "sandoq-kin": {
+      "project": {
+        "id": "sandoq-kin",
+        "name": "Sandoq Kin",
+        "summary": "Family mobile app",
+        "health": "ok",
+        "escalations": 0,
+        "sample": true
+      },
+      "cards": [
+        {
+          "id": "revenuecat",
+          "title": "Revenue",
+          "source": "RevenueCat",
+          "freshness": "fresh",
+          "last_success_at": "2026-10-18T11:20:00Z",
+          "sample": true,
+          "metrics": [
+            {
+              "label": "MRR",
+              "value": {
+                "kind": "money",
+                "minor": 48900,
+                "currency": "USD"
+              },
+              "detail": null
+            },
+            {
+              "label": "Active subscribers",
+              "value": {
+                "kind": "count",
+                "value": 63
+              },
+              "detail": null
+            },
+            {
+              "label": "Trials",
+              "value": {
+                "kind": "count",
+                "value": 9
+              },
+              "detail": null
+            }
+          ],
+          "entries": []
+        },
+        {
+          "id": "reviews",
+          "title": "Store reviews",
+          "source": "App Store + Play",
+          "freshness": "fresh",
+          "last_success_at": "2026-10-18T11:05:00Z",
+          "sample": true,
+          "metrics": [
+            {
+              "label": "New reviews",
+              "value": {
+                "kind": "count",
+                "value": 4
+              },
+              "detail": "Last 7 days"
+            },
+            {
+              "label": "Below 3 stars",
+              "value": {
+                "kind": "count",
+                "value": 0
+              },
+              "detail": null
+            }
+          ],
+          "entries": []
+        },
+        {
+          "id": "uptime",
+          "title": "Uptime",
+          "source": "Uptime checker",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Uptime (30 days)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Uptime checker is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        }
+      ]
+    },
+    "agent-x": {
+      "project": {
+        "id": "agent-x",
+        "name": "Agent X",
+        "summary": "Payments platform (our own ops data only)",
+        "health": "ok",
+        "escalations": 0,
+        "sample": true
+      },
+      "cards": [
+        {
+          "id": "uptime",
+          "title": "Uptime",
+          "source": "Uptime checker",
+          "freshness": "fresh",
+          "last_success_at": "2026-10-18T11:57:00Z",
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Uptime (30 days)",
+              "value": {
+                "kind": "percent",
+                "basis_points": 9995
+              },
+              "detail": null
+            },
+            {
+              "label": "Incidents",
+              "value": {
+                "kind": "count",
+                "value": 1
+              },
+              "detail": "4 minutes, 3 days ago"
+            }
+          ],
+          "entries": []
+        },
+        {
+          "id": "github",
+          "title": "Open issues",
+          "source": "GitHub",
+          "freshness": "fresh",
+          "last_success_at": "2026-10-18T11:30:00Z",
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Open issues",
+              "value": {
+                "kind": "count",
+                "value": 11
+              },
+              "detail": null
+            },
+            {
+              "label": "Failing builds",
+              "value": {
+                "kind": "count",
+                "value": 0
+              },
+              "detail": null
+            }
+          ],
+          "entries": []
+        }
+      ]
+    },
+    "eva": {
+      "project": {
+        "id": "eva",
+        "name": "Eva",
+        "summary": "AI agent SaaS",
+        "health": "unknown",
+        "escalations": 0,
+        "sample": true
+      },
+      "cards": [
+        {
+          "id": "paddle",
+          "title": "Revenue",
+          "source": "Paddle",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "MRR",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Active subscribers",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Paddle is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
+          "id": "uptime",
+          "title": "Uptime",
+          "source": "Uptime checker",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Uptime (30 days)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Uptime checker is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "models": {
+    "models": [
+      {
+        "id": "local-gemma",
+        "label": "Gemma (our server)",
+        "where": "local",
+        "available": false,
+        "default": true,
+        "note": "Runs on our own server. Connects with the local model trial (F05)."
+      },
+      {
+        "id": "cloud-claude",
+        "label": "Claude (cloud)",
+        "where": "cloud",
+        "available": false,
+        "default": false,
+        "note": "Opt-in. Never sees customer data. Needs a key in the vault."
+      },
+      {
+        "id": "cloud-gpt",
+        "label": "GPT (cloud)",
+        "where": "cloud",
+        "available": false,
+        "default": false,
+        "note": "Opt-in. Never sees customer data. Needs a key in the vault."
+      }
+    ]
+  }
+}
