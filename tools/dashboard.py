@@ -11,10 +11,16 @@ environment variable and is never printed. The numbers are held in memory
 only, and turn to "unknown" once they are older than the freshness rule allows
 (restart to read again).
 
+With ``--model-url URL`` the chat on the right answers for real, from the
+cards on screen, using the model server at that address (the local model
+trial, F05: ``uv run python -m tools.local_model`` serves it on
+http://127.0.0.1:8766). Without it the chat says it is not connected.
+
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
     uv run python -m tools.dashboard [--port 8765]
     uv run python -m tools.dashboard --paddle-key-env PADDLE_LIVE_API_KEY_ZAAHEEN
+    uv run python -m tools.dashboard --model-url http://127.0.0.1:8766
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
 
@@ -34,11 +40,12 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import SecretStr
 
-from yaqzan.core.api import LOCAL_HOSTS, Portfolio, SamplePortfolio, create_app
+from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from yaqzan.core.api.overlay import CardMaker, OverlayPortfolio
 from yaqzan.core.api.revenue import revenue_card
 from yaqzan.core.api.views import Card
-from yaqzan.core.net import JsonClient, NetPolicy
+from yaqzan.core.llm_gateway import FactChat
+from yaqzan.core.net import JsonClient, ModelClient, NetError, NetPolicy
 from yaqzan.core.scheduler import snapshot_from_rows
 from yaqzan.core.sdk import RevenueBatch, SourceError, explain
 from yaqzan.plugins.connectors.paddle import ALLOWED_HOSTS, API_VERSION_HEADER, LIVE_BASE_URL, PaddleSource
@@ -51,6 +58,8 @@ HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 # Read once at start: treated as an hourly source, so it shows "unknown" after two hours.
 PADDLE_SCHEDULE = timedelta(hours=1)
+# The model menu entry the local model trial connects (see SamplePortfolio.models).
+LOCAL_MODEL_ID = "local-gemma"
 
 Clock = Callable[[], datetime]
 
@@ -60,11 +69,25 @@ def _now() -> datetime:
 
 
 def build_app(
-    static_dir: Path = UI_BUILD, now: datetime | None = None, portfolio: Portfolio | None = None
+    static_dir: Path = UI_BUILD,
+    now: datetime | None = None,
+    portfolio: Portfolio | None = None,
+    chat: ChatBackend | None = None,
 ) -> FastAPI:
     """The dashboard app, serving the UI from ``static_dir`` (sample data unless given a portfolio)."""
     chosen = portfolio or SamplePortfolio(now or _now())
-    return create_app(chosen, static_dir=static_dir, allowed_hosts=LOCAL_HOSTS)
+    return create_app(chosen, static_dir=static_dir, allowed_hosts=LOCAL_HOSTS, chat=chat)
+
+
+def model_chat(model_url: str, transport: httpx.AsyncBaseTransport | None = None) -> ChatBackend | None:
+    """The chat backed by the model server at ``model_url``, or ``None`` (after saying why) if refused."""
+    try:
+        client = ModelClient(model_url, transport=transport)
+    except NetError as exc:
+        print(f"dashboard: the model address was refused ({exc.net_code.value}).")
+        print("  Use the local model server, e.g. http://127.0.0.1:8766")
+        return None
+    return FactChat(client, LOCAL_MODEL_ID)
 
 
 def month_start(moment: datetime) -> datetime:
@@ -183,6 +206,7 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--export-contract", action="store_true", help="rewrite the UI's contract fixture")
     parser.add_argument("--paddle-key-env", help="env var holding the live READ-ONLY Zaaheen Paddle key")
+    parser.add_argument("--model-url", help="the chat's model server, e.g. http://127.0.0.1:8766")
     ns = parser.parse_args(argv)
     if ns.export_contract:
         CONTRACT_FIXTURE.parent.mkdir(parents=True, exist_ok=True)
@@ -201,8 +225,15 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
         portfolio = live_portfolio(ns.paddle_key_env, env, clock=clock, transport=transport)
         if portfolio is None:
             return 1
-    app = build_app(static_dir, portfolio=portfolio)
+    chat: ChatBackend | None = None
+    if ns.model_url:
+        chat = model_chat(ns.model_url, transport)
+        if chat is None:
+            return 1
+    app = build_app(static_dir, portfolio=portfolio, chat=chat)
     what = "real Paddle numbers for Zaaheen, sample data elsewhere" if portfolio else "sample data"
+    if chat is not None:
+        what += "; chat connected to the local model"
     print(f"dashboard: open http://{HOST}:{ns.port} ({what}; press Ctrl+C to stop)")
     (serve or _serve)(app, HOST, ns.port)
     return 0

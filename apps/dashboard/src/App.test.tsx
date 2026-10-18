@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
-import { notConnectedReply } from "./components/ChatPanel";
+import { failureReply, notConnectedReply, SAMPLE_NOTE } from "./components/ChatPanel";
 import sample from "./contract/sample.json";
 
 function answer(path: string): unknown {
@@ -152,7 +152,7 @@ describe("the chat", () => {
   it("defaults to the local model and lists cloud ones as not connected", async () => {
     render(<App />);
     await screen.findByRole("option", { name: /Gemma/ });
-    expect(screen.getByLabelText("Model")).toHaveDisplayValue(/Gemma \(our server\) · default/);
+    expect(screen.getByLabelText("Model")).toHaveDisplayValue(/Gemma \(local\) · default/);
     expect(screen.getByRole("option", { name: /Claude \(cloud\) · not connected/ })).toBeInTheDocument();
   });
 
@@ -198,5 +198,100 @@ describe("the chat", () => {
 
   it("words the reply without a model or a project", () => {
     expect(notConnectedReply(undefined, null)).toMatch(/^The model is not connected yet.*your projects/);
+  });
+});
+
+describe("the chat with the local model connected", () => {
+  const connected = { models: sample.models.models.map((m) => ({ ...m, available: m.id === "local-gemma" })) };
+
+  function reply(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), { status });
+  }
+
+  function serveChat(chat: () => Promise<Response>): RequestInit[] {
+    const calls: RequestInit[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((path: string, init?: RequestInit) => {
+        if (path === "/api/chat") {
+          calls.push(init ?? {});
+          return chat();
+        }
+        return Promise.resolve(reply(path === "/api/models" ? connected : answer(path)));
+      }),
+    );
+    return calls;
+  }
+
+  async function ask(question: string) {
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Zaaheen" });
+    await screen.findByRole("option", { name: /Gemma \(local\) · default$/ });
+    await userEvent.type(screen.getByLabelText("Message"), `${question}{Enter}`);
+  }
+
+  it("asks the model about the open project and shows its answer", async () => {
+    const calls = serveChat(() =>
+      Promise.resolve(reply({ model_id: "local-gemma", answer: "MRR is $1,240.", from_sample: false })),
+    );
+    await ask("How is revenue?");
+    expect(await screen.findByText("MRR is $1,240.")).toBeInTheDocument();
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.headers).toMatchObject({ "Content-Type": "application/json", "X-Yaqzan-Request": "1" });
+    expect(JSON.parse(calls[0]?.body as string)).toEqual({
+      project_id: "zaaheen",
+      model_id: "local-gemma",
+      question: "How is revenue?",
+    });
+  });
+
+  it("says when an answer leans on sample data", async () => {
+    serveChat(() =>
+      Promise.resolve(reply({ model_id: "local-gemma", answer: "There are 2 escalations.", from_sample: true })),
+    );
+    await ask("What is escalated to me?");
+    expect(await screen.findByText(/There are 2 escalations\./)).toHaveTextContent(SAMPLE_NOTE);
+  });
+
+  it("shows a placeholder and blocks a second question while the model thinks", async () => {
+    let finish: (response: Response) => void = () => undefined;
+    serveChat(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await ask("How is revenue?");
+    expect(screen.getByText("Thinking…")).toHaveAttribute("aria-busy", "true");
+    await userEvent.type(screen.getByLabelText("Message"), "again");
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    finish(reply({ model_id: "local-gemma", answer: "Done.", from_sample: false }));
+    expect(await screen.findByText("Done.")).toBeInTheDocument();
+    expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  });
+
+  it.each([
+    ["net.unavailable", 502, /model server isn't running/],
+    ["net.timeout", 502, /took too long/],
+    ["chat.busy", 429, /still answering the last question/],
+    ["chat.not_connected", 503, /so I can.t answer for real/],
+    ["net.bad_response", 502, /went wrong asking the model \(net\.bad_response\)\. Nothing was changed\./],
+  ])("explains %s in words", async (code, status, words) => {
+    serveChat(() => Promise.resolve(reply({ detail: code }, status)));
+    await ask("How is revenue?");
+    expect(await screen.findByText(words)).toBeInTheDocument();
+  });
+
+  it("refuses an answer that does not match the contract", async () => {
+    serveChat(() => Promise.resolve(reply({ answer: "<script>" })));
+    await ask("How is revenue?");
+    expect(await screen.findByText(/^Something went wrong asking the model\. Nothing was changed\.$/)).toBeInTheDocument();
+  });
+
+  it("explains an error with no code", () => {
+    expect(failureReply(new Error("boom"), undefined, null)).toBe(
+      "Something went wrong asking the model. Nothing was changed.",
+    );
   });
 });

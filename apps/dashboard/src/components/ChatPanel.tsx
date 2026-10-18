@@ -1,12 +1,13 @@
 import { Bot, Mic, SendHorizontal } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { ModelChoice } from "../api";
+import { ApiError, api, type ModelChoice } from "../api";
 
 interface Message {
   id: number;
   from: "you" | "yaqzan";
   text: string;
+  pending?: boolean;
 }
 
 export const SUGGESTIONS = [
@@ -15,8 +16,7 @@ export const SUGGESTIONS = [
   "How is revenue this week?",
 ] as const;
 
-// The chat is not wired to a model yet (that arrives with the local model trial, F05),
-// so it answers honestly instead of pretending.
+// A model that is not connected answers honestly instead of pretending.
 export function notConnectedReply(model: ModelChoice | undefined, projectName: string | null): string {
   const who = model ? model.label : "The model";
   const where = projectName === null ? "your projects" : projectName;
@@ -27,17 +27,38 @@ export function notConnectedReply(model: ModelChoice | undefined, projectName: s
   );
 }
 
+export const SAMPLE_NOTE = "(Some of the numbers behind this answer are sample data.)";
+
+// What went wrong, in words: the server sends a code, never the question or answer.
+export function failureReply(error: unknown, model: ModelChoice | undefined, projectName: string | null): string {
+  const reason = error instanceof ApiError ? error.code : null;
+  switch (reason) {
+    case "chat.not_connected":
+      return notConnectedReply(model, projectName);
+    case "chat.busy":
+      return "I'm still answering the last question. Ask again in a moment.";
+    case "net.timeout":
+      return "The model took too long to answer. Try a shorter question, or ask again.";
+    case "net.unavailable":
+      return "The model server isn't running. Start it with the local model tool, then ask again.";
+    default:
+      return `Something went wrong asking the model${reason === null ? "" : ` (${reason})`}. Nothing was changed.`;
+  }
+}
+
 interface Props {
   models: readonly ModelChoice[];
+  projectId: string | null;
   projectName: string | null;
 }
 
-export function ChatPanel({ models, projectName }: Props) {
+export function ChatPanel({ models, projectId, projectName }: Props) {
   // Never fall back to an arbitrary (possibly cloud) model: only the local default.
   const fallback = models.find((m) => m.default && m.where === "local");
   const [modelId, setModelId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [waiting, setWaiting] = useState(false);
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
   const selectId = useId();
@@ -51,13 +72,36 @@ export function ChatPanel({ models, projectName }: Props) {
     if (end !== null && "scrollIntoView" in end) end.scrollIntoView({ block: "end" });
   }, [messages]);
 
+  function reply(id: number, text: string) {
+    setMessages((previous) => previous.map((m) => (m.id === id ? { id, from: "yaqzan", text } : m)));
+  }
+
   function send(text: string) {
     const question = text.trim();
-    if (question === "") return;
+    if (question === "" || waiting) return;
     const asked: Message = { id: nextId.current++, from: "you", text: question };
-    const answer: Message = { id: nextId.current++, from: "yaqzan", text: notConnectedReply(model, projectName) };
-    setMessages((previous) => [...previous, asked, answer]);
     setDraft("");
+    if (model?.available !== true) {
+      const answer: Message = { id: nextId.current++, from: "yaqzan", text: notConnectedReply(model, projectName) };
+      setMessages((previous) => [...previous, asked, answer]);
+      return;
+    }
+    const id = nextId.current++;
+    setMessages((previous) => [...previous, asked, { id, from: "yaqzan", text: "Thinking…", pending: true }]);
+    setWaiting(true);
+    api
+      .ask(projectId, model.id, question)
+      .then(
+        (answer) => {
+          reply(id, answer.from_sample ? `${answer.answer}\n\n${SAMPLE_NOTE}` : answer.answer);
+        },
+        (error: unknown) => {
+          reply(id, failureReply(error, model, projectName));
+        },
+      )
+      .finally(() => {
+        setWaiting(false);
+      });
   }
 
   return (
@@ -106,6 +150,7 @@ export function ChatPanel({ models, projectName }: Props) {
                 <button
                   key={suggestion}
                   type="button"
+                  disabled={waiting}
                   onClick={() => {
                     send(suggestion);
                   }}
@@ -120,9 +165,11 @@ export function ChatPanel({ models, projectName }: Props) {
           messages.map((message) => (
             <p
               key={message.id}
+              aria-busy={message.pending === true ? true : undefined}
               className={[
                 "max-w-[90%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap",
                 message.from === "you" ? "self-end bg-brand text-on-brand" : "self-start bg-raised text-ink",
+                message.pending === true ? "animate-pulse text-muted" : "",
               ].join(" ")}
             >
               <span className="sr-only">{message.from === "you" ? "You: " : "Yaqzan: "}</span>
@@ -172,7 +219,7 @@ export function ChatPanel({ models, projectName }: Props) {
         <button
           type="submit"
           aria-label="Send"
-          disabled={draft.trim() === ""}
+          disabled={draft.trim() === "" || waiting}
           className="grid size-11 place-items-center rounded-xl bg-brand text-on-brand transition-opacity disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
         >
           <SendHorizontal className="size-5" aria-hidden="true" />

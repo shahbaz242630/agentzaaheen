@@ -571,11 +571,11 @@
     "models": [
       {
         "id": "local-gemma",
-        "label": "Gemma (our server)",
+        "label": "Gemma (local)",
         "where": "local",
         "available": false,
         "default": true,
-        "note": "Runs on our own server. Connects with the local model trial (F05)."
+        "note": "Free and open. Runs on this laptop for now, on our own server later."
       },
       {
         "id": "cloud-claude",

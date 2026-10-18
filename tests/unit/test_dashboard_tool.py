@@ -164,3 +164,70 @@ def test_the_month_starts_at_midnight_utc_on_the_first() -> None:
     assert dashboard.month_start(datetime(2026, 10, 18, 12, 30, tzinfo=UTC)) == datetime(
         2026, 10, 1, tzinfo=UTC
     )
+
+
+# ---------------------------------------------------------------- the chat's model (F05)
+
+
+def test_the_chat_answers_through_the_model_server(ui: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    seen: list[httpx.Request] = []
+
+    def model_server(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": "MRR is USD 1240.00 (sample)."}}]}
+        )
+
+    apps: list[FastAPI] = []
+    code = dashboard.main(
+        ["--model-url", "http://127.0.0.1:8766"],
+        static_dir=ui,
+        serve=lambda app, _h, _p: apps.append(app),
+        transport=httpx.MockTransport(model_server),
+    )
+    assert code == 0
+    assert "chat connected to the local model" in capsys.readouterr().out
+    client = TestClient(apps[0], base_url="http://127.0.0.1")
+    models = client.get("/api/models").json()["models"]
+    assert [m["id"] for m in models if m["available"]] == [dashboard.LOCAL_MODEL_ID]
+    response = client.post(
+        "/api/chat",
+        json={"project_id": "zaaheen", "model_id": dashboard.LOCAL_MODEL_ID, "question": "How is revenue?"},
+        headers={"X-Yaqzan-Request": "1"},
+    )
+    assert response.status_code == 200
+    assert response.json()["answer"] == "MRR is USD 1240.00 (sample)."
+    assert str(seen[0].url) == "http://127.0.0.1:8766/v1/chat/completions"
+    assert b"How is revenue?" in seen[0].content
+
+
+def test_a_stopped_model_server_is_reported_not_hidden(ui: Path) -> None:
+    def down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    apps: list[FastAPI] = []
+    dashboard.main(
+        ["--model-url", "http://127.0.0.1:8766"],
+        static_dir=ui,
+        serve=lambda app, _h, _p: apps.append(app),
+        transport=httpx.MockTransport(down),
+    )
+    response = TestClient(apps[0], base_url="http://127.0.0.1").post(
+        "/api/chat",
+        json={"model_id": dashboard.LOCAL_MODEL_ID, "question": "hi"},
+        headers={"X-Yaqzan-Request": "1"},
+    )
+    assert response.status_code == 502
+    assert response.json() == {"detail": "net.unavailable"}
+
+
+@pytest.mark.parametrize(
+    "url", ["http://10.0.0.5:8766", "http://localhost:8766", "https://models.example.com"]
+)
+def test_a_model_address_off_the_laptop_is_refused(
+    ui: Path, url: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    served: list[FastAPI] = []
+    assert dashboard.main(["--model-url", url], static_dir=ui, serve=lambda a, *_: served.append(a)) == 1
+    assert served == []
+    assert "net.blocked" in capsys.readouterr().out

@@ -103,7 +103,7 @@ export function App() {
         </main>
 
         <aside className="min-h-[28rem] border-t border-line bg-panel lg:min-h-0 lg:border-t-0 lg:border-l">
-          <ChatPanel models={models} projectName={projectName} />
+          <ChatPanel models={models} projectId={selected} projectName={projectName} />
         </aside>
       </div>
     </div>
