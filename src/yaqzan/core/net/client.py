@@ -138,31 +138,42 @@ class JsonClient:
         await self._http.aclose()
 
     async def get_json(self, path: str, params: Mapping[str, str]) -> dict[str, object]:
-        """GET ``path`` with ``params``; return the JSON object, retrying where it is safe."""
-        url = self._base + check_path(path)
-        _check_host(urlsplit(url).hostname, self._policy)
-        for attempt in range(1, self._policy.max_attempts + 1):
-            last = attempt == self._policy.max_attempts
-            try:
-                async with asyncio.timeout(self._policy.total_timeout_s):
-                    outcome = await self._attempt(url, params)
-            except TimeoutError:  # our own whole-response deadline, not httpx's per-read one
+        """GET ``path`` with ``params``; return the JSON object, retrying where it is safe.
+
+        A failure carries ``GET <path>`` and the attempt it gave up on (``NetError.at``).
+        """
+        try:
+            url = self._base + check_path(path)
+        except NetError as exc:
+            raise exc.at("GET (refused path)") from None  # never echo a path we refused
+        attempt = 0
+        try:
+            _check_host(urlsplit(url).hostname, self._policy)
+            for attempt in range(1, self._policy.max_attempts + 1):
+                last = attempt == self._policy.max_attempts
+                try:
+                    async with asyncio.timeout(self._policy.total_timeout_s):
+                        outcome = await self._attempt(url, params)
+                except TimeoutError:  # our own whole-response deadline, not httpx's per-read one
+                    if last:
+                        raise NetError(NetErrorCode.TIMEOUT, "the response took too long in total") from None
+                    await self._back_off(attempt, None, path, NetErrorCode.TIMEOUT.value)
+                    continue
+                except NetError as exc:
+                    if last or exc.net_code not in {NetErrorCode.TIMEOUT, NetErrorCode.UNAVAILABLE}:
+                        raise
+                    await self._back_off(attempt, None, path, exc.net_code.value)
+                    continue
+                if isinstance(outcome, dict):
+                    return outcome
+                status, retry_after = outcome
                 if last:
-                    raise NetError(NetErrorCode.TIMEOUT, "the response took too long in total") from None
-                await self._back_off(attempt, None, path, NetErrorCode.TIMEOUT.value)
-                continue
-            except NetError as exc:
-                if last or exc.net_code not in {NetErrorCode.TIMEOUT, NetErrorCode.UNAVAILABLE}:
-                    raise
-                await self._back_off(attempt, None, path, exc.net_code.value)
-                continue
-            if isinstance(outcome, dict):
-                return outcome
-            status, retry_after = outcome
-            if last:
-                code = NetErrorCode.RATE_LIMITED if status == 429 else NetErrorCode.SERVER_ERROR
-                raise NetError(code, "gave up after retries", status=status)
-            await self._back_off(attempt, retry_after, path, f"http_{status}")
+                    code = NetErrorCode.RATE_LIMITED if status == 429 else NetErrorCode.SERVER_ERROR
+                    raise NetError(code, "gave up after retries", status=status)
+                await self._back_off(attempt, retry_after, path, f"http_{status}")
+        except NetError as exc:
+            exc.at(f"GET {path}", attempt or None, self._policy.max_attempts)
+            raise
         raise AssertionError("unreachable: the last attempt always returns or raises")  # pragma: no cover
 
     async def _attempt(

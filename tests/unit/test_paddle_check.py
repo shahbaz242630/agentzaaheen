@@ -40,11 +40,24 @@ def test_a_live_key_is_refused_before_any_request(capsys: pytest.CaptureFixture[
     assert "LIVE" in capsys.readouterr().out
 
 
-def test_a_refusal_prints_only_the_code(capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_refusal_says_what_where_why_and_what_to_do(capsys: pytest.CaptureFixture[str]) -> None:
     assert run_tool({"K": FAKE_KEY}, httpx.MockTransport(lambda r: httpx.Response(403))) == 1
     out = capsys.readouterr().out
-    assert "source.auth" in out
+    assert "failed with net.auth at GET /subscriptions, http 403." in out
+    assert "What: Paddle refused our API key." in out
+    assert "Why: The key has expired" in out
+    assert "What to do: Create a new read-only API key in Paddle" in out
     assert FAKE_KEY not in out
+
+
+def test_a_failure_without_a_status_or_place_still_explains(capsys: pytest.CaptureFixture[str]) -> None:
+    def serve(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("down")
+
+    assert run_tool({"K": FAKE_KEY}, httpx.MockTransport(serve)) == 1
+    out = capsys.readouterr().out
+    assert "failed with net.unavailable at GET /subscriptions." in out
+    assert "What: Yaqzan could not reach Paddle." in out
 
 
 def test_a_trailing_newline_is_stripped_but_inner_spaces_are_refused(

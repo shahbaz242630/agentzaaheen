@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -112,6 +113,38 @@ def test_a_failed_sync_records_why_and_keeps_the_last_success(test_db: ScratchDb
         last_attempt_at=later, last_success_at=world.NOW, last_error_code="source.auth", cursor_at=world.NOW
     )
     assert_world_numbers(snap)  # one missed sync is still within 2x the schedule
+
+
+def test_a_failure_is_logged_in_plain_english_with_the_precise_code(
+    test_db: ScratchDb, capsys: pytest.CaptureFixture[str]
+) -> None:
+    key = "pdl_sdbx_apikey_" + "z" * 20  # built here, never a real key
+
+    async def body() -> tuple[SyncOutcome, SyncState | None]:
+        http = JsonClient(
+            SANDBOX_BASE_URL,
+            policy=NetPolicy(allowed_hosts=ALLOWED_HOSTS),
+            secret_headers={"Authorization": SecretStr(f"Bearer {key}")},
+            transport=httpx.MockTransport(lambda r: httpx.Response(401)),
+        )
+        async with open_db(test_db.app_url) as db, http:
+            outcome = await sync_revenue(db, TENANT, PROJECT, PaddleSource(http), now=world.NOW)
+            return outcome, await RevenueRows(db).sync_state(TENANT, PROJECT, "paddle")
+
+    outcome, state = run(body())
+    assert outcome == SyncOutcome(ok=False, error_code="net.auth")
+    assert state is not None
+    assert state.last_error_code == "net.auth"
+    logged = capsys.readouterr().err
+    line = next(json.loads(x) for x in logged.splitlines() if "revenue_sync_failed" in x)
+    assert line["stage"] == "fetch from paddle"
+    assert line["operation"] == "GET /subscriptions"
+    assert line["attempt"] == "1/4"
+    assert line["http_status"] == 401
+    assert line["reason_code"] == "net.auth"
+    assert line["what"] == "Paddle refused our API key."
+    assert line["fix"].startswith("Create a new read-only API key in Paddle")
+    assert key not in logged
 
 
 def test_stale_data_is_unknown_never_zero(test_db: ScratchDb) -> None:

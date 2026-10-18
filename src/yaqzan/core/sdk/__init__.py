@@ -5,7 +5,8 @@ What it does:
     declarations, the revenue shapes Subscription/Payment/Refund and the
     protocols a connector implements), the small rules that travel with them
     (data class only goes up, taint spreads) and the one redacting logger
-    every module and plugin uses.
+    every module and plugin uses, and the error catalogue that puts every
+    reason code into plain English (:func:`explain`).
 
 Public interface:
     Everything listed in ``__all__`` below. Nothing else is public.
@@ -19,6 +20,7 @@ Must never:
     Log through anything other than :func:`get_logger`.
 """
 
+from yaqzan.core.sdk.explain import KNOWN_CODES, Explanation, explain
 from yaqzan.core.sdk.log import REDACTED, contains_sensitive, get_logger, redact, redact_text
 from yaqzan.core.sdk.models import (
     SDK_VERSION,
@@ -59,6 +61,7 @@ from yaqzan.core.sdk.revenue import (
 from yaqzan.core.sdk.tools import ToolLevel, ToolSpec
 
 __all__ = [
+    "KNOWN_CODES",
     "REDACTED",
     "SDK_VERSION",
     "Action",
@@ -68,6 +71,7 @@ __all__ = [
     "DataClass",
     "Event",
     "Evidence",
+    "Explanation",
     "Finding",
     "FindingKind",
     "FindingStatus",
@@ -93,6 +97,7 @@ __all__ = [
     "Trust",
     "combine_trust",
     "contains_sensitive",
+    "explain",
     "get_logger",
     "make_idempotency_key",
     "max_data_class",

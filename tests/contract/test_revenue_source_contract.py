@@ -146,6 +146,7 @@ def test_real_source_stops_at_the_page_cap() -> None:
     with pytest.raises(SourceError) as caught:
         asyncio.run(body())
     assert caught.value.code is SourceErrorCode.TOO_MUCH_DATA
+    assert caught.value.operation == "GET /subscriptions"
 
 
 @pytest.mark.parametrize(
@@ -188,6 +189,9 @@ def test_a_refused_key_surfaces_as_auth() -> None:
     with pytest.raises(SourceError) as caught:
         asyncio.run(body())
     assert caught.value.code is SourceErrorCode.AUTH
+    assert caught.value.reason_code == "net.auth"
+    where = (caught.value.operation, caught.value.attempt, caught.value.attempts, caught.value.status)
+    assert where == ("GET /subscriptions", 1, 4, 403)  # the client's detail, not overwritten by the adapter
     assert FAKE_KEY not in str(caught.value)
 
 
@@ -216,6 +220,21 @@ def test_data_breaking_a_shape_rule_is_a_bad_response() -> None:
     with pytest.raises(SourceError) as caught:
         asyncio.run(body())
     assert caught.value.code is SourceErrorCode.BAD_RESPONSE
+    assert caught.value.operation == "read paddle data"
+
+
+def test_an_unseen_value_says_it_failed_reading_paddle_data() -> None:
+    odd = [dict(world.SUBSCRIPTIONS[0], status="hibernating")]
+
+    async def body() -> None:
+        source, http = real_source(world.PaddleWorld(subscriptions=odd))
+        async with http:
+            await source.fetch(payments_since=None, now=world.NOW)
+
+    with pytest.raises(SourceError) as caught:
+        asyncio.run(body())
+    assert caught.value.code is SourceErrorCode.UNKNOWN_VALUE
+    assert caught.value.operation == "read paddle data"
 
 
 # ---------------------------------------------------------------- the fake only

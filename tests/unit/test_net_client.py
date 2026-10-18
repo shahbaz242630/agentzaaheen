@@ -252,6 +252,26 @@ def test_gives_up_on_persistent_server_errors() -> None:
     assert caught.value.code is SourceErrorCode.UNAVAILABLE
 
 
+def test_a_failure_says_where_which_attempt_and_the_status() -> None:
+    with pytest.raises(NetError) as caught:
+        get(lambda request: httpx.Response(502), path="/things")
+    err = caught.value
+    assert (err.operation, err.attempt, err.attempts, err.status) == ("GET /things", 3, 3, 502)
+    assert err.reason_code == "net.server_error"
+
+
+def test_a_refusal_is_reported_at_its_first_attempt() -> None:
+    with pytest.raises(NetError) as caught:
+        get(lambda request: httpx.Response(401))
+    assert (caught.value.operation, caught.value.attempt, caught.value.attempts) == ("GET /things", 1, 3)
+
+
+def test_a_refused_path_is_never_echoed_in_the_operation() -> None:
+    with pytest.raises(NetError) as caught:
+        get(ok({}), path="/x?token=abc")
+    assert (caught.value.operation, caught.value.attempt) == ("GET (refused path)", None)
+
+
 @pytest.mark.parametrize(
     ("exc", "code"),
     [

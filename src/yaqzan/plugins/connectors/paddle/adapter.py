@@ -69,7 +69,12 @@ class PaddleSource:
                 fetched_at=now,
             )
         except ValidationError:
-            raise SourceError(SourceErrorCode.BAD_RESPONSE, "paddle data broke a revenue rule") from None
+            raise SourceError(SourceErrorCode.BAD_RESPONSE, "paddle data broke a revenue rule").at(
+                "read paddle data"
+            ) from None
+        except SourceError as exc:
+            exc.at("read paddle data")
+            raise
 
     async def _discounts(self, raw_subs: list[Json]) -> dict[str, Json]:
         ids = sorted(
@@ -89,14 +94,19 @@ class PaddleSource:
     async def _pages(self, path: str, params: Mapping[str, str]) -> list[Json]:
         out: list[Json] = []
         query = {**params, "per_page": _PER_PAGE[path]}
-        for _ in range(self._max_pages):
-            page = await self._http.get_json(path, query)
-            out.extend(mapping.objects(page.get("data"), "data"))
-            pagination = mapping.obj(mapping.obj(page.get("meta"), "meta").get("pagination"), "pagination")
-            if pagination.get("has_more") is not True:
-                return out
-            query = {**query, "after": _after_from(pagination.get("next"))}
-        raise SourceError(SourceErrorCode.TOO_MUCH_DATA, f"more than {self._max_pages} pages from {path}")
+        try:
+            for _ in range(self._max_pages):
+                page = await self._http.get_json(path, query)
+                out.extend(mapping.objects(page.get("data"), "data"))
+                meta = mapping.obj(page.get("meta"), "meta")
+                pagination = mapping.obj(meta.get("pagination"), "pagination")
+                if pagination.get("has_more") is not True:
+                    return out
+                query = {**query, "after": _after_from(pagination.get("next"))}
+            raise SourceError(SourceErrorCode.TOO_MUCH_DATA, f"more than {self._max_pages} pages from {path}")
+        except SourceError as exc:
+            exc.at(f"GET {path}")
+            raise
 
 
 def _after_from(next_url: object) -> str:
