@@ -12,13 +12,23 @@ which attempt, the HTTP status, why, and what to do. The most precise code
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
 from yaqzan.core import metrics
 from yaqzan.core.metrics import CountAndAmounts, Freshness, Unknown
-from yaqzan.core.sdk import RevenueSource, SourceError, SourceErrorCode, explain, get_logger
+from yaqzan.core.sdk import (
+    Payment,
+    Refund,
+    RevenueSource,
+    SourceError,
+    SourceErrorCode,
+    Subscription,
+    explain,
+    get_logger,
+)
 from yaqzan.core.store import Database, RevenueRows, StoreError
 
 CURSOR_OVERLAP = timedelta(hours=1)
@@ -119,13 +129,40 @@ async def revenue_snapshot(  # noqa: PLR0913  # who, which source, when, and the
     rows = RevenueRows(db)
     state = await rows.sync_state(tenant_id, project_id, source)
     last_success = None if state is None else state.last_success_at
+    if not metrics.freshness(last_success, schedule, now).usable:
+        return snapshot_from_rows(
+            source, (), (), (), now=now, last_success=last_success, schedule=schedule, start=start, end=end
+        )
+    return snapshot_from_rows(
+        source,
+        await rows.subscriptions(tenant_id, project_id, source),
+        await rows.payments(tenant_id, project_id, source, start, end),
+        await rows.refunds(tenant_id, project_id, source, start, end),
+        now=now,
+        last_success=last_success,
+        schedule=schedule,
+        start=start,
+        end=end,
+    )
+
+
+def snapshot_from_rows(  # noqa: PLR0913  # the rows, plus when they were read and for which period
+    source: str,
+    subs: Sequence[Subscription],
+    pays: Sequence[Payment],
+    backs: Sequence[Refund],
+    *,
+    now: datetime,
+    last_success: datetime | None,
+    schedule: timedelta,
+    start: datetime,
+    end: datetime,
+) -> RevenueSnapshot:
+    """Numbers for ``[start, end)`` from rows already in hand. Not fresh = every number unknown, never 0."""
     fresh = metrics.freshness(last_success, schedule, now)
     if not fresh.usable:
         gone = Unknown(f"freshness.{fresh.value}")
         return RevenueSnapshot(source, now, fresh, last_success, gone, gone, gone, gone, gone, gone, gone)
-    subs = await rows.subscriptions(tenant_id, project_id, source)
-    pays = await rows.payments(tenant_id, project_id, source, start, end)
-    backs = await rows.refunds(tenant_id, project_id, source, start, end)
     return RevenueSnapshot(
         source=source,
         as_of=now,

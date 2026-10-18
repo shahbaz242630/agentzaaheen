@@ -83,6 +83,24 @@ describe("the dashboard", () => {
   });
 });
 
+describe("real and sample cards side by side", () => {
+  it("tags sample cards and says the others are real", async () => {
+    const zaaheen = sample.details.zaaheen;
+    const mixed = {
+      ...zaaheen,
+      cards: zaaheen.cards.map((card) => (card.id === "paddle" ? { ...card, sample: false } : card)),
+    };
+    serve((path) =>
+      path === "/api/projects/zaaheen" ? new Response(JSON.stringify(mixed), { status: 200 }) : undefined,
+    );
+    render(<App />);
+    expect(await screen.findByText(/The others are real/)).toBeInTheDocument();
+    const revenue = screen.getAllByRole("article", { name: "Revenue" });
+    expect(revenue[0]).not.toHaveTextContent("Sample");
+    expect(revenue[1]).toHaveTextContent("Sample");
+  });
+});
+
 describe("the UI enforces the API's rules too", () => {
   const zaaheen = sample.details.zaaheen;
 

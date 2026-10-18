@@ -33,6 +33,7 @@ const UNKNOWN_REASONS: Record<string, string> = {
   "freshness.stale": "Data is out of date",
   "freshness.alert": "Data is badly out of date",
   "freshness.never": "Never synced",
+  "mrr.price_not_exact": "A price could not be worked out exactly, so no guess is shown",
 };
 
 export function explainUnknown(reason: string): string {

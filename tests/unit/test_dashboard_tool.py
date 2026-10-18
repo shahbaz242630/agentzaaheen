@@ -1,8 +1,12 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from tests.fixtures import paddle_world as world
 from tools import dashboard
 
 
@@ -57,3 +61,106 @@ def test_exports_the_contract_fixture(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr(dashboard, "CONTRACT_FIXTURE", target)
     assert dashboard.main(["--export-contract"], serve=lambda *_: None) == 0
     assert target.read_text(encoding="utf-8") == dashboard.contract_sample()
+
+
+# --- live Paddle mode (a pretend Paddle; no real request is ever made) ---
+
+FAKE_KEY = "pdl_live_apikey_" + "q" * 20  # built here, never a real key
+
+
+class Clock:
+    def __init__(self, start: datetime) -> None:
+        self.now = start
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+def _live(
+    ui: Path, transport: httpx.AsyncBaseTransport, environ: dict[str, str], clock: Clock
+) -> tuple[int, list[FastAPI]]:
+    apps: list[FastAPI] = []
+    code = dashboard.main(
+        ["--paddle-key-env", "K"],
+        static_dir=ui,
+        serve=lambda app, _h, _p: apps.append(app),
+        environ=environ,
+        transport=transport,
+        clock=clock,
+    )
+    return code, apps
+
+
+def _paddle_card(app: FastAPI) -> dict[str, object]:
+    detail = TestClient(app, base_url="http://127.0.0.1").get("/api/projects/zaaheen").json()
+    return next(card for card in detail["cards"] if card["id"] == "paddle")
+
+
+def test_live_mode_shows_real_paddle_numbers_and_never_the_key(
+    ui: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    paddle = world.PaddleWorld()
+    clock = Clock(world.NOW + timedelta(minutes=1))
+    code, apps = _live(ui, httpx.MockTransport(paddle.serve), {"K": FAKE_KEY}, clock)
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "read 7 subscriptions, 5 payment attempts and 4 refunds" in out
+    assert "real Paddle numbers for Zaaheen" in out
+    assert FAKE_KEY not in out
+    assert {r.url.host for r in paddle.requests} <= {"api.paddle.com", "sandbox-api.paddle.com"}
+    assert paddle.requests[0].url.host == "api.paddle.com"
+    assert all(r.method == "GET" for r in paddle.requests)
+
+    card = _paddle_card(apps[0])
+    assert card["sample"] is False
+    assert card["freshness"] == "fresh"
+    assert card["source"] == "Paddle (live)"
+    values = {m["label"]: m["value"] for m in card["metrics"]}  # type: ignore[attr-defined]
+    assert values["MRR (USD)"] == {"kind": "money", "minor": 1300, "currency": "USD"}
+    assert values["Active subscribers"] == {"kind": "count", "value": 3}
+
+
+def test_live_numbers_turn_unknown_once_they_are_old(ui: Path) -> None:
+    clock = Clock(world.NOW)
+    code, apps = _live(ui, httpx.MockTransport(world.PaddleWorld().serve), {"K": FAKE_KEY}, clock)
+    assert code == 0
+    clock.now = world.NOW + dashboard.PADDLE_SCHEDULE * 3
+    card = _paddle_card(apps[0])
+    assert card["freshness"] == "stale"
+    assert all(m["value"]["kind"] == "unknown" for m in card["metrics"])  # type: ignore[attr-defined]
+
+
+def test_a_refused_key_explains_itself_and_does_not_start(
+    ui: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, apps = _live(
+        ui, httpx.MockTransport(lambda r: httpx.Response(403)), {"K": FAKE_KEY}, Clock(world.NOW)
+    )
+    assert code == 1
+    assert apps == []
+    out = capsys.readouterr().out
+    assert "failed with net.auth at GET /subscriptions" in out
+    assert "What to do: Create a new read-only API key in Paddle" in out
+    assert FAKE_KEY not in out
+
+
+@pytest.mark.parametrize(
+    ("environ", "words"),
+    [({}, "K is not set"), ({"K": "pdl live key"}, "spaces or control characters")],
+)
+def test_a_missing_or_mangled_key_is_refused_before_any_request(
+    ui: Path, environ: dict[str, str], words: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def serve(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("no request may be sent")
+
+    code, apps = _live(ui, httpx.MockTransport(serve), environ, Clock(world.NOW))
+    assert code == 1
+    assert apps == []
+    assert words in capsys.readouterr().out
+
+
+def test_the_month_starts_at_midnight_utc_on_the_first() -> None:
+    assert dashboard.month_start(datetime(2026, 10, 18, 12, 30, tzinfo=UTC)) == datetime(
+        2026, 10, 1, tzinfo=UTC
+    )
