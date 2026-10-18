@@ -307,3 +307,22 @@ def test_an_ip_literal_is_refused_even_if_someone_allowlists_it(ip: str) -> None
         check_base_url(f"https://{ip}", careless)
     assert caught.value.net_code is NetErrorCode.BLOCKED
     assert "ip-literal" in str(caught.value)
+
+
+def test_a_response_that_drips_forever_hits_the_total_deadline() -> None:
+    async def drip() -> AsyncIterator[bytes]:
+        while True:
+            yield b" "
+            await asyncio.sleep(0.01)
+
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, content=drip())
+
+    slow = NetPolicy(allowed_hosts=frozenset({HOST}), max_attempts=2, total_timeout_s=0.1)
+    with pytest.raises(NetError) as caught:
+        get(handler, policy=slow)
+    assert caught.value.net_code is NetErrorCode.TIMEOUT
+    assert len(calls) == 2

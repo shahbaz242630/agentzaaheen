@@ -109,7 +109,7 @@ def optional_text(data: Json, key: str) -> str | None:
 def amount(data: Json, key: str) -> int:
     """A minor-unit amount, which Paddle sends as a string of digits."""
     value = data.get(key)
-    if not isinstance(value, str) or not value.isdigit():
+    if not isinstance(value, str) or not (value.isascii() and value.isdigit()):
         raise _bad(key)
     return int(value)
 
@@ -258,8 +258,8 @@ def discount_off(discount: Json, lines: Sequence[tuple[Json, int]], currency: st
     if not isinstance(raw, str):
         return None
     if kind == "percentage":
-        return _percent_off(base, raw)
-    if not raw.isdigit() or discount.get("currency_code") != currency:
+        return _percent_off(base, raw, lines=len(eligible))
+    if not (raw.isascii() and raw.isdigit()) or discount.get("currency_code") != currency:
         return None
     if kind == "flat":
         return min(int(raw), base)
@@ -268,14 +268,17 @@ def discount_off(discount: Json, lines: Sequence[tuple[Json, int]], currency: st
     return None
 
 
-def _percent_off(base: int, raw: str) -> int | None:
+def _percent_off(base: int, raw: str, *, lines: int) -> int | None:
     try:
         percent = Decimal(raw)
     except InvalidOperation:
         return None
     if not percent.is_finite() or not 0 <= percent <= 100:  # a percentage
         return None
-    return int((Decimal(base) * percent / 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    exact = Decimal(base) * percent / 100
+    if lines > 1 and exact != exact.to_integral_value():
+        return None  # Paddle may round per line; we cannot know, so we do not claim an exact number
+    return int(exact.quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 def _quantity(item: Json) -> int:

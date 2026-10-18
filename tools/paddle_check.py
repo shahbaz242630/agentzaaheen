@@ -73,9 +73,12 @@ def main(
     parser.add_argument("--key-env", required=True, help="name of the env var holding a SANDBOX key")
     parser.add_argument("--days", type=int, default=30)
     ns = parser.parse_args(argv)
-    raw = (os.environ if environ is None else environ).get(ns.key_env, "")
+    raw = (os.environ if environ is None else environ).get(ns.key_env, "").strip()
     if not raw:
         print(f"paddle-check: {ns.key_env} is not set (could not run, not a pass).")
+        return 1
+    if not raw.isascii() or not raw.isprintable() or " " in raw:
+        print("paddle-check: the key contains spaces or control characters; copy it again.")
         return 1
     if "_live_" in raw:
         print("paddle-check: that looks like a LIVE key; this tool only talks to the sandbox.")

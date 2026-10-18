@@ -267,3 +267,21 @@ def test_manifest_declares_read_only_and_exactly_our_hosts() -> None:
     assert manifest["permissions"] == ["read"]
     assert set(manifest["egress"]) == ALLOWED_HOSTS
     assert all(endpoint.startswith("GET /") for endpoint in manifest["endpoints"])
+
+
+def test_unicode_digits_are_not_amounts() -> None:
+    attempt = {**world.attempt(1, "error", "525", world.at(3)), "amount": "5²5"}
+    txn = world.txn(1, "completed", 1, 1, [attempt], tax="25", total="525", updated=world.at(3))
+    with pytest.raises(SourceError) as caught:
+        mapping.payments(txn)
+    assert caught.value.code is SourceErrorCode.BAD_RESPONSE
+    flat = {"id": world.pid("dsc", 9), "type": "flat", "amount": "1²", "currency_code": "USD"}
+    assert recurring(one_sub(discount=window()), [flat]) is None
+
+
+def test_a_percentage_over_several_lines_is_exact_or_unknown() -> None:
+    items = [world.item(world.price(1, "333")), world.item(world.price(2, "333"))]
+    assert recurring(one_sub(items=items, discount=window()), [pct("50")]) == 333
+    assert (
+        recurring(one_sub(items=items, discount=window()), [pct("10")]) is None
+    )  # 66.6 off: per-line rounding unknown

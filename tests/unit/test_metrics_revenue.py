@@ -12,7 +12,14 @@ from hypothesis import strategies as st
 from tests.fixtures import paddle_world as world
 from yaqzan.core import metrics
 from yaqzan.core.metrics import CountAndAmounts, Unknown
-from yaqzan.core.sdk import BillingCycle, Interval, PaymentStatus, Subscription, SubscriptionStatus
+from yaqzan.core.sdk import (
+    BillingCycle,
+    Interval,
+    PaymentStatus,
+    RefundStatus,
+    Subscription,
+    SubscriptionStatus,
+)
 
 START = datetime(2026, 10, 1, tzinfo=UTC)
 END = datetime(2026, 11, 1, tzinfo=UTC)
@@ -194,3 +201,16 @@ def test_spike_rule(history: list[int], today: int, spike: bool) -> None:
 def test_spike_rule_refuses_bad_history(history: list[int], today: int) -> None:
     with pytest.raises(ValueError, match="14 non-negative"):
         metrics.failed_payment_spike(history, today)
+
+
+def test_a_reversal_counts_only_beside_its_own_approved_chargeback() -> None:
+    chargeback, reversal = world.EXPECTED_REFUNDS[1], world.EXPECTED_REFUNDS[2]
+    won = chargeback.model_copy(update={"status": RefundStatus.REVERSED})
+    # Vendor flips the chargeback to "reversed" AND sends a reversal: never count money back twice.
+    assert metrics.refunds([won, reversal], START, END) == CountAndAmounts(0, {})
+    assert metrics.cash_revenue([], [won, reversal], START, END, tax=True) == {}
+    # A reversal whose chargeback is out of view is left out: understate, never overstate.
+    assert metrics.cash_revenue([], [reversal], START, END, tax=True) == {}
+    other_txn = reversal.model_copy(update={"transaction_ref": "txn_other"})
+    assert metrics.refunds([chargeback, other_txn], START, END) == CountAndAmounts(1, {"USD": 525})
+    assert metrics.refunds([chargeback, reversal], START, END) == CountAndAmounts(1, {"USD": 0})

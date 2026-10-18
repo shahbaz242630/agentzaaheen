@@ -107,6 +107,24 @@ def failed_payments(payments: Iterable[Payment], start: datetime, end: datetime)
     return CountAndAmounts(count, dict(sorted(amounts.items())))
 
 
+def _counted_refunds(items: Iterable[Refund], start: datetime, end: datetime) -> list[Refund]:
+    """Approved items in the window. A reversal counts only beside its own approved chargeback.
+
+    If a vendor marks a won chargeback ``reversed`` *and* sends a reversal, counting
+    both would overstate revenue; without the matching chargeback in view we
+    leave the reversal out, so an error can only understate, never overstate.
+    """
+    approved = [
+        r for r in items if r.status is RefundStatus.APPROVED and _in_window(r.created_at, start, end)
+    ]
+    charged = {(r.source, r.transaction_ref) for r in approved if r.kind is RefundKind.CHARGEBACK}
+    return [
+        r
+        for r in approved
+        if r.kind is not RefundKind.CHARGEBACK_REVERSAL or (r.source, r.transaction_ref) in charged
+    ]
+
+
 def refunds(items: Iterable[Refund], start: datetime, end: datetime) -> CountAndAmounts:
     """Approved refunds and chargebacks created in ``[start, end)``.
 
@@ -114,9 +132,7 @@ def refunds(items: Iterable[Refund], start: datetime, end: datetime) -> CountAnd
     does not un-count the chargeback.
     """
     count, amounts = 0, dict[str, int]()
-    for r in items:
-        if r.status is not RefundStatus.APPROVED or not _in_window(r.created_at, start, end):
-            continue
+    for r in _counted_refunds(items, start, end):
         if r.kind is RefundKind.CHARGEBACK_REVERSAL:
             _add(amounts, r.currency, -r.amount_minor)
         else:
@@ -136,10 +152,9 @@ def cash_revenue(
     for p in payments:
         if p.status is PaymentStatus.SUCCEEDED and _in_window(p.occurred_at, start, end):
             _add(totals, p.currency, p.amount_minor - (0 if tax else p.tax_minor))
-    for r in items:
-        if r.status is RefundStatus.APPROVED and _in_window(r.created_at, start, end):
-            value = r.amount_minor - (0 if tax else r.tax_minor)
-            _add(totals, r.currency, value if r.kind is RefundKind.CHARGEBACK_REVERSAL else -value)
+    for r in _counted_refunds(items, start, end):
+        value = r.amount_minor - (0 if tax else r.tax_minor)
+        _add(totals, r.currency, value if r.kind is RefundKind.CHARGEBACK_REVERSAL else -value)
     return dict(sorted(totals.items()))
 
 

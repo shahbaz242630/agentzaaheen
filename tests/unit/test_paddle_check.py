@@ -45,3 +45,13 @@ def test_a_refusal_prints_only_the_code(capsys: pytest.CaptureFixture[str]) -> N
     out = capsys.readouterr().out
     assert "source.auth" in out
     assert FAKE_KEY not in out
+
+
+def test_a_trailing_newline_is_stripped_but_inner_spaces_are_refused(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    paddle = world.PaddleWorld()
+    assert run_tool({"K": FAKE_KEY + "\r\n"}, httpx.MockTransport(paddle.serve)) == 0
+    assert all(r.headers["Authorization"] == f"Bearer {FAKE_KEY}" for r in paddle.requests)
+    assert run_tool({"K": "pdl sdbx"}) == 1
+    assert "copy it again" in capsys.readouterr().out

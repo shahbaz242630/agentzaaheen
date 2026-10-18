@@ -40,6 +40,7 @@ class NetPolicy:
     allowed_hosts: frozenset[str]
     connect_timeout_s: float = 5.0
     read_timeout_s: float = 20.0
+    total_timeout_s: float = 60.0
     max_response_bytes: int = 5 * 1024 * 1024
     max_attempts: int = 4
     base_delay_s: float = 0.5
@@ -143,7 +144,13 @@ class JsonClient:
         for attempt in range(1, self._policy.max_attempts + 1):
             last = attempt == self._policy.max_attempts
             try:
-                outcome = await self._attempt(url, params)
+                async with asyncio.timeout(self._policy.total_timeout_s):
+                    outcome = await self._attempt(url, params)
+            except TimeoutError:  # our own whole-response deadline, not httpx's per-read one
+                if last:
+                    raise NetError(NetErrorCode.TIMEOUT, "the response took too long in total") from None
+                await self._back_off(attempt, None, path, NetErrorCode.TIMEOUT.value)
+                continue
             except NetError as exc:
                 if last or exc.net_code not in {NetErrorCode.TIMEOUT, NetErrorCode.UNAVAILABLE}:
                     raise
