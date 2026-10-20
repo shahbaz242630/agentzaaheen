@@ -35,7 +35,10 @@ dashboard is opened at http://localhost (it still listens on 127.0.0.1 only).
 ``--enrol-passkey`` allows the one-time passkey set-up and prints the code
 the page asks for. ``--uptime FILE`` checks each project's public addresses
 once (status only, never the page) from the local list ``projects/uptime.yaml``
-(``tools.dashboard_uptime``) and shows them on each project's Uptime card.
+(``tools.dashboard_uptime``) and shows them on each project's Uptime card,
+re-checking every 5 minutes; with ``--ntfy-topic-env NAME`` a site going
+down (two failed checks in a row) or coming back is pushed to the
+Chairman's phone (ADR-031).
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
@@ -46,7 +49,7 @@ Usage:
     uv run python -m tools.dashboard --bundles ~/.claude/plugins
     uv run python -m tools.dashboard --switches     # after: uv run python -m tools.laptop_db up
     uv run python -m tools.dashboard --switches --enrol-passkey   # once, to set up the passkey
-    uv run python -m tools.dashboard --uptime projects/uptime.yaml
+    uv run python -m tools.dashboard --uptime projects/uptime.yaml --ntfy-topic-env YAQZAN_NTFY_TOPIC
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
 
@@ -77,7 +80,7 @@ from tools.dashboard_sources import (
     utc_now,
 )
 from tools.dashboard_switches import LaptopSwitches, Prepare, connect, off_connectors
-from tools.dashboard_uptime import UptimeListError, load_uptime, uptime_portfolio
+from tools.dashboard_uptime import UptimeListError, load_uptime, start_watch, uptime_portfolio
 from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
 from yaqzan.core.api.registry import RegistryPage, registry_page, uses_from_cards
@@ -185,7 +188,12 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
         live.append("GitHub for every project")
     if uptime and "uptime" not in off:
         base = portfolio or SamplePortfolio(clock())
-        portfolio = uptime_portfolio(base, uptime, clock=clock, transport=transport)
+        names = {p.id: p.name for p in base.projects()}
+        watcher = start_watch(uptime, names, env, ns.ntfy_topic_env, clock=clock, transport=transport)
+        if watcher is None:
+            raise _NotStartedError
+        portfolio = uptime_portfolio(base, watcher, clock=clock)
+        watcher.start()
         live.append("uptime checks")
     return portfolio, live
 
@@ -243,6 +251,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--uptime", type=Path, help="check the addresses in this local list (projects/uptime.yaml)"
     )
+    parser.add_argument("--ntfy-topic-env", help="env var holding the secret ntfy topic for uptime alerts")
     return parser
 
 
