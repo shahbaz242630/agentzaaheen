@@ -12,11 +12,13 @@ What it does:
     matches the client's :class:`DownloadPolicy` (ADR-029), sending it no
     credentials. :class:`StatusProbe` makes status-only GETs for uptime: it
     reads the status line and closes, never the page, never a redirect.
+    :class:`PushClient` posts one short alert to the Chairman's secret ntfy
+    topic (ADR-031), the core's only outbound message.
 
 Public interface:
     ``JsonClient``, ``NetPolicy``, ``DownloadPolicy``, ``NetError``, ``NetErrorCode``,
     ``check_base_url``, ``check_path``, ``ModelClient``, ``check_model_url``,
-    ``StatusProbe``, ``check_probe_url``.
+    ``StatusProbe``, ``check_probe_url``, ``PushClient``, ``NTFY_HOST``.
     A ``JsonClient`` satisfies the SDK's ``JsonGetter`` protocol, which is all
     a connector ever sees.
 
@@ -25,7 +27,7 @@ How to test:
     test runs through ``httpx.MockTransport``).
 
 Must never:
-    Send anything but GET (the model chat POST aside); follow a redirect (the one signed
+    Send anything but GET (the model chat POST and the ntfy alert aside); follow a redirect (the one signed
     download aside, with no credentials); talk to a host not on the
     allowlist; put a key in a url, an error or a log line. No other module
     may import an HTTP library (import-linter).
@@ -35,14 +37,17 @@ from yaqzan.core.net.client import DownloadPolicy, JsonClient, NetPolicy, check_
 from yaqzan.core.net.errors import NetError, NetErrorCode
 from yaqzan.core.net.model import ModelClient, check_model_url
 from yaqzan.core.net.probe import StatusProbe, check_probe_url
+from yaqzan.core.net.push import NTFY_HOST, PushClient
 
 __all__ = [
+    "NTFY_HOST",
     "DownloadPolicy",
     "JsonClient",
     "ModelClient",
     "NetError",
     "NetErrorCode",
     "NetPolicy",
+    "PushClient",
     "StatusProbe",
     "check_base_url",
     "check_model_url",

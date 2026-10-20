@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from yaqzan.core import metrics
 from yaqzan.core.api.views import Card, Count, Entry, Metric, NotKnown, Tone
+from yaqzan.core.notify import REASON_WORDS
 from yaqzan.core.sdk import SiteCheck, UptimeReport
 
 CARD_ID = "uptime"
@@ -20,12 +21,6 @@ TITLE = "Uptime"
 LABELS = ("Up", "Down", "Slowest answer (ms)")
 SLOW_MS = 3000
 _MAX_ENTRY = 160
-_WHY = {
-    "uptime.no_answer": "did not answer",
-    "uptime.server_error": "server error",
-    "uptime.not_found": "page not found",
-    "uptime.refused": "refused the request",
-}
 
 
 def uptime_card(report: UptimeReport, *, schedule: timedelta, now: datetime) -> Card:
@@ -61,7 +56,7 @@ def _lines(report: UptimeReport) -> tuple[Entry, ...]:
 
 
 def _down(site: SiteCheck) -> Entry:
-    why = _WHY.get(site.reason, "not as expected")
+    why = REASON_WORDS.get(site.reason, "not as expected")
     status = f" (http {site.status})" if site.status is not None else ""
     return Entry(text=_fit(f"{_where(site)} is down: {why}{status}"), tone=Tone.ALERT, at=site.checked_at)
 
