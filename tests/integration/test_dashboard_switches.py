@@ -107,6 +107,7 @@ def test_a_switch_turned_off_stays_off_after_a_restart(ui: Path, laptop_url: Sec
         assert states(client) == {
             "github": "on",
             "paddle": "on",
+            "supabase": "on",
             "uptime": "on",
             "triage-failing-build": "on",
         }
@@ -217,3 +218,26 @@ def test_uptime_switched_off_checks_nothing_at_the_next_start(
 
     start(ui, laptop_url, ["--uptime", str(listed)], transport=httpx.MockTransport(refuse))
     assert "uptime is switched off on the Customize page, so it was not read." in capsys.readouterr().out
+
+
+def test_supabase_switched_off_reads_nothing_at_the_next_start(
+    ui: Path, laptop_url: SecretStr, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    listed = tmp_path / "supabase.yaml"
+    listed.write_text("eva: {ref: abcdefghijklmnopqrst, token_env: SUPA_EVA}\n", encoding="utf-8")
+    with TestClient(start(ui, laptop_url), base_url="http://127.0.0.1") as client:
+        supabase = {"kind": "connector", "id": "supabase"}
+        assert client.post("/api/registry/switch-off", json=supabase, headers=OURS).status_code == 200
+    capsys.readouterr()
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"Supabase was read although switched off: {request.url}")
+
+    start(
+        ui,
+        laptop_url,
+        ["--supabase", str(listed)],
+        environ={"SUPA_EVA": "sbp_" + "f" * 40},
+        transport=httpx.MockTransport(refuse),
+    )
+    assert "supabase is switched off on the Customize page, so it was not read." in capsys.readouterr().out

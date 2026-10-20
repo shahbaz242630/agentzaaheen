@@ -46,7 +46,7 @@ def test_a_refusal_says_what_where_why_and_what_to_do(capsys: pytest.CaptureFixt
     assert "failed with net.auth at GET /subscriptions, http 403." in out
     assert "What: Paddle refused our API key." in out
     assert "Why: The key has expired" in out
-    assert "What to do: Create a new read-only API key in Paddle" in out
+    assert "What to do: Create a new read-only key in Paddle's settings" in out
     assert FAKE_KEY not in out
 
 

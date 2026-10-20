@@ -29,6 +29,7 @@ from yaqzan.core.metrics import Freshness
 
 _NOT_CONNECTED = NotKnown(reason="source.not_connected")
 _CODE_LABELS = ("Open issues", "Open pull requests", "Failing workflows")
+_BACKEND_LABELS = ("Services healthy", "Disk used", "API requests (24h)")
 
 
 class SamplePortfolio:
@@ -208,6 +209,7 @@ class SamplePortfolio:
                     ),
                 ),
                 self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)", "Incidents")),
+                self._not_connected("supabase", "Backend", "Supabase", _BACKEND_LABELS),
                 self._fresh(
                     "activity",
                     "Yesterday's agent activity",
@@ -267,6 +269,7 @@ class SamplePortfolio:
                 ),
                 self._not_connected("github", "Code", "GitHub", _CODE_LABELS),
                 self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)",)),
+                self._not_connected("supabase", "Backend", "Supabase", _BACKEND_LABELS),
             ),
         )
 
@@ -323,6 +326,7 @@ class SamplePortfolio:
                 self._not_connected("paddle", "Revenue", "Paddle", ("MRR", "Active subscribers")),
                 self._not_connected("github", "Code", "GitHub", _CODE_LABELS),
                 self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)",)),
+                self._not_connected("supabase", "Backend", "Supabase", _BACKEND_LABELS),
             ),
         )
 
@@ -339,5 +343,6 @@ class SamplePortfolio:
             cards=(
                 self._not_connected("github", "Code", "GitHub", _CODE_LABELS),
                 self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)",)),
+                self._not_connected("supabase", "Backend", "Supabase", _BACKEND_LABELS),
             ),
         )

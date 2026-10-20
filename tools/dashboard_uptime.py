@@ -27,6 +27,7 @@ import httpx
 import yaml
 from pydantic import SecretStr, ValidationError
 
+from tools.dashboard_sources import ListNotUsableError
 from yaqzan.core.api import Portfolio
 from yaqzan.core.api.overlay import CardMaker, OverlayPortfolio
 from yaqzan.core.api.uptime import CARD_ID, uptime_card
@@ -189,3 +190,14 @@ def start_watch(  # noqa: PLR0913  # the list, the names, where the topic is, an
     if topic is not None:
         print("dashboard: uptime alerts go to your phone via ntfy (after 2 failed checks in a row).")
     return watcher
+
+
+def uptime_list(path: Path | None, projects: Collection[str]) -> dict[str, tuple[SiteRule, ...]]:
+    """The local uptime list given with ``--uptime`` (empty without one); a broken list is said and raised."""
+    if path is None:
+        return {}
+    try:
+        return load_uptime(path, projects)
+    except UptimeListError as exc:
+        print(f"dashboard: {exc}.")
+        raise ListNotUsableError from None

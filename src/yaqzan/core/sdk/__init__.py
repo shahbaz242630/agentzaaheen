@@ -6,8 +6,9 @@ What it does:
     protocols a connector implements), the small rules that travel with them
     (data class only goes up, taint spreads) and the one redacting logger
     every module and plugin uses, and the error catalogue that puts every
-    reason code into plain English (:func:`explain`), and the uptime shapes
-    (an address's rule, its status and timing, never its page).
+    reason code into plain English (:func:`explain`), the uptime shapes
+    (an address's rule, its status and timing, never its page) and the
+    backend health shapes (codes and numbers only).
 
 Public interface:
     Everything listed in ``__all__`` below. Nothing else is public.
@@ -21,6 +22,14 @@ Must never:
     Log through anything other than :func:`get_logger`.
 """
 
+from yaqzan.core.sdk.backend import (
+    PROJECT_REF,
+    BackendHealth,
+    BackendSource,
+    JsonReader,
+    ProjectState,
+    ServiceHealth,
+)
 from yaqzan.core.sdk.code import REPO_PATTERN, BuildState, RepoHealth, RepoSource
 from yaqzan.core.sdk.explain import KNOWN_CODES, Explanation, explain
 from yaqzan.core.sdk.log import (
@@ -93,12 +102,15 @@ __all__ = [
     "KNOWN_CODES",
     "MAX_LOG_CHARS",
     "MAX_LOG_LINES",
+    "PROJECT_REF",
     "REDACTED",
     "REPO_PATTERN",
     "SDK_VERSION",
     "Action",
     "ActionLevel",
     "ActionStatus",
+    "BackendHealth",
+    "BackendSource",
     "BillingCycle",
     "BuildLogSource",
     "BuildState",
@@ -114,9 +126,11 @@ __all__ = [
     "FindingStatus",
     "Interval",
     "JsonGetter",
+    "JsonReader",
     "ModelInfo",
     "Payment",
     "PaymentStatus",
+    "ProjectState",
     "Refund",
     "RefundKind",
     "RefundStatus",
@@ -126,6 +140,7 @@ __all__ = [
     "RevenueSource",
     "RunOutcome",
     "RunRecord",
+    "ServiceHealth",
     "Severity",
     "SiteCheck",
     "SiteRule",

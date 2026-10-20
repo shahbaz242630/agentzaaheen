@@ -42,6 +42,10 @@ GITHUB_REPOS: dict[str, str] = {
 Clock = Callable[[], datetime]
 
 
+class ListNotUsableError(Exception):
+    """A local list given at start (uptime, Supabase) could not be used; why was already said."""
+
+
 def utc_now() -> datetime:
     """The time now, in UTC."""
     return datetime.now(UTC)

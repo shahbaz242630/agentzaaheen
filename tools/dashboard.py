@@ -50,6 +50,7 @@ Usage:
     uv run python -m tools.dashboard --switches     # after: uv run python -m tools.laptop_db up
     uv run python -m tools.dashboard --switches --enrol-passkey   # once, to set up the passkey
     uv run python -m tools.dashboard --uptime projects/uptime.yaml --ntfy-topic-env YAQZAN_NTFY_TOPIC
+    uv run python -m tools.dashboard --supabase projects/supabase.yaml
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
 
@@ -74,13 +75,15 @@ from tools.chat_tools import Switched, model_chat, tools_for
 from tools.dashboard_sources import (
     GITHUB_REPOS,
     Clock,
+    ListNotUsableError,
     github_portfolio,
     live_portfolio,
     usable_secret,
     utc_now,
 )
+from tools.dashboard_supabase import SupabaseProject, supabase_list, supabase_portfolio
 from tools.dashboard_switches import LaptopSwitches, Prepare, connect, off_connectors
-from tools.dashboard_uptime import UptimeListError, load_uptime, start_watch, uptime_portfolio
+from tools.dashboard_uptime import start_watch, uptime_list, uptime_portfolio
 from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
 from yaqzan.core.api.registry import RegistryPage, registry_page, uses_from_cards
@@ -108,9 +111,19 @@ CONNECTOR_CARDS: dict[str, tuple[str, tuple[str, ...]]] = {
 type UptimeRules = dict[str, tuple[SiteRule, ...]]
 
 
-def wiring_for(uptime: UptimeRules) -> dict[str, tuple[str, tuple[str, ...]]]:
-    """Which card each connector feeds on this run: uptime only for the projects on its list."""
-    return {**CONNECTOR_CARDS, "uptime": (UPTIME_CARD, tuple(uptime))} if uptime else dict(CONNECTOR_CARDS)
+type SupabaseList = dict[str, SupabaseProject]
+
+
+def wiring_for(
+    uptime: UptimeRules, backends: SupabaseList | None = None
+) -> dict[str, tuple[str, tuple[str, ...]]]:
+    """Which card each connector feeds on this run (uptime and Supabase: only the projects listed)."""
+    wiring = dict(CONNECTOR_CARDS)
+    if uptime:
+        wiring["uptime"] = (UPTIME_CARD, tuple(uptime))
+    if backends:
+        wiring["supabase"] = ("supabase", tuple(backends))
+    return wiring
 
 
 def load_plugins(bundles: Sequence[Path] = ()) -> Registry:
@@ -126,10 +139,11 @@ def registry_for(
     bundles: Sequence[Path] = (),
     registry: Registry | None = None,
     uptime: UptimeRules | None = None,
+    backends: SupabaseList | None = None,
 ) -> RegistryPage:
     """The Customize page: what is on disk, with each connector judged from the cards it feeds."""
     found = load_plugins(bundles) if registry is None else registry
-    return registry_page(found, uses_from_cards(portfolio.project, wiring_for(uptime or {})))
+    return registry_page(found, uses_from_cards(portfolio.project, wiring_for(uptime or {}, backends)))
 
 
 def contract_sample() -> str:
@@ -164,6 +178,7 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
     *,
     off: frozenset[str] = frozenset(),
     uptime: UptimeRules | None = None,
+    backends: SupabaseList | None = None,
 ) -> tuple[Portfolio | None, list[str]]:
     """The portfolio with every requested real source laid over the sample, and what is real.
 
@@ -171,7 +186,12 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
     """
     portfolio: Portfolio | None = None
     live: list[str] = []
-    asked_for = (("paddle", ns.paddle_key_env), ("github", ns.github_token_env), ("uptime", uptime))
+    asked_for = (
+        ("paddle", ns.paddle_key_env),
+        ("github", ns.github_token_env),
+        ("uptime", uptime),
+        ("supabase", backends),
+    )
     for connector, asked in asked_for:
         if asked and connector in off:
             print(f"dashboard: {connector} is switched off on the Customize page, so it was not read.")
@@ -195,19 +215,11 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
         portfolio = uptime_portfolio(base, watcher, clock=clock)
         watcher.start()
         live.append("uptime checks")
+    if backends and "supabase" not in off:
+        base = portfolio or SamplePortfolio(clock())
+        portfolio = supabase_portfolio(base, backends, env, clock=clock, transport=transport)
+        live.append("Supabase")
     return portfolio, live
-
-
-def _uptime_rules(ns: argparse.Namespace, clock: Clock) -> UptimeRules:
-    """The local address list, if one was given (``--uptime``); a broken list stops the start, saying why."""
-    if ns.uptime is None:
-        return {}
-    projects = {p.id for p in SamplePortfolio(clock()).projects()}
-    try:
-        return load_uptime(ns.uptime, projects)
-    except UptimeListError as exc:
-        print(f"dashboard: {exc}.")
-        raise _NotStartedError from None
 
 
 def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock) is injectable for tests
@@ -252,6 +264,7 @@ def _parser() -> argparse.ArgumentParser:
         "--uptime", type=Path, help="check the addresses in this local list (projects/uptime.yaml)"
     )
     parser.add_argument("--ntfy-topic-env", help="env var holding the secret ntfy topic for uptime alerts")
+    parser.add_argument("--supabase", type=Path, help="read the Supabase projects in this local list")
     return parser
 
 
@@ -290,10 +303,12 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
     if ns.switches and connected is None:
         return 1
     try:
-        uptime = _uptime_rules(ns, clock)
+        projects = {p.id for p in SamplePortfolio(clock()).projects()}
+        uptime = uptime_list(ns.uptime, projects)
+        backends = supabase_list(ns.supabase, projects)
         off = off_connectors(connected[1], registry) if connected else frozenset[str]()
-        portfolio, live = _real_data(ns, env, clock, transport, off=off, uptime=uptime)
-    except _NotStartedError:
+        portfolio, live = _real_data(ns, env, clock, transport, off=off, uptime=uptime, backends=backends)
+    except (_NotStartedError, ListNotUsableError):
         return 1
     chosen = portfolio or SamplePortfolio(clock())
     switches = None
@@ -302,7 +317,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         switches = LaptopSwitches(
             connected[0],
             registry,
-            uses_from_cards(chosen.project, wiring_for(uptime)),
+            uses_from_cards(chosen.project, wiring_for(uptime, backends)),
             clock,
             site=Site(origin=f"http://localhost:{ns.port}"),
             enrol_code=code,
@@ -317,7 +332,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         )
         if chat is None:
             return 1
-    page = registry_for(chosen, registry=registry, uptime=uptime)
+    page = registry_for(chosen, registry=registry, uptime=uptime, backends=backends)
     app = create_app(
         chosen, static_dir=static_dir, allowed_hosts=LOCAL_HOSTS, chat=chat, registry=page, switches=switches
     )

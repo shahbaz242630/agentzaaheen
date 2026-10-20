@@ -140,7 +140,7 @@ def test_a_refused_key_explains_itself_and_does_not_start(
     assert apps == []
     out = capsys.readouterr().out
     assert "failed with net.auth at GET /subscriptions" in out
-    assert "What to do: Create a new read-only API key in Paddle" in out
+    assert "What to do: Create a new read-only key in Paddle's settings" in out
     assert FAKE_KEY not in out
 
 
@@ -240,7 +240,7 @@ def test_the_customize_page_lists_what_is_on_disk(ui: Path) -> None:
     apps: list[FastAPI] = []
     assert dashboard.main([], static_dir=ui, serve=lambda app, *_: apps.append(app)) == 0
     page = TestClient(apps[0], base_url="http://127.0.0.1").get("/api/registry").json()
-    assert [c["id"] for c in page["connectors"]] == ["github", "paddle", "uptime"]
+    assert [c["id"] for c in page["connectors"]] == ["github", "paddle", "supabase", "uptime"]
     assert {u["status"] for c in page["connectors"] for u in c["uses"]} == {"needs_key"}
     assert [u["project_id"] for u in page["connectors"][1]["uses"]] == ["zaaheen"]
     assert [s["id"] for s in page["skills"]] == ["triage-failing-build"]
