@@ -842,6 +842,24 @@
           }
         ],
         "state": "on"
+      },
+      {
+        "id": "uptime",
+        "name": "Uptime",
+        "category": "Health",
+        "description": "Whether each project's public addresses answer as they should: status code and timing only, never the page.",
+        "version": "0.1.0",
+        "level": "read",
+        "hosts": [
+          "the addresses in this laptop's uptime list (never committed)"
+        ],
+        "endpoints": [
+          "GET /"
+        ],
+        "key_slots": [],
+        "fingerprint": "b9e9c696c73ea70f398c80f1878e3a693cc11623957404c606d31147d9737eb9",
+        "uses": [],
+        "state": "on"
       }
     ],
     "skills": [

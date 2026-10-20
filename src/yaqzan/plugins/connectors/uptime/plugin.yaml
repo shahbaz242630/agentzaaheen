@@ -1,0 +1,14 @@
+id: uptime
+type: connector
+version: 0.1.0
+sdk: ">=1.7,<2"
+permissions: [read]
+egress: ["the addresses in this laptop's uptime list (never committed)"]
+endpoints:
+  - GET /
+credentials: []
+data_class: internal
+interface:
+  display_name: Uptime
+  category: Health
+  description: "Whether each project's public addresses answer as they should: status code and timing only, never the page."

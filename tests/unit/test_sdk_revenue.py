@@ -16,7 +16,7 @@ SUB = world.EXPECTED_SUBSCRIPTIONS[0]
 
 
 def test_sdk_version_is_bumped_for_the_new_shapes() -> None:
-    assert SDK_VERSION == "1.6.0"
+    assert SDK_VERSION == "1.7.0"
 
 
 @pytest.mark.parametrize(

@@ -240,7 +240,7 @@ def test_the_customize_page_lists_what_is_on_disk(ui: Path) -> None:
     apps: list[FastAPI] = []
     assert dashboard.main([], static_dir=ui, serve=lambda app, *_: apps.append(app)) == 0
     page = TestClient(apps[0], base_url="http://127.0.0.1").get("/api/registry").json()
-    assert [c["id"] for c in page["connectors"]] == ["github", "paddle"]
+    assert [c["id"] for c in page["connectors"]] == ["github", "paddle", "uptime"]
     assert {u["status"] for c in page["connectors"] for u in c["uses"]} == {"needs_key"}
     assert [u["project_id"] for u in page["connectors"][1]["uses"]] == ["zaaheen"]
     assert [s["id"] for s in page["skills"]] == ["triage-failing-build"]

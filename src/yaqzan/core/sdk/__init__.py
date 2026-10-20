@@ -6,7 +6,8 @@ What it does:
     protocols a connector implements), the small rules that travel with them
     (data class only goes up, taint spreads) and the one redacting logger
     every module and plugin uses, and the error catalogue that puts every
-    reason code into plain English (:func:`explain`).
+    reason code into plain English (:func:`explain`), and the uptime shapes
+    (an address's rule, its status and timing, never its page).
 
 Public interface:
     Everything listed in ``__all__`` below. Nothing else is public.
@@ -77,6 +78,16 @@ from yaqzan.core.sdk.revenue import (
     SubscriptionStatus,
 )
 from yaqzan.core.sdk.tools import ToolLevel, ToolSpec
+from yaqzan.core.sdk.uptime import (
+    Expect,
+    SiteCheck,
+    SiteRule,
+    StatusAnswer,
+    StatusGetter,
+    UptimeReport,
+    check_site,
+    judge,
+)
 
 __all__ = [
     "KNOWN_CODES",
@@ -95,6 +106,7 @@ __all__ = [
     "DataClass",
     "Event",
     "Evidence",
+    "Expect",
     "Explanation",
     "FailedStepLog",
     "Finding",
@@ -115,19 +127,26 @@ __all__ = [
     "RunOutcome",
     "RunRecord",
     "Severity",
+    "SiteCheck",
+    "SiteRule",
     "SourceError",
     "SourceErrorCode",
+    "StatusAnswer",
+    "StatusGetter",
     "Subscription",
     "SubscriptionStatus",
     "ToolLevel",
     "ToolSpec",
     "Trust",
+    "UptimeReport",
+    "check_site",
     "clean_log",
     "combine_trust",
     "contains_sensitive",
     "explain",
     "get_logger",
     "is_sensitive_key",
+    "judge",
     "log_digest",
     "make_failed_step_log",
     "make_idempotency_key",
