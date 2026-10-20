@@ -32,8 +32,12 @@ def test_the_page_carries_the_registry_and_where_each_connector_is_used() -> Non
     assert [(u.project_id, u.status) for u in paddle.uses] == [("zaaheen", Use.LIVE)]
     assert next(c for c in page.connectors if c.id == "github").uses == ()
     assert paddle.endpoints[0] == "GET /subscriptions"
-    assert [s.id for s in page.skills] == ["triage-failing-build"]
-    assert page.skills[0].missing == ()
+    assert [(s.id, s.missing) for s in page.skills] == [
+        ("check-slo", ()),
+        ("trace-request", ("grafana",)),  # honest: the Grafana connector does not exist yet (ADR-032)
+        ("triage-failing-build", ()),
+        ("triage-outage", ()),
+    ]
 
 
 def test_a_skill_lists_the_connectors_it_needs_that_do_not_exist() -> None:
