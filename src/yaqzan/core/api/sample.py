@@ -28,6 +28,7 @@ from yaqzan.core.api.views import (
 from yaqzan.core.metrics import Freshness
 
 _NOT_CONNECTED = NotKnown(reason="source.not_connected")
+_CODE_LABELS = ("Open issues", "Open pull requests", "Failing workflows")
 
 
 class SamplePortfolio:
@@ -188,24 +189,17 @@ class SamplePortfolio:
                 ),
                 self._fresh(
                     "github",
-                    "Open issues",
+                    "Code",
                     "GitHub",
                     30,
                     metrics=(
                         Metric(label="Open issues", value=Count(value=5)),
                         Metric(label="Open pull requests", value=Count(value=2)),
-                        Metric(label="Failing builds", value=Count(value=0)),
+                        Metric(label="Failing workflows", value=Count(value=0), detail="main, newest commit"),
                     ),
                     entries=(
                         Entry(
-                            text="New issue: sync stops after laptop sleep",
-                            tone=Tone.WARN,
-                            at=self._ago(hours=5),
-                        ),
-                        Entry(
-                            text="Security alert closed: dependency updated",
-                            tone=Tone.OK,
-                            at=self._ago(days=1),
+                            text="Newest build on main passed (3f9c2ab)", tone=Tone.OK, at=self._ago(hours=5)
                         ),
                     ),
                 ),
@@ -267,6 +261,7 @@ class SamplePortfolio:
                         Metric(label="Below 3 stars", value=Count(value=0)),
                     ),
                 ),
+                self._not_connected("github", "Code", "GitHub", _CODE_LABELS),
                 self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)",)),
             ),
         )
@@ -294,12 +289,13 @@ class SamplePortfolio:
                 ),
                 self._fresh(
                     "github",
-                    "Open issues",
+                    "Code",
                     "GitHub",
                     30,
                     metrics=(
                         Metric(label="Open issues", value=Count(value=11)),
-                        Metric(label="Failing builds", value=Count(value=0)),
+                        Metric(label="Open pull requests", value=Count(value=1)),
+                        Metric(label="Failing workflows", value=Count(value=0), detail="main, newest commit"),
                     ),
                 ),
             ),
@@ -317,6 +313,7 @@ class SamplePortfolio:
             ),
             cards=(
                 self._not_connected("paddle", "Revenue", "Paddle", ("MRR", "Active subscribers")),
+                self._not_connected("github", "Code", "GitHub", _CODE_LABELS),
                 self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)",)),
             ),
         )

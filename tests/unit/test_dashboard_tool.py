@@ -105,7 +105,7 @@ def test_live_mode_shows_real_paddle_numbers_and_never_the_key(
     assert code == 0
     out = capsys.readouterr().out
     assert "read 7 subscriptions, 5 payment attempts and 4 refunds" in out
-    assert "real Paddle numbers for Zaaheen" in out
+    assert "real numbers from Paddle for Zaaheen" in out
     assert FAKE_KEY not in out
     assert {r.url.host for r in paddle.requests} <= {"api.paddle.com", "sandbox-api.paddle.com"}
     assert paddle.requests[0].url.host == "api.paddle.com"

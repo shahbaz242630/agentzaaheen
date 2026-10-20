@@ -13,13 +13,14 @@ Public interface:
 
 How to test:
     ``uv run pytest tests/unit/test_sdk_models.py tests/unit/test_sdk_log.py``
-    ``uv run pytest tests/unit/test_sdk_revenue.py``
+    ``uv run pytest tests/unit/test_sdk_revenue.py tests/unit/test_sdk_code.py``
 
 Must never:
     Import any other core module, touch the database, the network or secrets.
     Log through anything other than :func:`get_logger`.
 """
 
+from yaqzan.core.sdk.code import REPO_PATTERN, BuildState, RepoHealth, RepoSource
 from yaqzan.core.sdk.explain import KNOWN_CODES, Explanation, explain
 from yaqzan.core.sdk.log import REDACTED, contains_sensitive, get_logger, redact, redact_text
 from yaqzan.core.sdk.models import (
@@ -63,11 +64,13 @@ from yaqzan.core.sdk.tools import ToolLevel, ToolSpec
 __all__ = [
     "KNOWN_CODES",
     "REDACTED",
+    "REPO_PATTERN",
     "SDK_VERSION",
     "Action",
     "ActionLevel",
     "ActionStatus",
     "BillingCycle",
+    "BuildState",
     "DataClass",
     "Event",
     "Evidence",
@@ -83,6 +86,8 @@ __all__ = [
     "Refund",
     "RefundKind",
     "RefundStatus",
+    "RepoHealth",
+    "RepoSource",
     "RevenueBatch",
     "RevenueSource",
     "RunOutcome",

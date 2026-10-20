@@ -259,7 +259,7 @@ KNOWN_CODES = frozenset(_CATALOGUE)
 
 def explain(code: str, *, vendor: str | None = None) -> Explanation:
     """``code`` in plain English. ``vendor`` is the source name (``paddle`` reads as "Paddle")."""
-    name = vendor.capitalize() if vendor else "the service"
+    name = vendor[:1].upper() + vendor[1:] if vendor else "the service"
     entry = _CATALOGUE.get(code)
     if entry is None:
         return Explanation(
