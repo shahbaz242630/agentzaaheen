@@ -25,7 +25,7 @@ def write_bundle(folder: Path, name: str, layout: str = "claude") -> None:
 
 def test_the_real_plugins_folder_loads_without_problems() -> None:
     registry = load_registry(PLUGINS)
-    assert [c.id for c in registry.connectors] == ["github", "paddle", "uptime"]
+    assert [c.id for c in registry.connectors] == ["github", "paddle", "supabase", "uptime"]
     assert [s.id for s in registry.skills] == ["triage-failing-build"]
     assert registry.plugins == ()
     assert registry.problems == ()

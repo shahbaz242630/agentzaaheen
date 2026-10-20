@@ -69,7 +69,7 @@ def test_each_key_gets_the_right_alert_and_a_plain_english_line(
     soon_line = lines[str(soon)]
     assert (soon_line["level"], soon_line["severity"], soon_line["days_left"]) == ("warning", "P2", 14)
     assert soon_line["what"] == "The Paddle API key expires within 14 days."
-    assert soon_line["fix"].startswith("Create a new read-only API key in Paddle")
+    assert soon_line["fix"].startswith("Create a new read-only key in Paddle's settings")
     assert lines[str(gone)]["level"] == "error"
     assert lines[str(undated)]["level"] == "info"
     assert SECRET not in logged

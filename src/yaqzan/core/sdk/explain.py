@@ -28,8 +28,10 @@ class Explanation:
         return f"{self.what} Why: {self.why} What to do: {self.fix}"
 
 
+# Vendor-neutral on purpose: where the key is made differs per vendor (each connector's manifest says how).
 _NEW_KEY = (
-    "Create a new read-only API key in {vendor} (Developer tools > Authentication) and save it in the vault."
+    "Create a new read-only key in {vendor}'s settings, "
+    "with only the access its connector lists, and save it."
 )
 _WAIT = (
     "Nothing yet: Yaqzan retries on the next scheduled sync. "

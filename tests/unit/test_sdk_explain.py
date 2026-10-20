@@ -42,7 +42,7 @@ def test_every_entry_reads_as_finished_sentences(code: str, vendor: str | None) 
 def test_the_vendor_is_named_and_capitalised() -> None:
     said = explain("source.auth", vendor="paddle")
     assert said.what == "Paddle refused our API key."
-    assert "Create a new read-only API key in Paddle" in said.fix
+    assert "Create a new read-only key in Paddle's settings" in said.fix
     assert explain("net.timeout").what == "The service took too long to answer."
     assert explain("source.auth", vendor="GitHub").what == "GitHub refused our API key."
     assert said.line() == f"{said.what} Why: {said.why} What to do: {said.fix}"

@@ -166,6 +166,16 @@ class JsonClient:
 
         A failure carries ``GET <path>`` and the attempt it gave up on (``NetError.at``).
         """
+        body = await self._get(path, params)
+        return _decode(body)
+
+    async def get_json_list(self, path: str, params: Mapping[str, str]) -> list[object]:
+        """Like :meth:`get_json`, for an endpoint that answers with a JSON array."""
+        body = await self._get(path, params)
+        return _decode_list(body)
+
+    async def _get(self, path: str, params: Mapping[str, str]) -> bytes:
+        """The body of a 200 answer to GET ``path``, retrying where it is safe."""
         try:
             url = self._base + check_path(path)
         except NetError as exc:
@@ -188,7 +198,7 @@ class JsonClient:
                         raise
                     await self._back_off(attempt, None, path, exc.net_code.value)
                     continue
-                if isinstance(outcome, dict):
+                if isinstance(outcome, bytes):
                     return outcome
                 status, retry_after = outcome
                 if last:
@@ -204,10 +214,8 @@ class JsonClient:
             raise
         raise AssertionError("unreachable: the last attempt always returns or raises")  # pragma: no cover
 
-    async def _attempt(
-        self, url: str, params: Mapping[str, str]
-    ) -> dict[str, object] | tuple[int, str | None]:
-        """One request: the decoded object, or ``(status, Retry-After)`` when a retry may help."""
+    async def _attempt(self, url: str, params: Mapping[str, str]) -> bytes | tuple[int, str | None]:
+        """One request: the body of a 200 answer, or ``(status, Retry-After)`` when a retry may help."""
         try:
             async with self._http.stream("GET", url, params=dict(params)) as response:
                 status = response.status_code
@@ -225,7 +233,7 @@ class JsonClient:
             raise NetError(NetErrorCode.TIMEOUT, "the request timed out") from None
         except httpx.TransportError:
             raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the host") from None
-        return _decode(body)
+        return body
 
     async def get_redirected_bytes(self, path: str, params: Mapping[str, str]) -> bytes:
         """GET ``path`` (with our headers), expect a redirect to a signed link, and read that link.
@@ -346,6 +354,16 @@ async def read_capped(response: httpx.Response, limit: int) -> bytes:
 def decode_object(body: bytes) -> dict[str, object]:
     """The body as a JSON object, or ``NetError(BAD_RESPONSE)``."""
     return _decode(body)
+
+
+def _decode_list(body: bytes) -> list[object]:
+    try:
+        value = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise NetError(NetErrorCode.BAD_RESPONSE, "the response is not JSON", status=200) from None
+    if not isinstance(value, list):
+        raise NetError(NetErrorCode.BAD_RESPONSE, "the response is not a JSON array", status=200)
+    return value
 
 
 def _decode(body: bytes) -> dict[str, object]:

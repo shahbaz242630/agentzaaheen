@@ -301,6 +301,47 @@
           ]
         },
         {
+          "id": "supabase",
+          "title": "Backend",
+          "source": "Supabase",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Services healthy",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Disk used",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "API requests (24h)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Supabase is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
           "id": "activity",
           "title": "Yesterday's agent activity",
           "source": "Audit log",
@@ -467,6 +508,47 @@
           "entries": [
             {
               "text": "Uptime checker is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
+          "id": "supabase",
+          "title": "Backend",
+          "source": "Supabase",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Services healthy",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Disk used",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "API requests (24h)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Supabase is not connected yet.",
               "tone": "info",
               "at": null
             }
@@ -656,6 +738,47 @@
               "at": null
             }
           ]
+        },
+        {
+          "id": "supabase",
+          "title": "Backend",
+          "source": "Supabase",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Services healthy",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Disk used",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "API requests (24h)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Supabase is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
         }
       ]
     },
@@ -730,6 +853,47 @@
           "entries": [
             {
               "text": "Uptime checker is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
+          "id": "supabase",
+          "title": "Backend",
+          "source": "Supabase",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Services healthy",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Disk used",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "API requests (24h)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Supabase is not connected yet.",
               "tone": "info",
               "at": null
             }
@@ -841,6 +1005,29 @@
             "status": "needs_key"
           }
         ],
+        "state": "on"
+      },
+      {
+        "id": "supabase",
+        "name": "Supabase",
+        "category": "Backend",
+        "description": "Each backend project's state, service health, disk use and API traffic: codes and numbers only, never data or messages.",
+        "version": "0.1.0",
+        "level": "read",
+        "hosts": [
+          "api.supabase.com"
+        ],
+        "endpoints": [
+          "GET /v1/projects/{ref}",
+          "GET /v1/projects/{ref}/health",
+          "GET /v1/projects/{ref}/config/disk/util",
+          "GET /v1/projects/{ref}/analytics/endpoints/usage.api-counts"
+        ],
+        "key_slots": [
+          "token"
+        ],
+        "fingerprint": "a47a465f92c38a447d7be708992bf98b6183ee8ed4fcc22ccf3b63e7c302f628",
+        "uses": [],
         "state": "on"
       },
       {
