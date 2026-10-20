@@ -57,6 +57,8 @@ dist/
 build/
 *.egg-info/
 node_modules/
+.wrangler/
+.dev.vars*
 .playwright-mcp/
 .DS_Store
 Thumbs.db
