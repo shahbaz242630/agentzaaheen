@@ -1,7 +1,9 @@
 """The dashboard's web server: a read-only JSON API plus the built web UI.
 
-Only GET routes exist, plus one POST: the chat (F05, ADR-024), which reads the
-cards and asks a model, and changes nothing. It answers only same-origin
+Only GET routes exist, plus a few POSTs: the chat (F05, ADR-024), which reads
+the cards and asks a model and changes nothing, and the Customize page's
+switches (ADR-030), which can only switch an item off, ask for it to be
+switched on, or withdraw that request. Every POST answers only same-origin
 JSON requests that carry the ``X-Yaqzan-Request`` header, so another web page
 cannot use it. Every response carries a strict Content-Security-Policy
 (SECURITY: no inline script, no remote images), and only the expected host
@@ -15,16 +17,20 @@ import asyncio
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Protocol
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from yaqzan.core.api.facts import portfolio_facts, project_facts, uses_sample
-from yaqzan.core.api.registry import RegistryPage
+from yaqzan.core.api.registry import ItemRef, RegistryPage
 from yaqzan.core.api.views import ChatAnswer, ChatQuestion, ModelList, ProjectDetail, ProjectSummary
 from yaqzan.core.llm_gateway import ChatReply
+from yaqzan.core.policy import Verdict
+from yaqzan.core.registry import Kind
 from yaqzan.core.sdk import SourceError, get_logger
+from yaqzan.core.store import StoreError
 
 LOCAL_HOSTS: tuple[str, ...] = ("127.0.0.1", "localhost")
 
@@ -83,6 +89,26 @@ class ChatBackend(Protocol):
         ...
 
 
+class RegistrySwitches(Protocol):
+    """The Customize page's switches (``api.registry.DashboardSwitches`` in real use)."""
+
+    async def page(self) -> RegistryPage:
+        """The page as stored now."""
+        ...
+
+    async def switch_off(self, kind: Kind, item_id: str) -> Verdict:
+        """Switch one item off."""
+        ...
+
+    async def request_on(self, kind: Kind, item_id: str) -> Verdict:
+        """Ask for one item to be switched on."""
+        ...
+
+    async def withdraw(self, request_id: UUID) -> Verdict:
+        """Withdraw a waiting request."""
+        ...
+
+
 REQUEST_HEADER = "X-Yaqzan-Request"
 
 
@@ -107,18 +133,57 @@ def _refuse_foreign(request: Request) -> None:
         raise HTTPException(status_code=415, detail="chat.json_only")
 
 
-def create_app(
+def _registry_routes(app: FastAPI, page: RegistryPage, switches: RegistrySwitches | None) -> None:
+    """The Customize page: read it, and (with a database) switch off, ask, withdraw (ADR-030)."""
+    log = get_logger("yaqzan.api")
+
+    async def stored[T](call: Awaitable[T]) -> T:
+        try:
+            return await call
+        except StoreError as exc:
+            log.warning("registry_store_failed", code=exc.code.value)
+            raise HTTPException(status_code=503, detail="registry.store_unavailable") from None
+
+    async def change(act: Callable[[RegistrySwitches], Awaitable[Verdict]]) -> RegistryPage:
+        if switches is None:
+            raise HTTPException(status_code=503, detail="registry.read_only")
+        verdict = await stored(act(switches))
+        if verdict is not Verdict.DONE:
+            raise HTTPException(status_code=409, detail=verdict.value)
+        return await stored(switches.page())
+
+    @app.get("/api/registry")
+    async def get_registry() -> RegistryPage:
+        return page if switches is None else await stored(switches.page())
+
+    @app.post("/api/registry/switch-off", dependencies=[Depends(_refuse_foreign)])
+    async def switch_off(item: ItemRef) -> RegistryPage:
+        return await change(lambda s: s.switch_off(item.kind, item.id))
+
+    @app.post("/api/registry/requests", dependencies=[Depends(_refuse_foreign)])
+    async def request_on(item: ItemRef) -> RegistryPage:
+        return await change(lambda s: s.request_on(item.kind, item.id))
+
+    @app.post("/api/registry/requests/{request_id}/withdraw", dependencies=[Depends(_refuse_foreign)])
+    async def withdraw(request_id: UUID) -> RegistryPage:
+        return await change(lambda s: s.withdraw(request_id))
+
+
+def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of the dashboard
     portfolio: Portfolio,
     *,
     static_dir: Path | None = None,
     allowed_hosts: Sequence[str] = LOCAL_HOSTS,
     chat: ChatBackend | None = None,
     registry: RegistryPage | None = None,
+    switches: RegistrySwitches | None = None,
 ) -> FastAPI:
     """Build the app. ``static_dir`` is the built web UI; without it only the API is served.
 
     Without ``chat`` the chat route answers ``chat.not_connected``. ``registry`` is
     what the Customize page shows (read once at start); without it the page is empty.
+    With ``switches`` (a database) the page is read fresh each time and can be
+    changed; without, the switch routes answer ``registry.read_only``.
     """
     page = registry or RegistryPage()
     log = get_logger("yaqzan.api")
@@ -151,9 +216,7 @@ def create_app(
     def list_models() -> ModelList:
         return _connected(portfolio.models(), chat)
 
-    @app.get("/api/registry")
-    def get_registry() -> RegistryPage:
-        return page
+    _registry_routes(app, page, switches)
 
     @app.post("/api/chat", dependencies=[Depends(_refuse_foreign)])
     async def ask(question: ChatQuestion) -> ChatAnswer:

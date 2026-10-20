@@ -102,6 +102,10 @@ export type Level = z.infer<typeof Level>;
 export const Use = z.enum(["live", "failed", "needs_key"]);
 export type Use = z.infer<typeof Use>;
 
+// How an item stands (ADR-030): on, switched off, changed since approved (so off), or view only (outside bundle).
+export const ItemState = z.enum(["on", "off", "changed", "view_only"]);
+export type ItemState = z.infer<typeof ItemState>;
+
 export const ConnectorItem = z.strictObject({
   id: item,
   name: z.string(),
@@ -114,6 +118,7 @@ export const ConnectorItem = z.strictObject({
   key_slots: z.array(z.string()),
   fingerprint,
   uses: z.array(z.strictObject({ project_id: slug, status: Use })),
+  state: ItemState,
 });
 export type ConnectorItem = z.infer<typeof ConnectorItem>;
 
@@ -124,6 +129,7 @@ export const SkillItem = z.strictObject({
   requires: z.array(item),
   missing: z.array(item),
   fingerprint,
+  state: ItemState,
 });
 export type SkillItem = z.infer<typeof SkillItem>;
 
@@ -138,17 +144,30 @@ export const PluginItem = z.strictObject({
   agents: z.int().nonnegative(),
   hooks: z.boolean(),
   fingerprint,
+  state: ItemState,
 });
 export type PluginItem = z.infer<typeof PluginItem>;
 
 export const Kind = z.enum(["connector", "skill", "plugin"]);
 export type Kind = z.infer<typeof Kind>;
 
+export const SwitchRequest = z.strictObject({
+  id: z.uuid(),
+  kind: Kind,
+  item_id: item,
+  requested_at: time,
+  stale: z.boolean(),
+});
+export type SwitchRequest = z.infer<typeof SwitchRequest>;
+
+// ``switches``: the server has a database, so on/off can be changed (otherwise the page is read-only).
 export const RegistryPage = z.strictObject({
   connectors: z.array(ConnectorItem),
   skills: z.array(SkillItem),
   plugins: z.array(PluginItem),
   problems: z.array(z.strictObject({ kind: Kind, path: z.string(), message: z.string() })),
+  switches: z.boolean(),
+  requests: z.array(SwitchRequest),
 });
 export type RegistryPage = z.infer<typeof RegistryPage>;
 
@@ -168,19 +187,23 @@ async function errorCode(response: Response): Promise<string | null> {
   }
 }
 
-// The one POST: a question for the chat. The custom header and JSON body mean
-// the server only answers our own page (another site's request is refused).
-async function askChat(projectId: string | null, modelId: string, question: string): Promise<ChatAnswer> {
-  const path = "/api/chat";
+// Every POST: the custom header and JSON body mean the server only answers our
+// own page (another site's request is refused).
+async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json", "X-Yaqzan-Request": "1" },
-    body: JSON.stringify({ project_id: projectId, model_id: modelId, question }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) throw new ApiError(path, response.status, await errorCode(response));
-  const parsed = ChatAnswer.safeParse(await response.json());
+  const parsed = schema.safeParse(await response.json());
   if (!parsed.success) throw new ApiError(path, null);
   return parsed.data;
+}
+
+// A question for the chat.
+function askChat(projectId: string | null, modelId: string, question: string): Promise<ChatAnswer> {
+  return postJson("/api/chat", { project_id: projectId, model_id: modelId, question }, ChatAnswer);
 }
 
 async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
@@ -196,5 +219,10 @@ export const api = {
   project: (id: string) => getJson(`/api/projects/${encodeURIComponent(id)}`, ProjectDetail),
   models: async () => (await getJson("/api/models", ModelList)).models,
   registry: () => getJson("/api/registry", RegistryPage),
+  // The registry switches (ADR-030): each answers with the page as it now stands. Nothing here switches on.
+  switchOff: (kind: Kind, id: string) => postJson("/api/registry/switch-off", { kind, id }, RegistryPage),
+  requestOn: (kind: Kind, id: string) => postJson("/api/registry/requests", { kind, id }, RegistryPage),
+  withdraw: (requestId: string) =>
+    postJson(`/api/registry/requests/${encodeURIComponent(requestId)}/withdraw`, {}, RegistryPage),
   ask: askChat,
 };

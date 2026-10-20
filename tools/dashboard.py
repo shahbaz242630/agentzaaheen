@@ -25,8 +25,11 @@ connected chat may open skills and, with ``--github-token-env``, read a
 failed build's log (``tools.chat_tools``, ADR-029).
 
 The Customize page lists every connector, skill and plugin found on disk
-(read once at start, nothing is switched on). ``--bundles DIR`` also shows
-the plugin bundles under DIR (Claude, Codex or Cursor layout), read only.
+(read once at start). ``--bundles DIR`` also shows the plugin bundles under
+DIR (Claude, Codex or Cursor layout), view only. With ``--switches`` the
+page's on/off switches work and are remembered in the laptop database
+(``tools.laptop_db up`` first, ADR-030): a connector that is off is not read,
+and the chat may use only what is on.
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
@@ -35,18 +38,18 @@ Usage:
     uv run python -m tools.dashboard --github-token-env GITHUB_READ_TOKEN_YAQZAN
     uv run python -m tools.dashboard --model-url http://127.0.0.1:8766
     uv run python -m tools.dashboard --bundles ~/.claude/plugins
+    uv run python -m tools.dashboard --switches     # after: uv run python -m tools.laptop_db up
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
 
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -54,20 +57,23 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import SecretStr
 
-from tools.chat_tools import chat_tools, model_chat
+from tools import laptop_db
+from tools.chat_tools import Switched, model_chat, tools_for
+from tools.dashboard_sources import (
+    GITHUB_REPOS,
+    Clock,
+    github_portfolio,
+    live_portfolio,
+    usable_secret,
+    utc_now,
+)
+from tools.dashboard_switches import LaptopSwitches, Prepare, connect, off_connectors
 from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
-from yaqzan.core.api.code import code_card, failed_code_card
-from yaqzan.core.api.overlay import CardMaker, OverlayPortfolio
 from yaqzan.core.api.registry import RegistryPage, registry_page, uses_from_cards
-from yaqzan.core.api.revenue import revenue_card
-from yaqzan.core.api.views import Card
-from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.registry import load_registry
-from yaqzan.core.scheduler import snapshot_from_rows
-from yaqzan.core.sdk import RepoHealth, RevenueBatch, SourceError, explain
-from yaqzan.plugins.connectors import github
-from yaqzan.plugins.connectors.paddle import ALLOWED_HOSTS, API_VERSION_HEADER, LIVE_BASE_URL, PaddleSource
+from yaqzan.core.llm_gateway import Tool
+from yaqzan.core.policy import Standing
+from yaqzan.core.registry import Registry, load_registry
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
@@ -76,207 +82,27 @@ PLUGINS_ROOT = UI_ROOT.parent.parent / "src" / "yaqzan" / "plugins"
 CONTRACT_TIME = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
-# Read once at start: treated as an hourly source, so it shows "unknown" after two hours.
-PADDLE_SCHEDULE = timedelta(hours=1)
-# Read once at start, like Paddle: "unknown" after two hours.
-GITHUB_SCHEDULE = timedelta(hours=1)
-# Which repository each project's Code card reads (checked against the local clones, 20 Oct 2026).
-GITHUB_REPOS: dict[str, str] = {
-    "zaaheen": "shahbaz242630/zaaheen",
-    "sandoq-kin": "shahbaz242630/Document-Vault",
-    "agent-x": "shahbaz242630/agent-x",
-    "eva": "shahbaz242630/AI-Agent-SAAS",
-    "family-checkin": "shahbaz242630/Family-Checkin",
-}
 # Which card each connector feeds, on which projects (handoffs/CONNECTORS-CHECKLIST).
 CONNECTOR_CARDS: dict[str, tuple[str, tuple[str, ...]]] = {
     "paddle": ("paddle", ("zaaheen",)),
     "github": (CODE_CARD, tuple(GITHUB_REPOS)),
 }
 
-Clock = Callable[[], datetime]
 
-
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
-def build_app(
-    static_dir: Path = UI_BUILD,
-    now: datetime | None = None,
-    portfolio: Portfolio | None = None,
-    chat: ChatBackend | None = None,
-    bundles: Sequence[Path] = (),
-) -> FastAPI:
-    """The dashboard app, serving the UI from ``static_dir`` (sample data unless given a portfolio)."""
-    chosen = portfolio or SamplePortfolio(now or _now())
-    registry = registry_for(chosen, bundles)
-    return create_app(chosen, static_dir=static_dir, allowed_hosts=LOCAL_HOSTS, chat=chat, registry=registry)
-
-
-def registry_for(portfolio: Portfolio, bundles: Sequence[Path] = ()) -> RegistryPage:
-    """The Customize page: what is on disk, with each connector judged from the cards it feeds."""
+def load_plugins(bundles: Sequence[Path] = ()) -> Registry:
+    """Everything on disk, read once; anything that could not be read is said."""
     registry = load_registry(PLUGINS_ROOT, bundles)
     for problem in registry.problems:
         print(f"dashboard: the {problem.kind.value} at {problem.path} was not loaded: {problem.message}")
-    return registry_page(registry, uses_from_cards(portfolio.project, CONNECTOR_CARDS))
+    return registry
 
 
-def month_start(moment: datetime) -> datetime:
-    """Midnight UTC on the first day of the month that ``moment`` falls in."""
-    return moment.astimezone(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-
-async def read_paddle(
-    key: SecretStr, now: datetime, transport: httpx.AsyncBaseTransport | None = None
-) -> RevenueBatch:
-    """One read-only fetch from the live Paddle account, payments from the start of this month."""
-    async with JsonClient(
-        LIVE_BASE_URL,
-        policy=NetPolicy(allowed_hosts=ALLOWED_HOSTS),
-        headers=API_VERSION_HEADER,
-        secret_headers={"Authorization": SecretStr(f"Bearer {key.get_secret_value()}")},
-        transport=transport,
-    ) as http:
-        return await PaddleSource(http).fetch(payments_since=month_start(now), now=now)
-
-
-def paddle_card(batch: RevenueBatch, read_at: datetime, clock: Clock = _now) -> CardMaker:
-    """Builds the Zaaheen Revenue card from ``batch``, judging freshness each time it is shown."""
-
-    def make() -> Card:
-        now = clock()
-        snapshot = snapshot_from_rows(
-            "paddle",
-            batch.subscriptions,
-            batch.payments,
-            batch.refunds,
-            now=now,
-            last_success=read_at,
-            schedule=PADDLE_SCHEDULE,
-            start=month_start(read_at),
-            end=now,
-        )
-        return revenue_card(
-            snapshot,
-            card_id="paddle",
-            title="Revenue",
-            source_label="Paddle (live)",
-            home_currency="USD",
-            period_label="This month",
-        )
-
-    return make
-
-
-def live_portfolio(
-    key_env: str,
-    environ: Mapping[str, str],
-    *,
-    clock: Clock = _now,
-    transport: httpx.AsyncBaseTransport | None = None,
-) -> Portfolio | None:
-    """Sample data with the real Zaaheen Paddle card, or ``None`` (after saying why) if the read failed."""
-    raw = environ.get(key_env, "").strip()
-    if not raw:
-        print(f"dashboard: {key_env} is not set, so Paddle was not read.")
-        return None
-    if not _usable_secret(raw):
-        print("dashboard: the key contains spaces or control characters; copy it again.")
-        return None
-    read_at = clock()
-    print("dashboard: reading the Zaaheen Paddle account (live, read-only)...")
-    try:
-        batch = asyncio.run(read_paddle(SecretStr(raw), read_at, transport))
-    except SourceError as exc:
-        code = exc.detail_code or exc.code
-        said = explain(code, vendor="Paddle")
-        where = f" at {exc.operation}" if exc.operation else ""
-        print(f"dashboard: the Paddle read failed with {code}{where}.")
-        print(f"  What: {said.what}")
-        print(f"  Why: {said.why}")
-        print(f"  What to do: {said.fix}")
-        return None
-    print(
-        f"dashboard: read {len(batch.subscriptions)} subscriptions, {len(batch.payments)} payment attempts "
-        f"and {len(batch.refunds)} refunds."
-    )
-    makers = {("zaaheen", "paddle"): paddle_card(batch, read_at, clock)}
-    return OverlayPortfolio(SamplePortfolio(read_at), makers)
-
-
-def _usable_secret(raw: str) -> bool:
-    return raw.isascii() and raw.isprintable() and " " not in raw
-
-
-async def read_github(
-    token: SecretStr,
-    repos: Mapping[str, str],
-    now: datetime,
-    transport: httpx.AsyncBaseTransport | None = None,
-) -> dict[str, RepoHealth | SourceError]:
-    """One read-only look at each repository, keyed by project; a failure is kept, not raised."""
-    async with JsonClient(
-        github.BASE_URL,
-        policy=NetPolicy(allowed_hosts=github.ALLOWED_HOSTS),
-        headers=github.API_HEADERS,
-        secret_headers={"Authorization": SecretStr(f"Bearer {token.get_secret_value()}")},
-        transport=transport,
-    ) as http:
-        out: dict[str, RepoHealth | SourceError] = {}
-        for project, repo in repos.items():  # one at a time: GitHub limits searches per minute
-            try:
-                out[project] = await github.GitHubSource(http, repo).fetch(now=now)
-            except SourceError as exc:
-                out[project] = exc
-        return out
-
-
-def github_card(result: RepoHealth | SourceError, clock: Clock = _now) -> CardMaker:
-    """Builds one project's Code card, judging freshness each time it is shown."""
-
-    def make() -> Card:
-        if isinstance(result, SourceError):
-            return failed_code_card(result.reason_code, source_label="GitHub (live)")
-        return code_card(result, source_label="GitHub (live)", schedule=GITHUB_SCHEDULE, now=clock())
-
-    return make
-
-
-def github_portfolio(  # noqa: PLR0913  # the base, the token's name, and the injectable outside world
-    base: Portfolio,
-    token_env: str,
-    environ: Mapping[str, str],
-    *,
-    clock: Clock = _now,
-    transport: httpx.AsyncBaseTransport | None = None,
-    repos: Mapping[str, str] | None = None,
-) -> Portfolio | None:
-    """``base`` with each project's real Code card, or ``None`` (after saying why) if there is no token."""
-    repos = GITHUB_REPOS if repos is None else repos
-    raw = environ.get(token_env, "").strip()
-    if not raw:
-        print(f"dashboard: {token_env} is not set, so GitHub was not read.")
-        return None
-    if not _usable_secret(raw):
-        print("dashboard: the token contains spaces or control characters; copy it again.")
-        return None
-    print(f"dashboard: reading {len(repos)} GitHub repositories (read-only)...")
-    results = asyncio.run(read_github(SecretStr(raw), repos, clock(), transport))
-    for project, result in results.items():
-        if isinstance(result, SourceError):
-            said = explain(result.reason_code, vendor="GitHub")
-            where = f" at {result.operation}" if result.operation else ""
-            print(f"dashboard: {repos[project]} could not be read ({result.reason_code}{where}).")
-            print(f"  What: {said.what}")
-            print(f"  What to do: {said.fix}")
-        else:
-            print(
-                f"dashboard: {repos[project]}: {result.open_issues} open issues, "
-                f"{result.open_pull_requests} open pull requests, build {result.build.value}."
-            )
-    makers = {(project, CODE_CARD): github_card(result, clock) for project, result in results.items()}
-    return OverlayPortfolio(base, makers)
+def registry_for(
+    portfolio: Portfolio, bundles: Sequence[Path] = (), registry: Registry | None = None
+) -> RegistryPage:
+    """The Customize page: what is on disk, with each connector judged from the cards it feeds."""
+    found = load_plugins(bundles) if registry is None else registry
+    return registry_page(found, uses_from_cards(portfolio.project, CONNECTOR_CARDS))
 
 
 def contract_sample() -> str:
@@ -308,16 +134,23 @@ def _real_data(
     env: Mapping[str, str],
     clock: Clock,
     transport: httpx.AsyncBaseTransport | None,
+    off: frozenset[str] = frozenset(),
 ) -> tuple[Portfolio | None, list[str]]:
-    """The portfolio with every requested real source laid over the sample, and what is real."""
+    """The portfolio with every requested real source laid over the sample, and what is real.
+
+    A connector in ``off`` (switched off on the Customize page) is not read at all.
+    """
     portfolio: Portfolio | None = None
     live: list[str] = []
-    if ns.paddle_key_env:
+    for connector, asked in (("paddle", ns.paddle_key_env), ("github", ns.github_token_env)):
+        if asked and connector in off:
+            print(f"dashboard: {connector} is switched off on the Customize page, so it was not read.")
+    if ns.paddle_key_env and "paddle" not in off:
         portfolio = live_portfolio(ns.paddle_key_env, env, clock=clock, transport=transport)
         if portfolio is None:
             raise _NotStartedError
         live.append("Paddle for Zaaheen")
-    if ns.github_token_env:
+    if ns.github_token_env and "github" not in off:
         base = portfolio or SamplePortfolio(clock())
         portfolio = github_portfolio(base, ns.github_token_env, env, clock=clock, transport=transport)
         if portfolio is None:
@@ -333,9 +166,22 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
     serve: Callable[[FastAPI, str, int], None] | None = None,
     environ: Mapping[str, str] | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
-    clock: Clock = _now,
+    clock: Clock = utc_now,
+    prepare: Prepare = laptop_db.prepare,
 ) -> int:
-    """Start the dashboard; return 1 if the UI is not built, a Paddle read failed or a token is missing."""
+    """Start the dashboard; 1 if the UI is not built, a read failed, or a token or the database is missing."""
+    ns = _parser().parse_args(argv)
+    done = _preflight(ns, static_dir)
+    if done is not None:
+        return done
+    env = os.environ if environ is None else environ
+    return _start(
+        ns, env, static_dir=static_dir, serve=serve, transport=transport, clock=clock, prepare=prepare
+    )
+
+
+def _parser() -> argparse.ArgumentParser:
+    """The command-line options."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--export-contract", action="store_true", help="rewrite the UI's contract fixture")
@@ -345,7 +191,14 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
     parser.add_argument(
         "--bundles", type=Path, action="append", default=[], help="show plugin bundles in DIR"
     )
-    ns = parser.parse_args(argv)
+    parser.add_argument(
+        "--switches", action="store_true", help="on/off switches, kept in the laptop database"
+    )
+    return parser
+
+
+def _preflight(ns: argparse.Namespace, static_dir: Path) -> int | None:
+    """Export the contract, or refuse an odd port or a missing UI; ``None`` to go on and serve."""
     if ns.export_contract:
         CONTRACT_FIXTURE.parent.mkdir(parents=True, exist_ok=True)
         CONTRACT_FIXTURE.write_text(contract_sample(), encoding="utf-8", newline="\n")
@@ -357,26 +210,79 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
     if not (static_dir / "index.html").is_file():
         print("dashboard: the web UI is not built yet. Run: cd apps/dashboard && npm ci && npm run build")
         return 1
-    env = os.environ if environ is None else environ
+    return None
+
+
+def _start(  # noqa: PLR0913  # the parsed options and the injectable outside world
+    ns: argparse.Namespace,
+    env: Mapping[str, str],
+    *,
+    static_dir: Path,
+    serve: Callable[[FastAPI, str, int], None] | None,
+    transport: httpx.AsyncBaseTransport | None,
+    clock: Clock,
+    prepare: Prepare,
+) -> int:
+    """Read what was asked for, wire the switches and the chat, then serve."""
+    registry = load_plugins([b.expanduser() for b in ns.bundles])
+    connected = connect(registry, prepare) if ns.switches else None
+    if ns.switches and connected is None:
+        return 1
     try:
-        portfolio, live = _real_data(ns, env, clock, transport)
+        off = off_connectors(connected[1], registry) if connected else frozenset[str]()
+        portfolio, live = _real_data(ns, env, clock, transport, off)
     except _NotStartedError:
         return 1
+    chosen = portfolio or SamplePortfolio(clock())
+    switches = None
+    if connected is not None:
+        switches = LaptopSwitches(
+            connected[0], registry, uses_from_cards(chosen.project, CONNECTOR_CARDS), clock
+        )
     chat: ChatBackend | None = None
     if ns.model_url:
-        raw = env.get(ns.github_token_env or "", "").strip()
-        token = SecretStr(raw) if raw and _usable_secret(raw) else None
-        tools, skills = chat_tools(PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport)
-        chat = model_chat(ns.model_url, transport, tools, skills)
+        token = env.get(ns.github_token_env or "", "")
+        chat = _chat(
+            ns.model_url, token, registry=registry, switches=switches, clock=clock, transport=transport
+        )
         if chat is None:
             return 1
-    app = build_app(static_dir, portfolio=portfolio, chat=chat, bundles=[b.expanduser() for b in ns.bundles])
+    page = registry_for(chosen, registry=registry)
+    app = create_app(
+        chosen, static_dir=static_dir, allowed_hosts=LOCAL_HOSTS, chat=chat, registry=page, switches=switches
+    )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
         what += "; chat connected to the local model"
+    if switches is not None:
+        what += "; switches remembered in the laptop database"
     print(f"dashboard: open http://{HOST}:{ns.port} ({what}; press Ctrl+C to stop)")
     (serve or _serve)(app, HOST, ns.port)
     return 0
+
+
+def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, and the outside world
+    model_url: str,
+    raw_token: str,
+    *,
+    registry: Registry,
+    switches: LaptopSwitches | None,
+    clock: Clock,
+    transport: httpx.AsyncBaseTransport | None,
+) -> ChatBackend | None:
+    """The chat, with tools for what is on (with switches, it asks them before every question)."""
+    raw = raw_token.strip()
+    token = SecretStr(raw) if raw and usable_secret(raw) else None
+    if switches is None:
+        tools, skills = tools_for(registry, PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport=transport)
+        return model_chat(model_url, transport, tools, skills)
+
+    def build(standing: Standing) -> tuple[list[Tool], str]:
+        return tools_for(
+            registry, PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport=transport, standing=standing
+        )
+
+    return model_chat(model_url, transport, switched=Switched(build=build, standing=switches.standing))
 
 
 def _serve(app: FastAPI, host: str, port: int) -> None:  # pragma: no cover - starts a real server

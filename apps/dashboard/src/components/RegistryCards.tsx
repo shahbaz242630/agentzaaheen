@@ -1,7 +1,8 @@
 import { KeyRound, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { ConnectorItem, Level, PluginItem, SkillItem, Use } from "../api";
+import type { ConnectorItem, ItemState, Level, PluginItem, SkillItem, Use } from "../api";
+import { StatePill } from "./RegistrySwitch";
 
 const USE: Record<Use, { dot: string; label: string }> = {
   live: { dot: "bg-ok", label: "Live" },
@@ -44,10 +45,12 @@ interface ShellProps {
   description: string;
   fingerprint: string;
   version?: string | null;
+  state: ItemState;
+  control?: ReactNode;
   children: ReactNode;
 }
 
-function Shell({ id, title, tag, description, fingerprint, version, children }: ShellProps) {
+function Shell({ id, title, tag, description, fingerprint, version, state, control, children }: ShellProps) {
   return (
     <article
       aria-labelledby={`item-${id}`}
@@ -66,11 +69,13 @@ function Shell({ id, title, tag, description, fingerprint, version, children }: 
           </h3>
           <p className="text-xs text-muted">{tag}</p>
         </div>
+        <StatePill state={state} />
       </header>
       <p className="line-clamp-4 text-sm text-muted" title={description}>
         {description}
       </p>
       {children}
+      {control}
       <p className="mt-auto pt-1 font-mono text-[0.7rem] text-faint" title={`Fingerprint ${fingerprint}`}>
         {version ? `v${version} · ` : ""}
         {fingerprint.slice(0, 12)}
@@ -79,9 +84,27 @@ function Shell({ id, title, tag, description, fingerprint, version, children }: 
   );
 }
 
-export function ConnectorCard({ item, projectName }: { item: ConnectorItem; projectName: (id: string) => string }) {
+interface CardProps<T> {
+  item: T;
+  control?: ReactNode;
+}
+
+export function ConnectorCard({
+  item,
+  control,
+  projectName,
+}: CardProps<ConnectorItem> & { projectName: (id: string) => string }) {
   return (
-    <Shell id={item.id} title={item.name} tag={item.category} description={item.description} fingerprint={item.fingerprint} version={item.version}>
+    <Shell
+      id={item.id}
+      title={item.name}
+      tag={item.category}
+      description={item.description}
+      fingerprint={item.fingerprint}
+      version={item.version}
+      state={item.state}
+      control={control}
+    >
       <div className="flex flex-wrap gap-1.5">
         <Pill tone={item.level === "read" ? "ok" : "warn"}>
           {item.level === "read" ? <ShieldCheck className="size-3.5" aria-hidden="true" /> : <TriangleAlert className="size-3.5" aria-hidden="true" />}
@@ -114,9 +137,21 @@ export function ConnectorCard({ item, projectName }: { item: ConnectorItem; proj
   );
 }
 
-export function SkillCard({ item, connectorName }: { item: SkillItem; connectorName: (id: string) => string }) {
+export function SkillCard({
+  item,
+  control,
+  connectorName,
+}: CardProps<SkillItem> & { connectorName: (id: string) => string }) {
   return (
-    <Shell id={item.id} title={skillTitle(item.id)} tag="Skill" description={item.description} fingerprint={item.fingerprint}>
+    <Shell
+      id={item.id}
+      title={skillTitle(item.id)}
+      tag="Skill"
+      description={item.description}
+      fingerprint={item.fingerprint}
+      state={item.state}
+      control={control}
+    >
       <div className="flex flex-wrap gap-1.5">
         <Pill>{item.invocation === "auto" ? "Used when a task needs it" : "Only when you ask for it"}</Pill>
         {item.requires.map((id) =>
@@ -134,7 +169,7 @@ export function SkillCard({ item, connectorName }: { item: SkillItem; connectorN
   );
 }
 
-export function PluginCard({ item }: { item: PluginItem }) {
+export function PluginCard({ item }: CardProps<PluginItem>) {
   const parts = [
     plural(item.skills, "skill"),
     plural(item.connectors, "connector"),
@@ -150,6 +185,7 @@ export function PluginCard({ item }: { item: PluginItem }) {
       description={item.description || "No description."}
       fingerprint={item.fingerprint}
       version={item.version}
+      state={item.state}
     >
       <p className="text-sm text-ink">{parts.join(" · ")}</p>
       <p className="text-xs text-faint">Shown only. Nothing in a plugin runs until you approve it.</p>

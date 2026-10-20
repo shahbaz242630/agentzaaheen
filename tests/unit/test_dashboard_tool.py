@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from tests.fixtures import paddle_world as world
-from tools import chat_tools, dashboard
+from tools import chat_tools, dashboard, dashboard_sources
 
 
 @pytest.fixture
@@ -124,7 +124,7 @@ def test_live_numbers_turn_unknown_once_they_are_old(ui: Path) -> None:
     clock = Clock(world.NOW)
     code, apps = _live(ui, httpx.MockTransport(world.PaddleWorld().serve), {"K": FAKE_KEY}, clock)
     assert code == 0
-    clock.now = world.NOW + dashboard.PADDLE_SCHEDULE * 3
+    clock.now = world.NOW + dashboard_sources.PADDLE_SCHEDULE * 3
     card = _paddle_card(apps[0])
     assert card["freshness"] == "stale"
     assert all(m["value"]["kind"] == "unknown" for m in card["metrics"])  # type: ignore[attr-defined]
@@ -161,7 +161,7 @@ def test_a_missing_or_mangled_key_is_refused_before_any_request(
 
 
 def test_the_month_starts_at_midnight_utc_on_the_first() -> None:
-    assert dashboard.month_start(datetime(2026, 10, 18, 12, 30, tzinfo=UTC)) == datetime(
+    assert dashboard_sources.month_start(datetime(2026, 10, 18, 12, 30, tzinfo=UTC)) == datetime(
         2026, 10, 1, tzinfo=UTC
     )
 

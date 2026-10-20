@@ -76,14 +76,14 @@ def free_mb(run: Runner) -> int | None:
     return (int(total) - used) // 1024**2
 
 
-def state(run: Runner) -> str:
+def state(run: Runner, *, name: str = NAME, label_value: str = LABEL_VALUE) -> str:
     """``absent``, ``running``, ``stopped``, or ``foreign`` (same name, not ours: never touched)."""
     fmt = '{{index .Config.Labels "' + LABEL_KEY + '"}}|{{.State.Running}}'
-    code, out = run(["inspect", "--type", "container", "--format", fmt, NAME])
+    code, out = run(["inspect", "--type", "container", "--format", fmt, name])
     if code != 0:
         return "absent"
     label, _, running = out.partition("|")
-    if label != LABEL_VALUE:
+    if label != label_value:
         return "foreign"
     return "running" if running == "true" else "stopped"
 
@@ -107,11 +107,11 @@ def _run_args(password: str) -> list[str]:
     ]  # fmt: skip
 
 
-def wait_ready(run: Runner, sleep: Sleeper, timeout_s: float = READY_TIMEOUT_S) -> bool:
+def wait_ready(run: Runner, sleep: Sleeper, timeout_s: float = READY_TIMEOUT_S, *, name: str = NAME) -> bool:
     """Wait until Postgres accepts TCP connections (the init-time server listens on a socket only)."""
     waited = 0.0
     while waited < timeout_s:
-        code, _ = run(["exec", NAME, "pg_isready", "-q", "-h", "127.0.0.1", "-U", "postgres"])
+        code, _ = run(["exec", name, "pg_isready", "-q", "-h", "127.0.0.1", "-U", "postgres"])
         if code == 0:
             return True
         sleep(1.0)
@@ -119,7 +119,8 @@ def wait_ready(run: Runner, sleep: Sleeper, timeout_s: float = READY_TIMEOUT_S) 
     return False
 
 
-def _enough_memory(run: Runner) -> bool:
+def enough_memory(run: Runner) -> bool:
+    """Whether Docker has ``MIN_FREE_MB`` free (saying why not). Unknown counts as not enough."""
     free = free_mb(run)
     if free is None:
         print("dev-db: could not read Docker memory; not starting (could not check ≠ safe).")
@@ -144,7 +145,7 @@ def up(run: Runner = run_docker, sleep: Sleeper = time.sleep, *, wait_minutes: i
         return EXIT_OK
     deadline = wait_minutes * 60
     waited = 0
-    while not _enough_memory(run):
+    while not enough_memory(run):
         if waited >= deadline:
             return EXIT_LOW_MEMORY
         print(f"dev-db: checking again in {RETRY_SECONDS // 60} minutes.")
@@ -172,15 +173,17 @@ def down(run: Runner = run_docker) -> int:
     return EXIT_OK if code == 0 else EXIT_ERROR
 
 
-def admin_url(run: Runner = run_docker) -> str | None:
+def admin_url(
+    run: Runner = run_docker, *, name: str = NAME, label_value: str = LABEL_VALUE, port: int = PORT
+) -> str | None:
     """Superuser URL for tests, read from our own running container. None if it is not running."""
-    if state(run) != "running":
+    if state(run, name=name, label_value=label_value) != "running":
         return None
-    code, env = run(["inspect", "--type", "container", "--format", "{{json .Config.Env}}", NAME])
+    code, env = run(["inspect", "--type", "container", "--format", "{{json .Config.Env}}", name])
     match = re.search(r'"POSTGRES_PASSWORD=([^"]+)"', env) if code == 0 else None
     if match is None:
         return None
-    return f"postgresql://postgres:{match.group(1)}@{HOST}:{PORT}/postgres"
+    return f"postgresql://postgres:{match.group(1)}@{HOST}:{port}/postgres"
 
 
 def main(argv: Sequence[str] | None = None) -> int:

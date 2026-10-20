@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from tests.fixtures import github_world as github
 from tests.fixtures import paddle_world as paddle
-from tools import dashboard
+from tools import dashboard, dashboard_sources
 from yaqzan.core.api import SamplePortfolio
 
 FAKE_TOKEN = "github_pat_" + "q" * 30  # built here, never a real token
@@ -30,7 +30,7 @@ class Clock:
 
 @pytest.fixture
 def ui(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setattr(dashboard, "GITHUB_REPOS", REPOS)
+    monkeypatch.setattr(dashboard_sources, "GITHUB_REPOS", REPOS)
     (tmp_path / "index.html").write_text("<!doctype html>", encoding="utf-8")
     return tmp_path
 
@@ -106,7 +106,7 @@ def test_the_code_card_turns_unknown_once_the_read_is_old(ui: Path) -> None:
         {"T": FAKE_TOKEN},
         clock,
     )
-    clock.now = github.NOW + dashboard.GITHUB_SCHEDULE * 3
+    clock.now = github.NOW + dashboard_sources.GITHUB_SCHEDULE * 3
     card = code_card(apps[0], "zaaheen")
     assert card["freshness"] == "stale"
     assert all(m["value"]["kind"] == "unknown" for m in card["metrics"])  # type: ignore[attr-defined]
@@ -149,8 +149,8 @@ def test_a_missing_or_mangled_token_is_refused_before_any_request(
 
 def test_every_project_has_a_repository_and_a_code_card_to_fill() -> None:
     sample = SamplePortfolio(github.NOW)
-    assert set(dashboard.GITHUB_REPOS) == {p.id for p in sample.projects()}
-    for project in dashboard.GITHUB_REPOS:
+    assert set(dashboard_sources.GITHUB_REPOS) == {p.id for p in sample.projects()}
+    for project in dashboard_sources.GITHUB_REPOS:
         detail = sample.project(project)
         assert detail is not None
         assert any(card.id == "github" for card in detail.cards)

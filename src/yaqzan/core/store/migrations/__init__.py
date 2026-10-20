@@ -12,7 +12,12 @@ from dataclasses import dataclass
 
 from yaqzan.core.store.db import Connection, Database
 from yaqzan.core.store.errors import StoreError, StoreErrorCode
-from yaqzan.core.store.migrations import m0001_initial, m0002_revenue, m0003_key_expiry
+from yaqzan.core.store.migrations import (
+    m0001_initial,
+    m0002_revenue,
+    m0003_key_expiry,
+    m0004_registry_switches,
+)
 
 
 @dataclass(frozen=True)
@@ -33,6 +38,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, m0001_initial.NAME, m0001_initial.SQL),
     Migration(2, m0002_revenue.NAME, m0002_revenue.SQL),
     Migration(3, m0003_key_expiry.NAME, m0003_key_expiry.SQL),
+    Migration(4, m0004_registry_switches.NAME, m0004_registry_switches.SQL),
 )
 LATEST_VERSION = MIGRATIONS[-1].version
 

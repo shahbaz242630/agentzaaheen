@@ -112,6 +112,8 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "revenue_payments": mirror,
         "revenue_refunds": mirror,
         "source_syncs": mirror,
+        "registry_requests": mirror,  # a request is decided, never deleted
+        "registry_switches": mirror,
     }
 
 
