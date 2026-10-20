@@ -76,6 +76,7 @@ GITHUB_REPOS: dict[str, str] = {
     "sandoq-kin": "shahbaz242630/Document-Vault",
     "agent-x": "shahbaz242630/agent-x",
     "eva": "shahbaz242630/AI-Agent-SAAS",
+    "family-checkin": "shahbaz242630/Family-Checkin",
 }
 # The model menu entry the local model trial connects (see SamplePortfolio.models).
 LOCAL_MODEL_ID = "local-gemma"

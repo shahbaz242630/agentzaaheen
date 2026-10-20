@@ -32,7 +32,7 @@ _CODE_LABELS = ("Open issues", "Open pull requests", "Failing workflows")
 
 
 class SamplePortfolio:
-    """Four products with made-up but realistic numbers."""
+    """Five products with made-up but realistic numbers."""
 
     def __init__(self, now: datetime) -> None:
         if now.tzinfo is None:
@@ -107,7 +107,7 @@ class SamplePortfolio:
         )
 
     def _build(self) -> tuple[ProjectDetail, ...]:
-        return (self._zaaheen(), self._sandoq_kin(), self._agent_x(), self._eva())
+        return (self._zaaheen(), self._sandoq_kin(), self._agent_x(), self._eva(), self._family_checkin())
 
     def _zaaheen(self) -> ProjectDetail:
         usd = "USD"
@@ -321,6 +321,22 @@ class SamplePortfolio:
             ),
             cards=(
                 self._not_connected("paddle", "Revenue", "Paddle", ("MRR", "Active subscribers")),
+                self._not_connected("github", "Code", "GitHub", _CODE_LABELS),
+                self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)",)),
+            ),
+        )
+
+    def _family_checkin(self) -> ProjectDetail:
+        return ProjectDetail(
+            project=ProjectSummary(
+                id="family-checkin",
+                name="Family Check-in",
+                summary="Nearby: cross-border family check-ins",
+                health=Health.UNKNOWN,
+                escalations=0,
+                sample=True,
+            ),
+            cards=(
                 self._not_connected("github", "Code", "GitHub", _CODE_LABELS),
                 self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)",)),
             ),

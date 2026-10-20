@@ -44,6 +44,7 @@ describe("the dashboard", () => {
       expect.stringContaining("Sandoq Kin"),
       expect.stringContaining("Agent X"),
       expect.stringContaining("Eva"),
+      expect.stringContaining("Family Check-in"),
     ]);
     expect(await screen.findByRole("heading", { level: 1, name: "Zaaheen" })).toBeInTheDocument();
     expect(screen.getByText(/Sample data/)).toBeInTheDocument();

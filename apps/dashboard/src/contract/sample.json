@@ -31,6 +31,14 @@
       "health": "unknown",
       "escalations": 0,
       "sample": true
+    },
+    {
+      "id": "family-checkin",
+      "name": "Family Check-in",
+      "summary": "Nearby: cross-border family check-ins",
+      "health": "unknown",
+      "escalations": 0,
+      "sample": true
     }
   ],
   "details": {
@@ -583,6 +591,84 @@
             }
           ]
         },
+        {
+          "id": "github",
+          "title": "Code",
+          "source": "GitHub",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Open issues",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Open pull requests",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Failing workflows",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "GitHub is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
+          "id": "uptime",
+          "title": "Uptime",
+          "source": "Uptime checker",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Uptime (30 days)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Uptime checker is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        }
+      ]
+    },
+    "family-checkin": {
+      "project": {
+        "id": "family-checkin",
+        "name": "Family Check-in",
+        "summary": "Nearby: cross-border family check-ins",
+        "health": "unknown",
+        "escalations": 0,
+        "sample": true
+      },
+      "cards": [
         {
           "id": "github",
           "title": "Code",
