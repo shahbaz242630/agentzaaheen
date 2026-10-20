@@ -53,7 +53,9 @@ describe("one run", () => {
     const reports = first.sent.filter((s) => s.url.startsWith(EVA));
     expect(reports.map((s) => s.url)).toEqual([`${EVA}/fail`]);
     expect(reports[0]?.init.body).toBe("1 of 2 addresses down (server error). Details on the dashboard.");
-    expect(reports[0]?.init.body).not.toMatch(/example\.com/);
+    const body = reports[0]?.init.body;
+    expect(typeof body).toBe("string");
+    expect(typeof body === "string" && body.includes("example.com")).toBe(false);
     expect(first.waits).toEqual([RECHECK_AFTER_MS, SECOND_ROUND_MS - RECHECK_AFTER_MS, RECHECK_AFTER_MS]);
     expect(db.state.get(await addressId(B))?.up).toBe(0);
 
