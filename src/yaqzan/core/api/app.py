@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from yaqzan.core.api.facts import portfolio_facts, project_facts, uses_sample
+from yaqzan.core.api.registry import RegistryPage
 from yaqzan.core.api.views import ChatAnswer, ChatQuestion, ModelList, ProjectDetail, ProjectSummary
 from yaqzan.core.sdk import SourceError, get_logger
 
@@ -111,11 +112,14 @@ def create_app(
     static_dir: Path | None = None,
     allowed_hosts: Sequence[str] = LOCAL_HOSTS,
     chat: ChatBackend | None = None,
+    registry: RegistryPage | None = None,
 ) -> FastAPI:
     """Build the app. ``static_dir`` is the built web UI; without it only the API is served.
 
-    Without ``chat`` the chat route answers ``chat.not_connected``.
+    Without ``chat`` the chat route answers ``chat.not_connected``. ``registry`` is
+    what the Customize page shows (read once at start); without it the page is empty.
     """
+    page = registry or RegistryPage()
     log = get_logger("yaqzan.api")
     busy = asyncio.Lock()
     app = FastAPI(title="Yaqzan", docs_url=None, redoc_url=None, openapi_url=None)
@@ -145,6 +149,10 @@ def create_app(
     @app.get("/api/models")
     def list_models() -> ModelList:
         return _connected(portfolio.models(), chat)
+
+    @app.get("/api/registry")
+    def get_registry() -> RegistryPage:
+        return page
 
     @app.post("/api/chat", dependencies=[Depends(_refuse_foreign)])
     async def ask(question: ChatQuestion) -> ChatAnswer:

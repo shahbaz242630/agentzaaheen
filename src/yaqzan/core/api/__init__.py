@@ -6,14 +6,17 @@ What it does (so far):
     Content-Security-Policy and a host allowlist. Sample data
     (:class:`SamplePortfolio`) with real cards laid over it
     (:class:`~yaqzan.core.api.overlay.OverlayPortfolio`). The chat (F05)
-    answers from the cards, written out as text by ``facts``.
+    answers from the cards, written out as text by ``facts``. The Customize
+    page (F06) is sent the registry of connectors, skills and plugins, with
+    where each connector is in use (``registry``).
 
 Public interface:
     ``create_app``, ``Portfolio``, ``ChatBackend``, ``SamplePortfolio``, ``LOCAL_HOSTS`` and
-    the view shapes in ``views``.
+    the view shapes in ``views`` and ``registry``.
 
 How to test:
     ``uv run pytest tests/unit/test_api_views.py tests/unit/test_api_app.py``
+    ``uv run pytest tests/unit/test_api_registry.py``
     See it: ``uv run python -m tools.dashboard`` (after building the UI).
 
 Must never:

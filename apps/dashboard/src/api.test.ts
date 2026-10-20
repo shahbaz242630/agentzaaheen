@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ModelList, ProjectDetail, ProjectSummary, Value } from "./api";
+import { ModelList, ProjectDetail, ProjectSummary, RegistryPage, Value } from "./api";
 import sample from "./contract/sample.json";
 
 describe("the contract fixture written by the API", () => {
@@ -8,6 +8,19 @@ describe("the contract fixture written by the API", () => {
     for (const project of sample.projects) expect(ProjectSummary.parse(project)).toEqual(project);
     for (const detail of Object.values(sample.details)) expect(ProjectDetail.parse(detail)).toEqual(detail);
     expect(ModelList.parse(sample.models)).toEqual(sample.models);
+    expect(RegistryPage.parse(sample.registry)).toEqual(sample.registry);
+  });
+
+  it("refuses a registry item with an unknown status, an extra field or a short fingerprint", () => {
+    const [first] = sample.registry.connectors;
+    const bad = [
+      { ...first, uses: [{ project_id: "zaaheen", status: "on" }] },
+      { ...first, secret: "x" },
+      { ...first, fingerprint: "short" },
+    ];
+    for (const connector of bad) {
+      expect(RegistryPage.safeParse({ ...sample.registry, connectors: [connector] }).success).toBe(false);
+    }
   });
 });
 

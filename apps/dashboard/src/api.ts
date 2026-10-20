@@ -87,6 +87,66 @@ export const ModelList = z.strictObject({ models: z.array(ModelChoice) }).refine
 export const ChatAnswer = z.strictObject({ model_id: slug, answer: z.string().min(1).max(4000), from_sample: z.boolean() });
 export type ChatAnswer = z.infer<typeof ChatAnswer>;
 
+// The Customize page (F06). Mirrors src/yaqzan/core/api/registry.py.
+const item = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
+
+export const Level = z.enum(["read", "draft", "act", "forbidden"]);
+export type Level = z.infer<typeof Level>;
+
+export const Use = z.enum(["live", "failed", "needs_key"]);
+export type Use = z.infer<typeof Use>;
+
+export const ConnectorItem = z.strictObject({
+  id: item,
+  name: z.string(),
+  category: z.string(),
+  description: z.string(),
+  version: z.string(),
+  level: Level,
+  hosts: z.array(z.string()),
+  endpoints: z.array(z.string()),
+  key_slots: z.array(z.string()),
+  fingerprint,
+  uses: z.array(z.strictObject({ project_id: slug, status: Use })),
+});
+export type ConnectorItem = z.infer<typeof ConnectorItem>;
+
+export const SkillItem = z.strictObject({
+  id: item,
+  description: z.string(),
+  invocation: z.enum(["auto", "manual"]),
+  requires: z.array(item),
+  missing: z.array(item),
+  fingerprint,
+});
+export type SkillItem = z.infer<typeof SkillItem>;
+
+export const PluginItem = z.strictObject({
+  id: item,
+  description: z.string(),
+  version: z.string().nullable(),
+  layout: z.enum(["claude", "codex", "cursor"]),
+  skills: z.int().nonnegative(),
+  connectors: z.int().nonnegative(),
+  commands: z.int().nonnegative(),
+  agents: z.int().nonnegative(),
+  hooks: z.boolean(),
+  fingerprint,
+});
+export type PluginItem = z.infer<typeof PluginItem>;
+
+export const Kind = z.enum(["connector", "skill", "plugin"]);
+export type Kind = z.infer<typeof Kind>;
+
+export const RegistryPage = z.strictObject({
+  connectors: z.array(ConnectorItem),
+  skills: z.array(SkillItem),
+  plugins: z.array(PluginItem),
+  problems: z.array(z.strictObject({ kind: Kind, path: z.string(), message: z.string() })),
+});
+export type RegistryPage = z.infer<typeof RegistryPage>;
+
 export class ApiError extends Error {
   constructor(readonly path: string, readonly status: number | null, readonly code: string | null = null) {
     super(status === null ? `${path}: the answer did not match the contract` : `${path}: HTTP ${status}`);
@@ -130,5 +190,6 @@ export const api = {
   projects: () => getJson("/api/projects", z.array(ProjectSummary)),
   project: (id: string) => getJson(`/api/projects/${encodeURIComponent(id)}`, ProjectDetail),
   models: async () => (await getJson("/api/models", ModelList)).models,
+  registry: () => getJson("/api/registry", RegistryPage),
   ask: askChat,
 };

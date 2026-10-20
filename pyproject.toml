@@ -10,6 +10,7 @@ dependencies = [
     "fastapi==0.143.0",
     "httpx==0.28.1",
     "pydantic==2.14.1",
+    "pyyaml==6.0.3",
     "structlog==26.1.0",
     "uvicorn==0.54.0",
 ]
@@ -24,7 +25,6 @@ dev = [
     "pip-audit==2.10.1",
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
-    "pyyaml==6.0.3",
     "ruff==0.17.0",
     "types-pyyaml==6.0.12.20260906",
 ]
@@ -118,7 +118,7 @@ forbidden_modules = [
     "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
     "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
     "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker",
+    "yaqzan.core.broker", "yaqzan.core.registry",
 ]
 
 [[tool.importlinter.contracts]]
@@ -129,7 +129,7 @@ forbidden_modules = [
     "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
     "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
     "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker",
+    "yaqzan.core.broker", "yaqzan.core.registry",
 ]
 
 [[tool.importlinter.contracts]]
@@ -156,6 +156,7 @@ source_modules = [
     "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
     "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.detector", "yaqzan.core.metrics",
     "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.sdk", "yaqzan.plugins",
+    "yaqzan.core.registry",
 ]
 forbidden_modules = ["cryptography"]
 allow_indirect_imports = true
@@ -167,6 +168,7 @@ source_modules = [
     "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
     "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
     "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.plugins",
+    "yaqzan.core.registry",
 ]
 forbidden_modules = ["structlog"]
 allow_indirect_imports = true
@@ -189,6 +191,7 @@ source_modules = [
     "yaqzan.core.api", "yaqzan.core.scheduler", "yaqzan.core.runner", "yaqzan.core.policy",
     "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector", "yaqzan.core.metrics",
     "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.sdk", "yaqzan.plugins",
+    "yaqzan.core.registry",
 ]
 forbidden_modules = ["asyncpg"]
 allow_indirect_imports = true
@@ -200,6 +203,7 @@ source_modules = [
     "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
     "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
     "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.sdk", "yaqzan.plugins",
+    "yaqzan.core.registry",
 ]
 forbidden_modules = ["httpx", "httpcore", "urllib3", "http", "socket", "ssl"]
 allow_indirect_imports = true
@@ -212,6 +216,7 @@ source_modules = [
     "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector", "yaqzan.core.metrics",
     "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net", "yaqzan.core.broker",
     "yaqzan.core.sdk", "yaqzan.plugins",
+    "yaqzan.core.registry",
 ]
 forbidden_modules = ["fastapi", "starlette", "uvicorn"]
 
@@ -229,6 +234,17 @@ forbidden_modules = [
     "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
     "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
     "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
+    "yaqzan.core.broker",
+]
+
+[[tool.importlinter.contracts]]
+name = "The registry only reads files: no database, network, vault, policy or web (ADR-027)"
+type = "forbidden"
+source_modules = ["yaqzan.core.registry"]
+forbidden_modules = [
+    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
+    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
+    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
     "yaqzan.core.broker",
 ]
 

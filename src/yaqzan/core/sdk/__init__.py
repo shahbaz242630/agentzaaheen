@@ -22,7 +22,14 @@ Must never:
 
 from yaqzan.core.sdk.code import REPO_PATTERN, BuildState, RepoHealth, RepoSource
 from yaqzan.core.sdk.explain import KNOWN_CODES, Explanation, explain
-from yaqzan.core.sdk.log import REDACTED, contains_sensitive, get_logger, redact, redact_text
+from yaqzan.core.sdk.log import (
+    REDACTED,
+    contains_sensitive,
+    get_logger,
+    is_sensitive_key,
+    redact,
+    redact_text,
+)
 from yaqzan.core.sdk.models import (
     SDK_VERSION,
     Action,
@@ -104,6 +111,7 @@ __all__ = [
     "contains_sensitive",
     "explain",
     "get_logger",
+    "is_sensitive_key",
     "make_idempotency_key",
     "max_data_class",
     "redact",
