@@ -22,6 +22,25 @@ describe("the contract fixture written by the API", () => {
       expect(RegistryPage.safeParse({ ...sample.registry, connectors: [connector] }).success).toBe(false);
     }
   });
+
+  it("refuses an unknown item state or a request that is not well formed", () => {
+    const [first] = sample.registry.connectors;
+    const request = {
+      id: "6f1c7a52-3b9e-4d0a-9a43-1f6f1d2b8c11",
+      kind: "skill",
+      item_id: "triage-failing-build",
+      requested_at: "2026-10-20T12:00:00Z",
+      stale: false,
+    };
+    expect(RegistryPage.safeParse({ ...sample.registry, requests: [request] }).success).toBe(true);
+    const bad = [
+      { ...sample.registry, connectors: [{ ...first, state: "enabled" }] },
+      { ...sample.registry, requests: [{ ...request, id: "1" }] },
+      { ...sample.registry, requests: [{ ...request, item_id: "../x" }] },
+      { ...sample.registry, switches: "yes" },
+    ];
+    for (const page of bad) expect(RegistryPage.safeParse(page).success).toBe(false);
+  });
 });
 
 describe("values", () => {

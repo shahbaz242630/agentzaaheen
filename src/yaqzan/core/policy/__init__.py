@@ -61,11 +61,13 @@ from yaqzan.core.policy.gate import (
     decide,
 )
 from yaqzan.core.policy.ledger import Ledger, load_kill_switches
+from yaqzan.core.policy.registry_control import OUTSIDE_KINDS, Pending, RegistryControl, Standing, Verdict
 
 __all__ = [
     "GENESIS_HASH",
     "INCREASES_RISK",
     "MAX_TOOLS_PER_AGENT",
+    "OUTSIDE_KINDS",
     "REDUCES_RISK",
     "STEP_UP_MAX_AGE",
     "AccessDecision",
@@ -84,11 +86,15 @@ __all__ = [
     "KillSwitches",
     "Ledger",
     "Operation",
+    "Pending",
     "ProjectPolicy",
+    "RegistryControl",
     "Role",
     "RunState",
+    "Standing",
     "Target",
     "ToolCall",
+    "Verdict",
     "append",
     "audit_draft",
     "authorize",

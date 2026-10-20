@@ -11,6 +11,10 @@ const page = sample.registry as RegistryPage;
 const names: Record<string, string> = { zaaheen: "Zaaheen", eva: "Eva" };
 const projectName = (id: string) => names[id] ?? id;
 
+function view(shown: RegistryPage) {
+  return <CustomizeView page={shown} projectName={projectName} onChange={vi.fn()} />;
+}
+
 function withUses(uses: RegistryPage["connectors"][number]["uses"]): RegistryPage {
   return { ...page, connectors: page.connectors.map((c) => (c.id === "github" ? { ...c, uses } : c)) };
 }
@@ -70,7 +74,7 @@ describe("the Customize page", () => {
       { project_id: "zaaheen", status: "live" as const },
       { project_id: "eva", status: "failed" as const },
     ];
-    render(<CustomizeView page={withUses(uses)} projectName={projectName} />);
+    render(view(withUses(uses)));
     const list = screen.getByRole("list", { name: "Where GitHub is used" });
     expect(list).toHaveTextContent("ZaaheenLive");
     expect(list).toHaveTextContent("EvaRead failed");
@@ -84,8 +88,9 @@ describe("the Customize page", () => {
       invocation: "manual" as const,
       requires: ["clerk"],
       missing: ["clerk"],
+      state: "on" as const,
     };
-    render(<CustomizeView page={{ ...page, skills: [...page.skills, manual] }} projectName={projectName} />);
+    render(view({ ...page, skills: [...page.skills, manual] }));
     await userEvent.click(screen.getByRole("tab", { name: /Skills/ }));
     const triage = screen.getByRole("article", { name: "Triage failing build" });
     expect(triage).toHaveTextContent("Used when a task needs it");
@@ -96,7 +101,7 @@ describe("the Customize page", () => {
   });
 
   it("searches within the open tab", async () => {
-    render(<CustomizeView page={page} projectName={projectName} />);
+    render(view(page));
     const search = screen.getByRole("searchbox", { name: "Search" });
     await userEvent.type(search, "revenue");
     expect(screen.getByRole("article", { name: "Paddle" })).toBeInTheDocument();
@@ -118,12 +123,16 @@ describe("the Customize page", () => {
       agents: 0,
       hooks: true,
       fingerprint: "b".repeat(64),
+      state: "view_only" as const,
     };
-    const { rerender } = render(<CustomizeView page={page} projectName={projectName} />);
+    const { rerender } = render(view(page));
     await userEvent.click(screen.getByRole("tab", { name: /Plugins/ }));
-    expect(screen.getByText(/No plugins yet/)).toBeInTheDocument();
-    rerender(<CustomizeView page={{ ...page, plugins: [plugin] }} projectName={projectName} />);
+    await userEvent.click(screen.getByRole("button", { name: "Discover" }));
+    expect(screen.getByText(/No plugins found/)).toBeInTheDocument();
+    rerender(view({ ...page, plugins: [plugin] }));
     const card = screen.getByRole("article", { name: "kit" });
+    expect(card).toHaveTextContent("View only (unsigned)");
+    expect(within(card).queryByRole("button")).not.toBeInTheDocument();
     expect(card).toHaveTextContent("Claude format");
     expect(card).toHaveTextContent("1 skill · 2 connectors · 0 commands · 0 agents · hooks");
     expect(card).toHaveTextContent("Nothing in a plugin runs until you approve it.");
@@ -131,17 +140,24 @@ describe("the Customize page", () => {
 
   it("lists what could not be loaded, on its own tab", async () => {
     const problems = [{ kind: "skill" as const, path: "skills/broken", message: "the name is wrong" }];
-    render(<CustomizeView page={{ ...page, problems }} projectName={projectName} />);
+    render(view({ ...page, problems }));
     expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: /Skills/ }));
     expect(screen.getByText("1 item could not be loaded")).toBeInTheDocument();
     expect(screen.getByText("skills/broken")).toBeInTheDocument();
   });
 
-  it("keeps Discover honest: nothing to add yet", async () => {
-    render(<CustomizeView page={page} projectName={projectName} />);
+  it("keeps Discover honest: only what is not on, and empty when everything is", async () => {
+    render(view(page));
     await userEvent.click(screen.getByRole("button", { name: "Discover" }));
-    expect(screen.getByText("Discover is coming soon")).toBeInTheDocument();
+    expect(screen.getByText("Every connector Yaqzan has is on.")).toBeInTheDocument();
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
+  });
+
+  it("without a database shows no switches and says how to get them", () => {
+    render(view(page));
+    expect(screen.getByText(/start the dashboard with --switches/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Switch off/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Heads up/)).not.toBeInTheDocument();
   });
 });

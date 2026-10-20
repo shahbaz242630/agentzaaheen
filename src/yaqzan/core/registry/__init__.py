@@ -11,8 +11,9 @@ What it does:
 
 Public interface:
     ``load_registry``, ``skill_instructions`` (a skill's body, refused if its
-    files changed since loading), ``ItemError`` and the shapes ``Registry``, ``Connector``, ``Skill``,
-    ``Plugin``, ``Problem``, ``Kind``, ``Invocation``, ``Layout``.
+    files changed since loading), ``state_of`` and friends (whether an item
+    counts as on, from its stored switch, ADR-030), ``ItemError`` and the shapes
+    ``Registry``, ``Connector``, ``Skill``, ``Plugin``, ``Problem``, ``Kind``, ``Invocation``, ``Layout``.
 
 How to test:
     ``uv run pytest tests/unit/test_registry_files.py tests/unit/test_registry_items.py``
@@ -30,6 +31,15 @@ from yaqzan.core.registry.files import ItemError
 from yaqzan.core.registry.load import load_registry
 from yaqzan.core.registry.models import Connector, Invocation, Kind, Layout, Plugin, Problem, Registry, Skill
 from yaqzan.core.registry.skills import skill_instructions
+from yaqzan.core.registry.switches import (
+    State,
+    StoredSwitch,
+    SwitchKey,
+    by_item,
+    may_request,
+    may_switch_off,
+    state_of,
+)
 
 __all__ = [
     "Connector",
@@ -41,6 +51,13 @@ __all__ = [
     "Problem",
     "Registry",
     "Skill",
+    "State",
+    "StoredSwitch",
+    "SwitchKey",
+    "by_item",
     "load_registry",
+    "may_request",
+    "may_switch_off",
     "skill_instructions",
+    "state_of",
 ]

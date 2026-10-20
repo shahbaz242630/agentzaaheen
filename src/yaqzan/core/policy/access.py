@@ -55,6 +55,9 @@ class Operation(StrEnum):
     PROMOTE_KNOWLEDGE = "promote_knowledge"
     EDIT_POLICY = "edit_policy"
     GRANT_PII_ACCESS = "grant_pii_access"
+    SWITCH_OFF = "switch_off"  # a registry item (ADR-030)
+    REQUEST_ON = "request_on"  # ask for a registry item to be switched on
+    WITHDRAW_REQUEST = "withdraw_request"
 
 
 REDUCES_RISK = frozenset(
@@ -65,6 +68,10 @@ REDUCES_RISK = frozenset(
         Operation.PAUSE_AGENT,
         Operation.FREEZE_PROJECT,
         Operation.STOP_ALL,
+        Operation.SWITCH_OFF,
+        # Asking changes nothing; only approving the request does (ADR-030).
+        Operation.REQUEST_ON,
+        Operation.WITHDRAW_REQUEST,
     }
 )
 INCREASES_RISK = frozenset(set(Operation) - REDUCES_RISK)

@@ -100,4 +100,6 @@ def test_without_a_registry_the_page_is_empty() -> None:
         "skills": [],
         "plugins": [],
         "problems": [],
+        "switches": False,
+        "requests": [],
     }

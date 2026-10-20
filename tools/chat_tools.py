@@ -10,11 +10,18 @@ each with a closed list of arguments:
   always handed to the model as untrusted text.
 
 The skill catalogue in the prompt lists the same skills, one line each.
+
+With registry switches (ADR-030), :class:`SwitchedChat` asks the database
+before every question which items are on, and offers only those: an off skill
+leaves the catalogue and ``load_skill``; an off GitHub connector takes
+``failed_build_log`` away. If the switches cannot be read, the chat gets no
+tools at all (fail closed).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -22,19 +29,53 @@ import httpx
 from pydantic import SecretStr
 
 from yaqzan.core.api import ChatBackend
-from yaqzan.core.llm_gateway import FactChat, Tool, catalogue
+from yaqzan.core.llm_gateway import ChatModel, ChatReply, FactChat, Tool, catalogue
 from yaqzan.core.net import DownloadPolicy, JsonClient, ModelClient, NetError, NetPolicy
-from yaqzan.core.registry import Invocation, ItemError, Registry, load_registry, skill_instructions
-from yaqzan.core.sdk import FailedStepLog
+from yaqzan.core.policy import Standing
+from yaqzan.core.registry import Invocation, ItemError, Kind, Registry, load_registry, skill_instructions
+from yaqzan.core.sdk import FailedStepLog, get_logger
+from yaqzan.core.store import StoreError
 from yaqzan.plugins.connectors import github
 
 Clock = Callable[[], datetime]
 # The model menu entry the local model trial connects (see SamplePortfolio.models).
 LOCAL_MODEL_ID = "local-gemma"
+# The registry id of the connector that ``failed_build_log`` reads through (its plugin.yaml).
+GITHUB_CONNECTOR = "github"
 CHANGED_SKILL = (
     "This skill was not opened: its files changed (or went missing) since Yaqzan started, "
     "so it has not been reviewed in this form. Answer without it and say so."
 )
+
+
+type ToolSet = tuple[list[Tool], str]
+
+
+@dataclass(frozen=True)
+class Switched:
+    """How to build the chat's tools for what is on (``None``: switches unreadable), and how to ask."""
+
+    build: Callable[[Standing], ToolSet]
+    standing: Callable[[], Awaitable[Standing]]
+
+
+class SwitchedChat:
+    """The chat, given fresh tools for every question: only what is switched on now."""
+
+    def __init__(self, model: ChatModel, switched: Switched) -> None:
+        self.model_id = LOCAL_MODEL_ID
+        self._model = model
+        self._switched = switched
+        self._log = get_logger("yaqzan.chat", model=LOCAL_MODEL_ID)
+
+    async def ask(self, question: str, facts: str) -> ChatReply:
+        """Answer with the tools of the items that are on; with none if the switches can't be read."""
+        try:
+            tools, skills = self._switched.build(await self._switched.standing())
+        except StoreError as exc:
+            self._log.warning("chat_switches_unreadable", code=exc.code.value, effect="no_tools")
+            tools, skills = [], ""
+        return await FactChat(self._model, self.model_id, tools=tools, skills=skills).ask(question, facts)
 
 
 def model_chat(
@@ -42,20 +83,36 @@ def model_chat(
     transport: httpx.AsyncBaseTransport | None = None,
     tools: Sequence[Tool] = (),
     skills: str = "",
+    *,
+    switched: Switched | None = None,
 ) -> ChatBackend | None:
-    """The chat backed by the model server at ``model_url``, or ``None`` (after saying why) if refused."""
+    """The chat backed by the model server at ``model_url``, or ``None`` (after saying why) if refused.
+
+    With ``switched`` its tools follow the registry switches; otherwise it keeps ``tools`` and ``skills``.
+    """
     try:
         client = ModelClient(model_url, transport=transport)
     except NetError as exc:
         print(f"dashboard: the model address was refused ({exc.net_code.value}).")
         print("  Use the local model server, e.g. http://127.0.0.1:8766")
         return None
+    if switched is not None:
+        return SwitchedChat(client, switched)
     return FactChat(client, LOCAL_MODEL_ID, tools=tools, skills=skills)
 
 
-def skill_tool(registry: Registry, plugins_root: Path) -> tuple[Tool | None, str]:
-    """The ``load_skill`` tool and the catalogue for the skills a model may pick itself (none: ``None``)."""
-    skills = [skill for skill in registry.skills if skill.invocation is Invocation.AUTO]
+def skill_tool(
+    registry: Registry, plugins_root: Path, on: frozenset[str] | None = None
+) -> tuple[Tool | None, str]:
+    """The ``load_skill`` tool and the catalogue for the skills a model may pick itself (none: ``None``).
+
+    ``on``, when given, leaves out every skill not switched on.
+    """
+    skills = [
+        skill
+        for skill in registry.skills
+        if skill.invocation is Invocation.AUTO and (on is None or skill.id in on)
+    ]
     if not skills:
         return None, ""
     reviewed = {skill.id: skill.fingerprint for skill in skills}
@@ -128,10 +185,25 @@ def chat_tools(
     repos: Mapping[str, str],
     clock: Clock,
     transport: httpx.AsyncBaseTransport | None = None,
-) -> tuple[list[Tool], str]:
-    """Every chat tool available on this run, and the skill catalogue for the prompt."""
-    skill, skills = skill_tool(load_registry(plugins_root), plugins_root)
+) -> ToolSet:
+    """Every chat tool available on this run, and the skill catalogue for the prompt (no switches)."""
+    return tools_for(load_registry(plugins_root), plugins_root, token, repos, clock, transport=transport)
+
+
+def tools_for(  # noqa: PLR0913  # the registry, where it lives, the outside world, and what is on
+    registry: Registry,
+    plugins_root: Path,
+    token: SecretStr | None,
+    repos: Mapping[str, str],
+    clock: Clock,
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
+    standing: Standing | None = None,
+) -> ToolSet:
+    """The chat's tools and skill catalogue for what is on (``standing``; ``None``: no switches, so all)."""
+    skill, skills = skill_tool(registry, plugins_root, None if standing is None else standing.on(Kind.SKILL))
     tools = [skill] if skill is not None else []
-    if token is not None:
+    github_on = standing is None or GITHUB_CONNECTOR in standing.on(Kind.CONNECTOR)
+    if token is not None and github_on:
         tools.append(build_log_tool(token, repos, clock, transport))
     return tools, skills

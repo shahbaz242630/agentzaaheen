@@ -811,7 +811,8 @@
             "project_id": "family-checkin",
             "status": "needs_key"
           }
-        ]
+        ],
+        "state": "on"
       },
       {
         "id": "paddle",
@@ -839,7 +840,8 @@
             "project_id": "zaaheen",
             "status": "needs_key"
           }
-        ]
+        ],
+        "state": "on"
       }
     ],
     "skills": [
@@ -851,10 +853,13 @@
           "github"
         ],
         "missing": [],
-        "fingerprint": "b9b58c1dcfaee1a2b6ba4ffe4e4a0ca60555de863202f3cfd0e877caee575f79"
+        "fingerprint": "b9b58c1dcfaee1a2b6ba4ffe4e4a0ca60555de863202f3cfd0e877caee575f79",
+        "state": "on"
       }
     ],
     "plugins": [],
-    "problems": []
+    "problems": [],
+    "switches": false,
+    "requests": []
   }
 }

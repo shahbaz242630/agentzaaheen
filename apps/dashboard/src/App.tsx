@@ -58,7 +58,7 @@ export function App() {
     };
   }, [selected]);
 
-  // Read once when first opened (the server reads the registry once at start); retried after a failure.
+  // Read once when first opened, retried after a failure; each switch answers with the page as it now stands.
   function customize() {
     setCustomizing(true);
     if (registry?.state === "ready" || registry?.state === "loading") return;
@@ -137,7 +137,15 @@ export function App() {
                   Could not load the connectors and skills.
                 </p>
               )}
-              {registry?.state === "ready" && <CustomizeView page={registry.data} projectName={projectNameOf} />}
+              {registry?.state === "ready" && (
+                <CustomizeView
+                  page={registry.data}
+                  projectName={projectNameOf}
+                  onChange={(data) => {
+                    setRegistry({ state: "ready", data });
+                  }}
+                />
+              )}
             </>
           ) : (
             <>

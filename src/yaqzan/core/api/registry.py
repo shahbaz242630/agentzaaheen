@@ -3,20 +3,29 @@
 The registry says what exists; ``uses`` says, for each connector, which
 projects it serves and whether it was read this run. A skill lists any
 connector it needs that is not in the registry, so the page can say so. The
-UI checks these shapes with the same rules in zod. Nothing here switches
-anything on: "Add" arrives later as a proposal the Chairman approves.
+UI checks these shapes with the same rules in zod.
+
+Each item carries its ``state`` (ADR-030). With a database, the page also
+carries the requests waiting for approval and ``switches: true``, and
+:class:`DashboardSwitches` lets the dashboard switch an item off, ask for it
+to be switched on, or withdraw that request, always as the Chairman on the
+dashboard channel (there is no login yet; it serves 127.0.0.1 only). Nothing
+here switches anything on: that needs the passkey approval (slice 2c).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime
 from enum import StrEnum
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from yaqzan.core.api.views import ProjectDetail
 from yaqzan.core.metrics import Freshness
-from yaqzan.core.registry import Invocation, Kind, Layout, Registry
+from yaqzan.core.policy import OUTSIDE_KINDS, Channel, RegistryControl, Role, Standing, Verdict
+from yaqzan.core.registry import Invocation, Kind, Layout, Registry, State, state_of
 from yaqzan.core.sdk import ToolLevel
 
 _SLUG = r"^[a-z0-9][a-z0-9-]{0,39}$"
@@ -57,6 +66,7 @@ class ConnectorView(_View):
     key_slots: tuple[str, ...]
     fingerprint: str = Field(pattern=_HASH)
     uses: tuple[ProjectUse, ...]
+    state: State
 
 
 class SkillView(_View):
@@ -68,6 +78,7 @@ class SkillView(_View):
     requires: tuple[str, ...]
     missing: tuple[str, ...]
     fingerprint: str = Field(pattern=_HASH)
+    state: State
 
 
 class PluginView(_View):
@@ -83,6 +94,24 @@ class PluginView(_View):
     agents: int = Field(ge=0)
     hooks: bool
     fingerprint: str = Field(pattern=_HASH)
+    state: State
+
+
+class RequestView(_View):
+    """A request to switch an item on, waiting for approval. ``stale``: its files changed since."""
+
+    id: UUID
+    kind: Kind
+    item_id: str = Field(pattern=_ITEM)
+    requested_at: datetime
+    stale: bool
+
+
+class ItemRef(_View):
+    """Which item a switch or request is about (sent by the page)."""
+
+    kind: Kind
+    id: str = Field(pattern=_ITEM, max_length=64)
 
 
 class ProblemView(_View):
@@ -94,32 +123,100 @@ class ProblemView(_View):
 
 
 class RegistryPage(_View):
-    """Everything the Customize page shows."""
+    """Everything the Customize page shows. ``switches``: on/off can be changed (a database is connected)."""
 
     connectors: tuple[ConnectorView, ...] = ()
     skills: tuple[SkillView, ...] = ()
     plugins: tuple[PluginView, ...] = ()
     problems: tuple[ProblemView, ...] = ()
+    switches: bool = False
+    requests: tuple[RequestView, ...] = ()
 
 
-def registry_page(registry: Registry, uses: Mapping[str, Mapping[str, Use]]) -> RegistryPage:
-    """The page for ``registry``; ``uses`` maps connector id → project id → how it stands."""
+def registry_page(
+    registry: Registry, uses: Mapping[str, Mapping[str, Use]], standing: Standing | None = None
+) -> RegistryPage:
+    """The page for ``registry``; ``uses`` maps connector id → project id → how it stands.
+
+    Without ``standing`` (no database) every item shows its default state and nothing can be switched.
+    """
     known = {connector.id for connector in registry.connectors}
+
+    def state(kind: Kind, item_id: str, fingerprint: str) -> State:
+        if standing is not None:
+            return standing.states[(kind, item_id)]
+        return state_of(kind, item_id, fingerprint, {}, outside=kind in OUTSIDE_KINDS)
+
     return RegistryPage(
         connectors=tuple(
             ConnectorView(
                 **c.model_dump(),
                 uses=tuple(ProjectUse(project_id=p, status=s) for p, s in uses.get(c.id, {}).items()),
+                state=state(Kind.CONNECTOR, c.id, c.fingerprint),
             )
             for c in registry.connectors
         ),
         skills=tuple(
-            SkillView(**s.model_dump(), missing=tuple(r for r in s.requires if r not in known))
+            SkillView(
+                **s.model_dump(),
+                missing=tuple(r for r in s.requires if r not in known),
+                state=state(Kind.SKILL, s.id, s.fingerprint),
+            )
             for s in registry.skills
         ),
-        plugins=tuple(PluginView(**p.model_dump()) for p in registry.plugins),
+        plugins=tuple(
+            PluginView(**p.model_dump(), state=state(Kind.PLUGIN, p.id, p.fingerprint))
+            for p in registry.plugins
+        ),
         problems=tuple(ProblemView(kind=p.kind, path=p.path, message=p.message) for p in registry.problems),
+        switches=standing is not None,
+        requests=tuple(
+            RequestView(id=r.id, kind=r.kind, item_id=r.item_id, requested_at=r.requested_at, stale=r.stale)
+            for r in (standing.pending if standing else ())
+        ),
     )
+
+
+class DashboardSwitches:
+    """The Customize page's switches: the dashboard on this laptop acts as the Chairman (no login yet)."""
+
+    def __init__(
+        self,
+        control: RegistryControl,
+        registry: Registry,
+        uses: Mapping[str, Mapping[str, Use]],
+        clock: Callable[[], datetime],
+    ) -> None:
+        self._control = control
+        self._registry = registry
+        self._uses = uses
+        self._clock = clock
+
+    async def standing(self) -> Standing:
+        """How every item stands now."""
+        return await self._control.standing()
+
+    async def page(self) -> RegistryPage:
+        """The page with the states and requests as stored now."""
+        return registry_page(self._registry, self._uses, await self._control.standing())
+
+    async def switch_off(self, kind: Kind, item_id: str) -> Verdict:
+        """Switch one item off."""
+        return await self._control.switch_off(
+            kind, item_id, role=Role.CHAIRMAN, channel=Channel.DASHBOARD, now=self._clock()
+        )
+
+    async def request_on(self, kind: Kind, item_id: str) -> Verdict:
+        """Ask for one item to be switched on (approval comes later, with a passkey)."""
+        return await self._control.request_on(
+            kind, item_id, role=Role.CHAIRMAN, channel=Channel.DASHBOARD, now=self._clock()
+        )
+
+    async def withdraw(self, request_id: UUID) -> Verdict:
+        """Withdraw a waiting request."""
+        return await self._control.withdraw(
+            request_id, role=Role.CHAIRMAN, channel=Channel.DASHBOARD, now=self._clock()
+        )
 
 
 def uses_from_cards(
