@@ -6,6 +6,7 @@ No real process and no real model: the process, memory reading and health check 
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import httpx
@@ -169,3 +170,50 @@ def test_health_polling_gives_up_at_the_deadline() -> None:
         sleep=lambda _s: None,
     )
     assert ready is False
+
+
+@pytest.mark.parametrize(
+    ("meminfo", "expected"),
+    [
+        ("MemTotal: 16000000 kB\nMemAvailable: 4000000 kB\n", 4000000 * 1024),
+        ("MemTotal: 16000000 kB\n", None),
+    ],
+)
+def test_reads_free_memory_on_linux(
+    monkeypatch: pytest.MonkeyPatch, meminfo: str, expected: int | None
+) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(Path, "read_text", lambda _self, encoding: meminfo)
+    assert local_model.free_memory_bytes() == expected
+
+
+def test_unreadable_meminfo_means_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unreadable(_self: Path, encoding: str) -> str:
+        raise OSError("no /proc")
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(Path, "read_text", unreadable)
+    assert local_model.free_memory_bytes() is None
+
+
+class StubbornProcess(FakeProcess):
+    """Ignores terminate, so only a hard kill stops it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.killed = False
+
+    def terminate(self) -> None:
+        pass
+
+    def wait(self, timeout: float | None = None) -> int:
+        raise subprocess.TimeoutExpired("llama-server", timeout or 0)
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+def test_a_server_that_ignores_terminate_is_killed() -> None:
+    proc = StubbornProcess()
+    local_model._stop(proc)  # type: ignore[arg-type]  # a stand-in with the methods used
+    assert proc.killed
