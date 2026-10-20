@@ -765,5 +765,93 @@
         "note": "Opt-in. Never sees customer data. Needs a key in the vault."
       }
     ]
+  },
+  "registry": {
+    "connectors": [
+      {
+        "id": "github",
+        "name": "GitHub",
+        "category": "Code",
+        "description": "Open issues, open pull requests and the main branch's latest build, as counts only (never titles or text).",
+        "version": "0.1.0",
+        "level": "read",
+        "hosts": [
+          "api.github.com"
+        ],
+        "endpoints": [
+          "GET /repos/{owner}/{repo}",
+          "GET /repos/{owner}/{repo}/actions/runs",
+          "GET /search/issues"
+        ],
+        "key_slots": [
+          "token"
+        ],
+        "fingerprint": "e0617b50e18e7cf5e0160cdfc9fc52f17eec7046efbb5c526fde530dc5254aea",
+        "uses": [
+          {
+            "project_id": "zaaheen",
+            "status": "needs_key"
+          },
+          {
+            "project_id": "sandoq-kin",
+            "status": "needs_key"
+          },
+          {
+            "project_id": "agent-x",
+            "status": "needs_key"
+          },
+          {
+            "project_id": "eva",
+            "status": "needs_key"
+          },
+          {
+            "project_id": "family-checkin",
+            "status": "needs_key"
+          }
+        ]
+      },
+      {
+        "id": "paddle",
+        "name": "Paddle",
+        "category": "Revenue",
+        "description": "Subscriptions, payments and refunds, read-only: MRR, subscribers, trials, failed payments.",
+        "version": "0.1.0",
+        "level": "read",
+        "hosts": [
+          "api.paddle.com",
+          "sandbox-api.paddle.com"
+        ],
+        "endpoints": [
+          "GET /subscriptions",
+          "GET /transactions",
+          "GET /adjustments",
+          "GET /discounts"
+        ],
+        "key_slots": [
+          "api_key"
+        ],
+        "fingerprint": "da29bcd1f657e1c5a25d41697f69972bb05505e71758076194fed0c9c1b5bc9f",
+        "uses": [
+          {
+            "project_id": "zaaheen",
+            "status": "needs_key"
+          }
+        ]
+      }
+    ],
+    "skills": [
+      {
+        "id": "triage-failing-build",
+        "description": "Work out why a project's build or scheduled job on GitHub failed, explain it in plain English, and either propose a fix for a human to approve or escalate. Use whenever a project's Code card shows a failed or inconclusive build, or someone asks why CI is red.",
+        "invocation": "auto",
+        "requires": [
+          "github"
+        ],
+        "missing": [],
+        "fingerprint": "790e6f15d3ee8fc9b630c46861539a0aa017fcb14a00038c277ba0a5df7b0e0e"
+      }
+    ],
+    "plugins": [],
+    "problems": []
   }
 }

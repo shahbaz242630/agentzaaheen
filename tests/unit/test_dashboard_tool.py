@@ -231,3 +231,34 @@ def test_a_model_address_off_the_laptop_is_refused(
     assert dashboard.main(["--model-url", url], static_dir=ui, serve=lambda a, *_: served.append(a)) == 1
     assert served == []
     assert "net.blocked" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- the Customize page (F06)
+
+
+def test_the_customize_page_lists_what_is_on_disk(ui: Path) -> None:
+    apps: list[FastAPI] = []
+    assert dashboard.main([], static_dir=ui, serve=lambda app, *_: apps.append(app)) == 0
+    page = TestClient(apps[0], base_url="http://127.0.0.1").get("/api/registry").json()
+    assert [c["id"] for c in page["connectors"]] == ["github", "paddle"]
+    assert {u["status"] for c in page["connectors"] for u in c["uses"]} == {"needs_key"}
+    assert [u["project_id"] for u in page["connectors"][1]["uses"]] == ["zaaheen"]
+    assert [s["id"] for s in page["skills"]] == ["triage-failing-build"]
+
+
+def test_bundles_are_shown_and_bad_ones_explained(
+    ui: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    good = tmp_path / "bundles" / "kit" / ".claude-plugin"
+    bad = tmp_path / "bundles" / "broken" / ".codex-plugin"
+    good.mkdir(parents=True)
+    bad.mkdir(parents=True)
+    (good / "plugin.json").write_text('{"name": "kit"}', encoding="utf-8")
+    (bad / "plugin.json").write_text('{"name": "Broken"}', encoding="utf-8")
+    apps: list[FastAPI] = []
+    argv = ["--bundles", str(tmp_path / "bundles")]
+    assert dashboard.main(argv, static_dir=ui, serve=lambda app, *_: apps.append(app)) == 0
+    page = TestClient(apps[0], base_url="http://127.0.0.1").get("/api/registry").json()
+    assert [p["id"] for p in page["plugins"]] == ["kit"]
+    assert [p["path"] for p in page["problems"]] == ["bundles/broken"]
+    assert "the plugin at bundles/broken was not loaded" in capsys.readouterr().out

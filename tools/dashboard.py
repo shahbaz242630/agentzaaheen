@@ -22,12 +22,17 @@ cards on screen, using the model server at that address (the local model
 trial, F05: ``uv run python -m tools.local_model`` serves it on
 http://127.0.0.1:8766). Without it the chat says it is not connected.
 
+The Customize page lists every connector, skill and plugin found on disk
+(read once at start, nothing is switched on). ``--bundles DIR`` also shows
+the plugin bundles under DIR (Claude, Codex or Cursor layout), read only.
+
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
     uv run python -m tools.dashboard [--port 8765]
     uv run python -m tools.dashboard --paddle-key-env PADDLE_LIVE_API_KEY_ZAAHEEN
     uv run python -m tools.dashboard --github-token-env GITHUB_READ_TOKEN_YAQZAN
     uv run python -m tools.dashboard --model-url http://127.0.0.1:8766
+    uv run python -m tools.dashboard --bundles ~/.claude/plugins
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
 
@@ -51,10 +56,12 @@ from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
 from yaqzan.core.api.code import code_card, failed_code_card
 from yaqzan.core.api.overlay import CardMaker, OverlayPortfolio
+from yaqzan.core.api.registry import RegistryPage, registry_page, uses_from_cards
 from yaqzan.core.api.revenue import revenue_card
 from yaqzan.core.api.views import Card
 from yaqzan.core.llm_gateway import FactChat
 from yaqzan.core.net import JsonClient, ModelClient, NetError, NetPolicy
+from yaqzan.core.registry import load_registry
 from yaqzan.core.scheduler import snapshot_from_rows
 from yaqzan.core.sdk import RepoHealth, RevenueBatch, SourceError, explain
 from yaqzan.plugins.connectors import github
@@ -63,6 +70,7 @@ from yaqzan.plugins.connectors.paddle import ALLOWED_HOSTS, API_VERSION_HEADER, 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
 CONTRACT_FIXTURE = UI_ROOT / "src" / "contract" / "sample.json"
+PLUGINS_ROOT = UI_ROOT.parent.parent / "src" / "yaqzan" / "plugins"
 CONTRACT_TIME = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -77,6 +85,11 @@ GITHUB_REPOS: dict[str, str] = {
     "agent-x": "shahbaz242630/agent-x",
     "eva": "shahbaz242630/AI-Agent-SAAS",
     "family-checkin": "shahbaz242630/Family-Checkin",
+}
+# Which card each connector feeds, on which projects (handoffs/CONNECTORS-CHECKLIST).
+CONNECTOR_CARDS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "paddle": ("paddle", ("zaaheen",)),
+    "github": (CODE_CARD, tuple(GITHUB_REPOS)),
 }
 # The model menu entry the local model trial connects (see SamplePortfolio.models).
 LOCAL_MODEL_ID = "local-gemma"
@@ -93,10 +106,20 @@ def build_app(
     now: datetime | None = None,
     portfolio: Portfolio | None = None,
     chat: ChatBackend | None = None,
+    bundles: Sequence[Path] = (),
 ) -> FastAPI:
     """The dashboard app, serving the UI from ``static_dir`` (sample data unless given a portfolio)."""
     chosen = portfolio or SamplePortfolio(now or _now())
-    return create_app(chosen, static_dir=static_dir, allowed_hosts=LOCAL_HOSTS, chat=chat)
+    registry = registry_for(chosen, bundles)
+    return create_app(chosen, static_dir=static_dir, allowed_hosts=LOCAL_HOSTS, chat=chat, registry=registry)
+
+
+def registry_for(portfolio: Portfolio, bundles: Sequence[Path] = ()) -> RegistryPage:
+    """The Customize page: what is on disk, with each connector judged from the cards it feeds."""
+    registry = load_registry(PLUGINS_ROOT, bundles)
+    for problem in registry.problems:
+        print(f"dashboard: the {problem.kind.value} at {problem.path} was not loaded: {problem.message}")
+    return registry_page(registry, uses_from_cards(portfolio.project, CONNECTOR_CARDS))
 
 
 def model_chat(model_url: str, transport: httpx.AsyncBaseTransport | None = None) -> ChatBackend | None:
@@ -275,6 +298,7 @@ def contract_sample() -> str:
         "projects": [p.model_dump(mode="json") for p in projects],
         "details": {p.id: _detail_json(portfolio, p.id) for p in projects},
         "models": portfolio.models().model_dump(mode="json"),
+        "registry": registry_for(portfolio).model_dump(mode="json"),
     }
     return json.dumps(answers, indent=2, ensure_ascii=False) + "\n"
 
@@ -329,6 +353,9 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
     parser.add_argument("--paddle-key-env", help="env var holding the live READ-ONLY Zaaheen Paddle key")
     parser.add_argument("--github-token-env", help="env var holding the READ-ONLY GitHub token")
     parser.add_argument("--model-url", help="the chat's model server, e.g. http://127.0.0.1:8766")
+    parser.add_argument(
+        "--bundles", type=Path, action="append", default=[], help="show plugin bundles in DIR"
+    )
     ns = parser.parse_args(argv)
     if ns.export_contract:
         CONTRACT_FIXTURE.parent.mkdir(parents=True, exist_ok=True)
@@ -351,7 +378,7 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
         chat = model_chat(ns.model_url, transport)
         if chat is None:
             return 1
-    app = build_app(static_dir, portfolio=portfolio, chat=chat)
+    app = build_app(static_dir, portfolio=portfolio, chat=chat, bundles=[b.expanduser() for b in ns.bundles])
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
         what += "; chat connected to the local model"

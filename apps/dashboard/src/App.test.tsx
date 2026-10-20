@@ -9,6 +9,7 @@ import sample from "./contract/sample.json";
 function answer(path: string): unknown {
   if (path === "/api/projects") return sample.projects;
   if (path === "/api/models") return sample.models;
+  if (path === "/api/registry") return sample.registry;
   const id = decodeURIComponent(path.replace("/api/projects/", ""));
   return (sample.details as Record<string, unknown>)[id];
 }
