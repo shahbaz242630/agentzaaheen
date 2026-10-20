@@ -18,6 +18,8 @@ CARD_ID = "github"
 TITLE = "Code"
 LABELS = ("Open issues", "Open pull requests", "Failing workflows")
 _MAX_ENTRY = 160
+# A branch name longer than this is not repeated on the card (it would reach the chat model as text).
+_MAX_BRANCH = 40
 
 
 def code_card(health: RepoHealth, *, source_label: str, schedule: timedelta, now: datetime) -> Card:
@@ -28,7 +30,7 @@ def code_card(health: RepoHealth, *, source_label: str, schedule: timedelta, now
         gone = NotKnown(reason=f"freshness.{fresh.value}")
         unknown = tuple(Metric(label=label, value=gone) for label in LABELS)
         return _card(fresh, unknown, (), source_label=source_label, last_success_at=seen)
-    branch = f"{health.default_branch}, newest commit"
+    branch = f"{_branch(health)}, latest run of each workflow"
     numbers = (
         Metric(label=LABELS[0], value=Count(value=health.open_issues)),
         Metric(label=LABELS[1], value=Count(value=health.open_pull_requests)),
@@ -47,7 +49,7 @@ def failed_code_card(code: str, *, source_label: str) -> Card:
 
 def _build_line(health: RepoHealth) -> Entry:
     short = (health.build_commit or "")[:7]
-    branch = health.default_branch
+    branch = _branch(health)
     if health.build is BuildState.PASSED:
         return Entry(
             text=f"Newest build on {branch} passed ({short})", tone=Tone.OK, at=health.build_finished_at
@@ -56,9 +58,17 @@ def _build_line(health: RepoHealth) -> Entry:
         many = "workflow" if health.failing_workflows == 1 else "workflows"
         text = f"Newest build on {branch} failed: {health.failing_workflows} {many} ({short})"
         return Entry(text=text, tone=Tone.ALERT, at=health.build_finished_at)
+    if health.build is BuildState.INCONCLUSIVE:
+        text = f"Latest builds on {branch} were cancelled or skipped: none passed ({short})"
+        return Entry(text=text, tone=Tone.WARN, at=health.build_finished_at)
     if health.build is BuildState.RUNNING:
         return Entry(text=f"Newest build on {branch} is still running ({short})", tone=Tone.INFO)
     return Entry(text=f"No builds have run on {branch} yet", tone=Tone.INFO)
+
+
+def _branch(health: RepoHealth) -> str:
+    name = health.default_branch
+    return name if len(name) <= _MAX_BRANCH else "the main branch"
 
 
 def _card(

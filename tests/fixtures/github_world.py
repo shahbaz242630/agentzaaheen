@@ -44,6 +44,8 @@ def run(
     updated: str,
     status: str = "completed",
     conclusion: str | None = "success",
+    event: str = "push",
+    source: str = REPO,
 ) -> dict[str, object]:
     return {
         "id": run_id,
@@ -51,7 +53,8 @@ def run(
         "workflow_id": workflow_id,
         "head_branch": "main",
         "head_sha": sha,
-        "event": "push",
+        "event": event,
+        "head_repository": {"full_name": source, "description": NEVER_READ},
         "status": status,
         "conclusion": conclusion,
         "created_at": created,

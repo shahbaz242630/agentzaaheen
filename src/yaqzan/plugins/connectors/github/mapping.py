@@ -3,7 +3,8 @@
 Only these fields are ever read: a repository's ``default_branch``, a search's
 ``total_count`` and ``incomplete_results``, and each workflow run's
 ``workflow_id``, ``head_sha``, ``status``, ``conclusion``, ``created_at`` and
-``updated_at``. Titles, bodies, names and commit messages are never touched.
+``updated_at``, ``id``, ``event`` and ``head_repository.full_name``. Titles,
+bodies, people's names and commit messages are never touched.
 """
 
 from __future__ import annotations
@@ -23,8 +24,13 @@ Json = Mapping[str, object]
 _UNFINISHED = frozenset({"queued", "in_progress", "waiting", "requested", "pending"})
 # How a finished run ended: these count as a broken build ...
 _FAILING = frozenset({"failure", "timed_out", "startup_failure", "action_required"})
-# ... and these do not (a cancelled or skipped run says nothing bad about the code).
-_NOT_FAILING = frozenset({"success", "neutral", "skipped", "cancelled", "stale"})
+# ... only this one is a pass ...
+_PASSING = "success"
+# ... and these are neither: the run never reached a verdict on the code.
+_NO_VERDICT = frozenset({"neutral", "skipped", "cancelled", "stale"})
+# Runs on the main branch we trust: our own pushes, schedules and manual starts. A pull request
+# from a fork can carry a branch also called "main", so its runs must never decide the build.
+_OWN_EVENTS = frozenset({"push", "schedule", "workflow_dispatch"})
 _BRANCH = re.compile(r"[A-Za-z0-9._/-]{1,255}")
 _SHA_LENGTH = 40
 _HEX = frozenset("0123456789abcdef")
@@ -100,7 +106,7 @@ def search_total(page: Json) -> int:
 
 @dataclass(frozen=True)
 class Build:
-    """The newest commit's build, summed over its workflows (the result of :func:`build`)."""
+    """The main branch's build, summed over its workflows (the result of :func:`build`)."""
 
     state: BuildState
     commit: str | None
@@ -108,25 +114,39 @@ class Build:
     finished_at: datetime | None
 
 
-def build(runs: Sequence[Json]) -> Build:
-    """How the newest commit on the branch built: each workflow's latest run on that commit decides.
+def _order(run: Json) -> tuple[datetime, int]:
+    """Newest first by start time, then by run id, so equal times always sort the same way."""
+    return time(run, "created_at"), count(run, "id")
+
+
+def _ours(run: Json, repo: str) -> bool:
+    """Whether a run is our own push, schedule or manual start (never someone else's pull request)."""
+    if text(run, "event") not in _OWN_EVENTS:
+        return False
+    source = text(obj(run.get("head_repository"), "head_repository"), "full_name")
+    return source.lower() == repo.lower()
+
+
+def build(runs: Sequence[Json], repo: str) -> Build:
+    """How the main branch builds: each workflow's latest run of ours there decides.
 
     One failed workflow fails the build, even while others still run. Otherwise
-    any unfinished workflow means it is still running.
+    any unfinished workflow means it is still running. A pass needs at least one
+    workflow that succeeded; all cancelled or skipped is "inconclusive", never a pass.
     """
-    if not runs:
-        return Build(BuildState.NONE, None, 0, None)
-    newest = max(runs, key=lambda run: time(run, "created_at"))
-    head = commit(newest, "head_sha")
     latest: dict[int, Json] = {}
     for run in runs:
-        if commit(run, "head_sha") != head:
+        if not _ours(run, repo):
             continue
         workflow = count(run, "workflow_id")
-        if workflow not in latest or time(run, "created_at") > time(latest[workflow], "created_at"):
+        if workflow not in latest or _order(run) > _order(latest[workflow]):
             latest[workflow] = run
+    if not latest:
+        return Build(BuildState.NONE, None, 0, None)
+    head = commit(max(latest.values(), key=_order), "head_sha")
     failing = 0
     running = False
+    passed = False
     finished: list[datetime] = []
     for run in latest.values():
         status = text(run, "status")
@@ -136,12 +156,13 @@ def build(runs: Sequence[Json]) -> Build:
         if status != "completed":
             raise SourceError(SourceErrorCode.UNKNOWN_VALUE, "github sent a run status we do not know")
         conclusion = text(run, "conclusion")
-        if conclusion not in _FAILING | _NOT_FAILING:
+        if conclusion not in {*_FAILING, _PASSING, *_NO_VERDICT}:
             raise SourceError(SourceErrorCode.UNKNOWN_VALUE, "github sent a run conclusion we do not know")
         failing += conclusion in _FAILING
+        passed = passed or conclusion == _PASSING
         finished.append(time(run, "updated_at"))
     if failing:
         return Build(BuildState.FAILED, head, failing, max(finished))
     if running:
         return Build(BuildState.RUNNING, head, 0, None)
-    return Build(BuildState.PASSED, head, 0, max(finished))
+    return Build(BuildState.PASSED if passed else BuildState.INCONCLUSIVE, head, 0, max(finished))

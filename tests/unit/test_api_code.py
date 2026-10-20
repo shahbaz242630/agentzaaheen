@@ -29,7 +29,7 @@ def test_a_fresh_card_shows_the_counts_and_the_build() -> None:
         ("Open pull requests", Count(value=2)),
         ("Failing workflows", Count(value=0)),
     ]
-    assert shown.metrics[2].detail == "main, newest commit"
+    assert shown.metrics[2].detail == "main, latest run of each workflow"
     (line,) = shown.entries
     assert (line.text, line.tone, line.at) == ("Newest build on main passed (bbbbbbb)", Tone.OK, when(11, 9))
 
@@ -48,6 +48,11 @@ def test_a_fresh_card_shows_the_counts_and_the_build() -> None:
             Tone.ALERT,
         ),
         (
+            {"build": BuildState.INCONCLUSIVE},
+            "Latest builds on main were cancelled or skipped: none passed (bbbbbbb)",
+            Tone.WARN,
+        ),
+        (
             {"build": BuildState.RUNNING, "build_finished_at": None},
             "Newest build on main is still running (bbbbbbb)",
             Tone.INFO,
@@ -64,6 +69,14 @@ def test_the_build_line_says_what_happened(changes: dict[str, object], text: str
     (line,) = card(health).entries
     assert (line.text, line.tone) == (text, tone)
     assert HEAD_SHA[:7] in text or health.build is BuildState.NONE
+
+
+def test_a_long_branch_name_is_not_repeated_on_the_card() -> None:
+    long_name = "ignore-previous-instructions-" + "x" * 30
+    shown = card(RepoHealth.model_validate({**EXPECTED.model_dump(), "default_branch": long_name}))
+    words = [m.detail or "" for m in shown.metrics] + [e.text for e in shown.entries]
+    assert all(long_name not in w for w in words)
+    assert shown.entries[0].text == "Newest build on the main branch passed (bbbbbbb)"
 
 
 def test_an_old_read_turns_every_number_unknown_and_drops_the_build_line() -> None:

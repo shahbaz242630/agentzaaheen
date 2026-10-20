@@ -22,7 +22,7 @@ BASE_URL = "https://api.github.com"
 ALLOWED_HOSTS = frozenset({"api.github.com"})
 API_HEADERS = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
 
-# Enough to hold every workflow of the newest commit; older runs are never needed.
+# Enough to hold the latest run of every workflow on the main branch.
 RUNS_PER_PAGE = "50"
 
 
@@ -55,7 +55,7 @@ class GitHubSource:
             page = await self._get(
                 f"/repos/{self._repo}/actions/runs", {"branch": branch, "per_page": RUNS_PER_PAGE}
             )
-            built = mapping.build(mapping.objects(page.get("workflow_runs"), "workflow_runs"))
+            built = mapping.build(mapping.objects(page.get("workflow_runs"), "workflow_runs"), self._repo)
             return RepoHealth(
                 source=mapping.SOURCE,
                 repo=self._repo,

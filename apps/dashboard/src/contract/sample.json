@@ -248,7 +248,7 @@
                 "kind": "count",
                 "value": 0
               },
-              "detail": "main, newest commit"
+              "detail": "main, latest run of each workflow"
             }
           ],
           "entries": [
@@ -533,7 +533,7 @@
                 "kind": "count",
                 "value": 0
               },
-              "detail": "main, newest commit"
+              "detail": "main, latest run of each workflow"
             }
           ],
           "entries": []

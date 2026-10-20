@@ -26,16 +26,20 @@ class _Shape(BaseModel):
 
 
 class BuildState(StrEnum):
-    """How the newest commit on the main branch built, across all of its workflows."""
+    """How the main branch builds: each workflow's latest run there, taken together."""
 
     PASSED = "passed"
     FAILED = "failed"
     RUNNING = "running"
+    INCONCLUSIVE = "inconclusive"  # every latest run was cancelled or skipped: nothing passed
     NONE = "none"  # no build has ever run on the main branch
 
 
 class RepoHealth(_Shape):
-    """One repository right now. ``failing_workflows`` counts the newest commit's failed workflows."""
+    """One repository right now. ``failing_workflows`` counts workflows whose latest run on main failed.
+
+    ``build_commit`` is the commit of the newest of those runs.
+    """
 
     source: str = Field(pattern=_SOURCE)
     repo: str = Field(pattern=REPO_PATTERN)
@@ -57,7 +61,8 @@ class RepoHealth(_Shape):
             raise ValueError(f"a {self.build} build names the commit it built")
         if (self.build is BuildState.FAILED) != (self.failing_workflows > 0):
             raise ValueError("a failed build has failing workflows, and only a failed build does")
-        if (self.build in {BuildState.PASSED, BuildState.FAILED}) != (self.build_finished_at is not None):
+        finished = {BuildState.PASSED, BuildState.FAILED, BuildState.INCONCLUSIVE}
+        if (self.build in finished) != (self.build_finished_at is not None):
             raise ValueError("a finished build has a finish time, and only a finished build does")
         return self
 

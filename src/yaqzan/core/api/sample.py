@@ -195,7 +195,11 @@ class SamplePortfolio:
                     metrics=(
                         Metric(label="Open issues", value=Count(value=5)),
                         Metric(label="Open pull requests", value=Count(value=2)),
-                        Metric(label="Failing workflows", value=Count(value=0), detail="main, newest commit"),
+                        Metric(
+                            label="Failing workflows",
+                            value=Count(value=0),
+                            detail="main, latest run of each workflow",
+                        ),
                     ),
                     entries=(
                         Entry(
@@ -295,7 +299,11 @@ class SamplePortfolio:
                     metrics=(
                         Metric(label="Open issues", value=Count(value=11)),
                         Metric(label="Open pull requests", value=Count(value=1)),
-                        Metric(label="Failing workflows", value=Count(value=0), detail="main, newest commit"),
+                        Metric(
+                            label="Failing workflows",
+                            value=Count(value=0),
+                            detail="main, latest run of each workflow",
+                        ),
                     ),
                 ),
             ),

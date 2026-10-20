@@ -4,8 +4,10 @@ Every rule is checked in code before a byte leaves (SECURITY NET-1):
 https only, the host must be on this client's allowlist and must be a name,
 never an IP literal; no credentials in the URL; redirects are refused, not
 followed; responses are size-capped and must be a JSON object. Retries
-(429, 5xx, timeouts, dropped connections) back off with full jitter and obey
-``Retry-After``. Errors carry a code and status only, never a body or header.
+(429, 5xx, timeouts, dropped connections, and a 403 that carries ``Retry-After``)
+back off with full jitter and obey ``Retry-After``; a 403 saying the hourly
+allowance is used up is reported as rate-limited, not as a refused key.
+Errors carry a code and status only, never a body or header.
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ from yaqzan.core.sdk import get_logger
 
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 _AUTH_STATUSES = frozenset({401, 403})
+# Some vendors (GitHub) answer 403 when slowing a caller down; its headers tell it from a refused key.
+_FORBIDDEN = 403
 _MAX_PATH = 512
 
 Sleep = Callable[[float], Awaitable[None]]
@@ -169,7 +173,11 @@ class JsonClient:
                     return outcome
                 status, retry_after = outcome
                 if last:
-                    code = NetErrorCode.RATE_LIMITED if status == 429 else NetErrorCode.SERVER_ERROR
+                    code = (
+                        NetErrorCode.RATE_LIMITED
+                        if status in {_FORBIDDEN, 429}
+                        else NetErrorCode.SERVER_ERROR
+                    )
                     raise NetError(code, "gave up after retries", status=status)
                 await self._back_off(attempt, retry_after, path, f"http_{status}")
         except NetError as exc:
@@ -186,6 +194,12 @@ class JsonClient:
                 status = response.status_code
                 if status in _RETRY_STATUSES:
                     return status, response.headers.get("Retry-After")
+                if status == _FORBIDDEN and response.headers.get("Retry-After") is not None:
+                    return status, response.headers.get("Retry-After")  # a vendor's 403 "slow down" (GitHub)
+                if status == _FORBIDDEN and response.headers.get("X-RateLimit-Remaining") == "0":
+                    raise NetError(
+                        NetErrorCode.RATE_LIMITED, "the hourly request allowance is used up", status=status
+                    )
                 self._refuse_status(status)
                 body = await self._read_capped(response)
         except httpx.TimeoutException:

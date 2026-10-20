@@ -231,6 +231,45 @@ def test_retry_after_is_honoured_and_capped() -> None:
     assert sleeps.delays == [7.0, POLICY.max_delay_s]
 
 
+def test_a_403_asking_us_to_slow_down_is_retried_not_called_a_refused_key() -> None:
+    sleeps = Sleeps()
+    responses = iter([httpx.Response(403, headers={"Retry-After": "3"})])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return next(responses, httpx.Response(200, json={}))
+
+    assert get(handler, sleeps=sleeps) == {}
+    assert sleeps.delays == [3.0]
+
+
+def test_a_403_that_keeps_asking_us_to_slow_down_ends_rate_limited() -> None:
+    with pytest.raises(NetError) as caught:
+        get(lambda request: httpx.Response(403, headers={"Retry-After": "1"}))
+    assert (caught.value.net_code, caught.value.code, caught.value.status) == (
+        NetErrorCode.RATE_LIMITED,
+        SourceErrorCode.RATE_LIMITED,
+        403,
+    )
+
+
+def test_a_used_up_hourly_allowance_is_rate_limited_and_not_retried() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(403, headers={"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1760968800"})
+
+    with pytest.raises(NetError) as caught:
+        get(handler)
+    assert (caught.value.net_code, caught.value.status, len(calls)) == (NetErrorCode.RATE_LIMITED, 403, 1)
+
+
+def test_a_401_with_retry_after_is_still_a_refused_key() -> None:
+    with pytest.raises(NetError) as caught:
+        get(lambda request: httpx.Response(401, headers={"Retry-After": "1"}))
+    assert caught.value.net_code is NetErrorCode.AUTH
+
+
 def test_gives_up_after_max_attempts_with_rate_limited() -> None:
     calls: list[int] = []
 
