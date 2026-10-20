@@ -161,3 +161,19 @@ class ModelList(_View):
         if len(defaults) != 1 or defaults[0].where != "local":
             raise ValueError("there must be exactly one default model, and it must be local (ADR-023)")
         return self
+
+
+class ChatQuestion(_View):
+    """One question typed into the chat, about one project or (``None``) all of them."""
+
+    project_id: str | None = Field(default=None, pattern=_SLUG)
+    model_id: str = Field(pattern=_SLUG)
+    question: str = Field(min_length=1, max_length=2000)
+
+
+class ChatAnswer(_View):
+    """The model's plain-text answer. ``from_sample`` says some facts it saw were sample data."""
+
+    model_id: str = Field(pattern=_SLUG)
+    answer: str = Field(min_length=1, max_length=4000)
+    from_sample: bool

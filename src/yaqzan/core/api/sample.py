@@ -48,16 +48,16 @@ class SamplePortfolio:
         return self._details.get(project_id)
 
     def models(self) -> ModelList:
-        """The chat's model menu (ADR-023). Nothing is wired up yet."""
+        """The chat's model menu (ADR-023). The dashboard marks the connected one available."""
         return ModelList(
             models=(
                 ModelChoice(
                     id="local-gemma",
-                    label="Gemma (our server)",
+                    label="Gemma (local)",
                     where="local",
                     available=False,
                     default=True,
-                    note="Runs on our own server. Connects with the local model trial (F05).",
+                    note="Free and open. Runs on this laptop for now, on our own server later.",
                 ),
                 ModelChoice(
                     id="cloud-claude",

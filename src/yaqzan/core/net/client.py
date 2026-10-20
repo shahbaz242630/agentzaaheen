@@ -47,7 +47,8 @@ class NetPolicy:
     max_delay_s: float = 30.0
 
 
-def _check_host(host: str | None, policy: NetPolicy) -> str:
+def check_host(host: str | None, policy: NetPolicy) -> str:
+    """Return the lower-cased host if it is an allowlisted name (never an IP literal), else raise."""
     if not host:
         raise NetError(NetErrorCode.BLOCKED, "the url has no host")
     try:
@@ -72,7 +73,7 @@ def check_base_url(base_url: str, policy: NetPolicy) -> str:
         raise NetError(NetErrorCode.BLOCKED, "a base url carries no query or fragment")
     if parts.port is not None and parts.port != 443:
         raise NetError(NetErrorCode.BLOCKED, "only the default https port is allowed")
-    host = _check_host(parts.hostname, policy)
+    host = check_host(parts.hostname, policy)
     return f"https://{host}{parts.path.rstrip('/')}"
 
 
@@ -148,7 +149,7 @@ class JsonClient:
             raise exc.at("GET (refused path)") from None  # never echo a path we refused
         attempt = 0
         try:
-            _check_host(urlsplit(url).hostname, self._policy)
+            check_host(urlsplit(url).hostname, self._policy)
             for attempt in range(1, self._policy.max_attempts + 1):
                 last = attempt == self._policy.max_attempts
                 try:
@@ -195,26 +196,10 @@ class JsonClient:
 
     @staticmethod
     def _refuse_status(status: int) -> None:
-        if 300 <= status < 400:  # the 3xx range
-            raise NetError(NetErrorCode.BLOCKED, "redirects are never followed", status=status)
-        if status in _AUTH_STATUSES:
-            raise NetError(NetErrorCode.AUTH, "the credential was refused", status=status)
-        if status != 200:  # only a plain OK carries a body we trust
-            raise NetError(NetErrorCode.CLIENT_ERROR, "the request was refused", status=status)
+        refuse_status(status)
 
     async def _read_capped(self, response: httpx.Response) -> bytes:
-        limit = self._policy.max_response_bytes
-        declared = response.headers.get("Content-Length")
-        if declared is not None and declared.isdigit() and int(declared) > limit:
-            raise NetError(NetErrorCode.TOO_LARGE, "the response is over the size cap", status=200)
-        chunks: list[bytes] = []
-        size = 0
-        async for chunk in response.aiter_bytes():
-            size += len(chunk)
-            if size > limit:
-                raise NetError(NetErrorCode.TOO_LARGE, "the response is over the size cap", status=200)
-            chunks.append(chunk)
-        return b"".join(chunks)
+        return await read_capped(response, self._policy.max_response_bytes)
 
     async def _back_off(self, attempt: int, retry_after: str | None, path: str, reason: str) -> None:
         delay = self._jitter() * min(self._policy.max_delay_s, self._policy.base_delay_s * 2 ** (attempt - 1))
@@ -223,6 +208,36 @@ class JsonClient:
         delay = min(delay, self._policy.max_delay_s)
         self._log.warning("net_retry", path=path, attempt=attempt, reason=reason, delay_s=round(delay, 2))
         await self._sleep(delay)
+
+
+def refuse_status(status: int) -> None:
+    """Raise unless ``status`` is a plain 200: redirects, auth refusals and errors all stop here."""
+    if 300 <= status < 400:  # the 3xx range
+        raise NetError(NetErrorCode.BLOCKED, "redirects are never followed", status=status)
+    if status in _AUTH_STATUSES:
+        raise NetError(NetErrorCode.AUTH, "the credential was refused", status=status)
+    if status != 200:  # only a plain OK carries a body we trust
+        raise NetError(NetErrorCode.CLIENT_ERROR, "the request was refused", status=status)
+
+
+async def read_capped(response: httpx.Response, limit: int) -> bytes:
+    """The body, refused as soon as it is (or says it will be) over ``limit`` bytes."""
+    declared = response.headers.get("Content-Length")
+    if declared is not None and declared.isdigit() and int(declared) > limit:
+        raise NetError(NetErrorCode.TOO_LARGE, "the response is over the size cap", status=200)
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in response.aiter_bytes():
+        size += len(chunk)
+        if size > limit:
+            raise NetError(NetErrorCode.TOO_LARGE, "the response is over the size cap", status=200)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def decode_object(body: bytes) -> dict[str, object]:
+    """The body as a JSON object, or ``NetError(BAD_RESPONSE)``."""
+    return _decode(body)
 
 
 def _decode(body: bytes) -> dict[str, object]:

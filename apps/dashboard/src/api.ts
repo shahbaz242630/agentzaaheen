@@ -84,10 +84,38 @@ export const ModelList = z.strictObject({ models: z.array(ModelChoice) }).refine
   { message: "there must be exactly one default model, and it must be local" },
 );
 
+export const ChatAnswer = z.strictObject({ model_id: slug, answer: z.string().min(1).max(4000), from_sample: z.boolean() });
+export type ChatAnswer = z.infer<typeof ChatAnswer>;
+
 export class ApiError extends Error {
-  constructor(readonly path: string, readonly status: number | null) {
+  constructor(readonly path: string, readonly status: number | null, readonly code: string | null = null) {
     super(status === null ? `${path}: the answer did not match the contract` : `${path}: HTTP ${status}`);
   }
+}
+
+// The server's error code ("chat.busy", "net.timeout"), if it sent one.
+async function errorCode(response: Response): Promise<string | null> {
+  try {
+    const parsed = z.object({ detail: code }).safeParse(await response.json());
+    return parsed.success ? parsed.data.detail : null;
+  } catch {
+    return null;
+  }
+}
+
+// The one POST: a question for the chat. The custom header and JSON body mean
+// the server only answers our own page (another site's request is refused).
+async function askChat(projectId: string | null, modelId: string, question: string): Promise<ChatAnswer> {
+  const path = "/api/chat";
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json", "X-Yaqzan-Request": "1" },
+    body: JSON.stringify({ project_id: projectId, model_id: modelId, question }),
+  });
+  if (!response.ok) throw new ApiError(path, response.status, await errorCode(response));
+  const parsed = ChatAnswer.safeParse(await response.json());
+  if (!parsed.success) throw new ApiError(path, null);
+  return parsed.data;
 }
 
 async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
@@ -102,4 +130,5 @@ export const api = {
   projects: () => getJson("/api/projects", z.array(ProjectSummary)),
   project: (id: string) => getJson(`/api/projects/${encodeURIComponent(id)}`, ProjectDetail),
   models: async () => (await getJson("/api/models", ModelList)).models,
+  ask: askChat,
 };
