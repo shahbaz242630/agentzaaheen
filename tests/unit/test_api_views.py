@@ -128,9 +128,9 @@ def test_the_sample_is_marked_sample_everywhere() -> None:
         assert all(card.sample for card in detail.cards)
 
 
-def test_the_sample_lists_the_four_products_with_zaaheen_first() -> None:
+def test_the_sample_lists_the_five_products_with_zaaheen_first() -> None:
     names = [p.name for p in SamplePortfolio(NOW).projects()]
-    assert names == ["Zaaheen", "Sandoq Kin", "Agent X", "Eva"]
+    assert names == ["Zaaheen", "Sandoq Kin", "Agent X", "Eva", "Family Check-in"]
 
 
 def test_the_sample_support_card_shows_counts_not_addresses() -> None:

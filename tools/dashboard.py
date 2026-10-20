@@ -11,6 +11,12 @@ environment variable and is never printed. The numbers are held in memory
 only, and turn to "unknown" once they are older than the freshness rule allows
 (restart to read again).
 
+With ``--github-token-env NAME`` it also reads each project's GitHub
+repository once (GET only: open issues, open pull requests and the newest
+build on the main branch, counts only) and shows them on its Code card. The
+token comes from the named environment variable and is never printed. A
+repository that cannot be read shows why on its card; the others still show.
+
 With ``--model-url URL`` the chat on the right answers for real, from the
 cards on screen, using the model server at that address (the local model
 trial, F05: ``uv run python -m tools.local_model`` serves it on
@@ -20,6 +26,7 @@ Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
     uv run python -m tools.dashboard [--port 8765]
     uv run python -m tools.dashboard --paddle-key-env PADDLE_LIVE_API_KEY_ZAAHEEN
+    uv run python -m tools.dashboard --github-token-env GITHUB_READ_TOKEN_YAQZAN
     uv run python -m tools.dashboard --model-url http://127.0.0.1:8766
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
@@ -41,13 +48,16 @@ from fastapi import FastAPI
 from pydantic import SecretStr
 
 from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
+from yaqzan.core.api.code import CARD_ID as CODE_CARD
+from yaqzan.core.api.code import code_card, failed_code_card
 from yaqzan.core.api.overlay import CardMaker, OverlayPortfolio
 from yaqzan.core.api.revenue import revenue_card
 from yaqzan.core.api.views import Card
 from yaqzan.core.llm_gateway import FactChat
 from yaqzan.core.net import JsonClient, ModelClient, NetError, NetPolicy
 from yaqzan.core.scheduler import snapshot_from_rows
-from yaqzan.core.sdk import RevenueBatch, SourceError, explain
+from yaqzan.core.sdk import RepoHealth, RevenueBatch, SourceError, explain
+from yaqzan.plugins.connectors import github
 from yaqzan.plugins.connectors.paddle import ALLOWED_HOSTS, API_VERSION_HEADER, LIVE_BASE_URL, PaddleSource
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
@@ -58,6 +68,16 @@ HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 # Read once at start: treated as an hourly source, so it shows "unknown" after two hours.
 PADDLE_SCHEDULE = timedelta(hours=1)
+# Read once at start, like Paddle: "unknown" after two hours.
+GITHUB_SCHEDULE = timedelta(hours=1)
+# Which repository each project's Code card reads (checked against the local clones, 20 Oct 2026).
+GITHUB_REPOS: dict[str, str] = {
+    "zaaheen": "shahbaz242630/zaaheen",
+    "sandoq-kin": "shahbaz242630/Document-Vault",
+    "agent-x": "shahbaz242630/agent-x",
+    "eva": "shahbaz242630/AI-Agent-SAAS",
+    "family-checkin": "shahbaz242630/Family-Checkin",
+}
 # The model menu entry the local model trial connects (see SamplePortfolio.models).
 LOCAL_MODEL_ID = "local-gemma"
 
@@ -149,7 +169,7 @@ def live_portfolio(
     if not raw:
         print(f"dashboard: {key_env} is not set, so Paddle was not read.")
         return None
-    if not raw.isascii() or not raw.isprintable() or " " in raw:
+    if not _usable_secret(raw):
         print("dashboard: the key contains spaces or control characters; copy it again.")
         return None
     read_at = clock()
@@ -173,6 +193,80 @@ def live_portfolio(
     return OverlayPortfolio(SamplePortfolio(read_at), makers)
 
 
+def _usable_secret(raw: str) -> bool:
+    return raw.isascii() and raw.isprintable() and " " not in raw
+
+
+async def read_github(
+    token: SecretStr,
+    repos: Mapping[str, str],
+    now: datetime,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> dict[str, RepoHealth | SourceError]:
+    """One read-only look at each repository, keyed by project; a failure is kept, not raised."""
+    async with JsonClient(
+        github.BASE_URL,
+        policy=NetPolicy(allowed_hosts=github.ALLOWED_HOSTS),
+        headers=github.API_HEADERS,
+        secret_headers={"Authorization": SecretStr(f"Bearer {token.get_secret_value()}")},
+        transport=transport,
+    ) as http:
+        out: dict[str, RepoHealth | SourceError] = {}
+        for project, repo in repos.items():  # one at a time: GitHub limits searches per minute
+            try:
+                out[project] = await github.GitHubSource(http, repo).fetch(now=now)
+            except SourceError as exc:
+                out[project] = exc
+        return out
+
+
+def github_card(result: RepoHealth | SourceError, clock: Clock = _now) -> CardMaker:
+    """Builds one project's Code card, judging freshness each time it is shown."""
+
+    def make() -> Card:
+        if isinstance(result, SourceError):
+            return failed_code_card(result.reason_code, source_label="GitHub (live)")
+        return code_card(result, source_label="GitHub (live)", schedule=GITHUB_SCHEDULE, now=clock())
+
+    return make
+
+
+def github_portfolio(  # noqa: PLR0913  # the base, the token's name, and the injectable outside world
+    base: Portfolio,
+    token_env: str,
+    environ: Mapping[str, str],
+    *,
+    clock: Clock = _now,
+    transport: httpx.AsyncBaseTransport | None = None,
+    repos: Mapping[str, str] | None = None,
+) -> Portfolio | None:
+    """``base`` with each project's real Code card, or ``None`` (after saying why) if there is no token."""
+    repos = GITHUB_REPOS if repos is None else repos
+    raw = environ.get(token_env, "").strip()
+    if not raw:
+        print(f"dashboard: {token_env} is not set, so GitHub was not read.")
+        return None
+    if not _usable_secret(raw):
+        print("dashboard: the token contains spaces or control characters; copy it again.")
+        return None
+    print(f"dashboard: reading {len(repos)} GitHub repositories (read-only)...")
+    results = asyncio.run(read_github(SecretStr(raw), repos, clock(), transport))
+    for project, result in results.items():
+        if isinstance(result, SourceError):
+            said = explain(result.reason_code, vendor="GitHub")
+            where = f" at {result.operation}" if result.operation else ""
+            print(f"dashboard: {repos[project]} could not be read ({result.reason_code}{where}).")
+            print(f"  What: {said.what}")
+            print(f"  What to do: {said.fix}")
+        else:
+            print(
+                f"dashboard: {repos[project]}: {result.open_issues} open issues, "
+                f"{result.open_pull_requests} open pull requests, build {result.build.value}."
+            )
+    makers = {(project, CODE_CARD): github_card(result, clock) for project, result in results.items()}
+    return OverlayPortfolio(base, makers)
+
+
 def contract_sample() -> str:
     """The sample API answers as JSON, for the UI's tests to check against its zod shapes."""
     portfolio = SamplePortfolio(CONTRACT_TIME)
@@ -192,6 +286,33 @@ def _detail_json(portfolio: SamplePortfolio, project_id: str) -> object:
     return detail.model_dump(mode="json")
 
 
+class _NotStartedError(Exception):
+    """A requested real-data read failed, after saying why."""
+
+
+def _real_data(
+    ns: argparse.Namespace,
+    env: Mapping[str, str],
+    clock: Clock,
+    transport: httpx.AsyncBaseTransport | None,
+) -> tuple[Portfolio | None, list[str]]:
+    """The portfolio with every requested real source laid over the sample, and what is real."""
+    portfolio: Portfolio | None = None
+    live: list[str] = []
+    if ns.paddle_key_env:
+        portfolio = live_portfolio(ns.paddle_key_env, env, clock=clock, transport=transport)
+        if portfolio is None:
+            raise _NotStartedError
+        live.append("Paddle for Zaaheen")
+    if ns.github_token_env:
+        base = portfolio or SamplePortfolio(clock())
+        portfolio = github_portfolio(base, ns.github_token_env, env, clock=clock, transport=transport)
+        if portfolio is None:
+            raise _NotStartedError
+        live.append("GitHub for every project")
+    return portfolio, live
+
+
 def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock) is injectable for tests
     argv: Sequence[str] | None = None,
     *,
@@ -201,11 +322,12 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
     transport: httpx.AsyncBaseTransport | None = None,
     clock: Clock = _now,
 ) -> int:
-    """Start the dashboard; return 1 if the web UI is not built or a requested Paddle read failed."""
+    """Start the dashboard; return 1 if the UI is not built, a Paddle read failed or a token is missing."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--export-contract", action="store_true", help="rewrite the UI's contract fixture")
     parser.add_argument("--paddle-key-env", help="env var holding the live READ-ONLY Zaaheen Paddle key")
+    parser.add_argument("--github-token-env", help="env var holding the READ-ONLY GitHub token")
     parser.add_argument("--model-url", help="the chat's model server, e.g. http://127.0.0.1:8766")
     ns = parser.parse_args(argv)
     if ns.export_contract:
@@ -219,19 +341,18 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
     if not (static_dir / "index.html").is_file():
         print("dashboard: the web UI is not built yet. Run: cd apps/dashboard && npm ci && npm run build")
         return 1
-    portfolio: Portfolio | None = None
-    if ns.paddle_key_env:
-        env = os.environ if environ is None else environ
-        portfolio = live_portfolio(ns.paddle_key_env, env, clock=clock, transport=transport)
-        if portfolio is None:
-            return 1
+    env = os.environ if environ is None else environ
+    try:
+        portfolio, live = _real_data(ns, env, clock, transport)
+    except _NotStartedError:
+        return 1
     chat: ChatBackend | None = None
     if ns.model_url:
         chat = model_chat(ns.model_url, transport)
         if chat is None:
             return 1
     app = build_app(static_dir, portfolio=portfolio, chat=chat)
-    what = "real Paddle numbers for Zaaheen, sample data elsewhere" if portfolio else "sample data"
+    what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
         what += "; chat connected to the local model"
     print(f"dashboard: open http://{HOST}:{ns.port} ({what}; press Ctrl+C to stop)")

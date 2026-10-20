@@ -1,0 +1,15 @@
+id: github
+type: connector
+version: 0.1.0
+sdk: ">=1.4,<2"
+permissions: [read]
+egress: [api.github.com]
+endpoints:
+  - GET /repos/{owner}/{repo}
+  - GET /repos/{owner}/{repo}/actions/runs
+  - GET /search/issues
+credentials:
+  - name: token
+    scope_hint: "fine-grained, read-only: issues, pull requests, actions, metadata; chosen repositories only"
+    verify: true
+data_class: internal

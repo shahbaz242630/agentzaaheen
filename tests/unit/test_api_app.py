@@ -24,7 +24,7 @@ def client(ui: Path) -> TestClient:
 def test_lists_projects(client: TestClient) -> None:
     response = client.get("/api/projects")
     assert response.status_code == 200
-    assert [p["id"] for p in response.json()] == ["zaaheen", "sandoq-kin", "agent-x", "eva"]
+    assert [p["id"] for p in response.json()] == ["zaaheen", "sandoq-kin", "agent-x", "eva", "family-checkin"]
 
 
 def test_gets_one_project_with_its_cards(client: TestClient) -> None:

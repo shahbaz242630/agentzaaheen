@@ -31,6 +31,14 @@
       "health": "unknown",
       "escalations": 0,
       "sample": true
+    },
+    {
+      "id": "family-checkin",
+      "name": "Family Check-in",
+      "summary": "Nearby: cross-border family check-ins",
+      "health": "unknown",
+      "escalations": 0,
+      "sample": true
     }
   ],
   "details": {
@@ -220,7 +228,7 @@
         },
         {
           "id": "github",
-          "title": "Open issues",
+          "title": "Code",
           "source": "GitHub",
           "freshness": "fresh",
           "last_success_at": "2026-10-18T11:30:00Z",
@@ -243,24 +251,19 @@
               "detail": null
             },
             {
-              "label": "Failing builds",
+              "label": "Failing workflows",
               "value": {
                 "kind": "count",
                 "value": 0
               },
-              "detail": null
+              "detail": "main, latest run of each workflow"
             }
           ],
           "entries": [
             {
-              "text": "New issue: sync stops after laptop sleep",
-              "tone": "warn",
-              "at": "2026-10-18T07:00:00Z"
-            },
-            {
-              "text": "Security alert closed: dependency updated",
+              "text": "Newest build on main passed (3f9c2ab)",
               "tone": "ok",
-              "at": "2026-10-17T12:00:00Z"
+              "at": "2026-10-18T07:00:00Z"
             }
           ]
         },
@@ -404,6 +407,47 @@
           "entries": []
         },
         {
+          "id": "github",
+          "title": "Code",
+          "source": "GitHub",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Open issues",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Open pull requests",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Failing workflows",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "GitHub is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
           "id": "uptime",
           "title": "Uptime",
           "source": "Uptime checker",
@@ -469,7 +513,7 @@
         },
         {
           "id": "github",
-          "title": "Open issues",
+          "title": "Code",
           "source": "GitHub",
           "freshness": "fresh",
           "last_success_at": "2026-10-18T11:30:00Z",
@@ -484,12 +528,20 @@
               "detail": null
             },
             {
-              "label": "Failing builds",
+              "label": "Open pull requests",
+              "value": {
+                "kind": "count",
+                "value": 1
+              },
+              "detail": null
+            },
+            {
+              "label": "Failing workflows",
               "value": {
                 "kind": "count",
                 "value": 0
               },
-              "detail": null
+              "detail": "main, latest run of each workflow"
             }
           ],
           "entries": []
@@ -534,6 +586,125 @@
           "entries": [
             {
               "text": "Paddle is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
+          "id": "github",
+          "title": "Code",
+          "source": "GitHub",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Open issues",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Open pull requests",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Failing workflows",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "GitHub is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
+          "id": "uptime",
+          "title": "Uptime",
+          "source": "Uptime checker",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Uptime (30 days)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "Uptime checker is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        }
+      ]
+    },
+    "family-checkin": {
+      "project": {
+        "id": "family-checkin",
+        "name": "Family Check-in",
+        "summary": "Nearby: cross-border family check-ins",
+        "health": "unknown",
+        "escalations": 0,
+        "sample": true
+      },
+      "cards": [
+        {
+          "id": "github",
+          "title": "Code",
+          "source": "GitHub",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Open issues",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Open pull requests",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Failing workflows",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "GitHub is not connected yet.",
               "tone": "info",
               "at": null
             }

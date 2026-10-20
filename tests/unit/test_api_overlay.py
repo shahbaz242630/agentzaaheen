@@ -44,7 +44,11 @@ def test_swaps_in_the_real_card_and_keeps_the_rest() -> None:
 
 
 def test_a_project_with_only_real_cards_is_not_sample() -> None:
-    makers = {("eva", "paddle"): _real, ("eva", "uptime"): lambda: _real("uptime")}
+    makers = {
+        ("eva", "paddle"): _real,
+        ("eva", "github"): lambda: _real("github"),
+        ("eva", "uptime"): lambda: _real("uptime"),
+    }
     portfolio = OverlayPortfolio(SamplePortfolio(NOW), makers)
     eva = next(p for p in portfolio.projects() if p.id == "eva")
     assert eva.sample is False

@@ -92,6 +92,6 @@ def test_a_never_synced_card_says_so() -> None:
 def test_the_project_list() -> None:
     portfolio = SamplePortfolio(NOW)
     lines = portfolio_facts(portfolio.projects()).splitlines()
-    assert len(lines) == 4
+    assert len(lines) == 5
     assert all(line.startswith("Project: ") for line in lines)
     assert portfolio_facts(()) == "No projects."
