@@ -1051,6 +1051,30 @@
     ],
     "skills": [
       {
+        "id": "check-slo",
+        "description": "Say how each project is doing against its service level objectives (SLOs) - is it within target, how much error budget is left, and is the budget burning fast. Use when someone asks whether a product is healthy, how reliable it has been, how much downtime is left this month, or before deciding whether to ship a risky change.",
+        "invocation": "auto",
+        "requires": [
+          "uptime"
+        ],
+        "missing": [],
+        "fingerprint": "620990d9ed4e80a967e1ad6b3dfec31c31fd0c40e57aab5f5909957be0a3ca4c",
+        "state": "on"
+      },
+      {
+        "id": "trace-request",
+        "description": "Follow one request through every service it touched, using its trace ID, and explain where it went wrong - which step failed or was slow, with the matching log lines and metrics. Use when you have a trace or request ID (from an error message, a customer report, an alert or a slow-request example) and need to know exactly what happened to it.",
+        "invocation": "auto",
+        "requires": [
+          "grafana"
+        ],
+        "missing": [
+          "grafana"
+        ],
+        "fingerprint": "2ef4a0125a61501830bd43aa518802b0e549117de82c82460b79179036f78fe3",
+        "state": "on"
+      },
+      {
         "id": "triage-failing-build",
         "description": "Work out why a project's build or scheduled job on GitHub failed, explain it in plain English, and either propose a fix for a human to approve or escalate. Use whenever a project's Code card shows a failed or inconclusive build, or someone asks why CI is red.",
         "invocation": "auto",
@@ -1059,6 +1083,18 @@
         ],
         "missing": [],
         "fingerprint": "b9b58c1dcfaee1a2b6ba4ffe4e4a0ca60555de863202f3cfd0e877caee575f79",
+        "state": "on"
+      },
+      {
+        "id": "triage-outage",
+        "description": "When a project is down or an SLO is burning fast, find out what is wrong and why, from the alert to the cause - which objective broke, since when, an example failing request traced end to end, its logs, and recent changes - then propose a fix or escalate. Use when an uptime alert or SLO burn alert fires, or someone says a product is down, slow or erroring.",
+        "invocation": "auto",
+        "requires": [
+          "uptime",
+          "github"
+        ],
+        "missing": [],
+        "fingerprint": "40b9ce3f2f8ec6d7559f4a7612016390f2e251cb1ba4ef8bdacb4e5a4fd8dfc3",
         "state": "on"
       }
     ],

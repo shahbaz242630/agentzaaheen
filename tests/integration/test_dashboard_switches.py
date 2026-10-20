@@ -109,11 +109,19 @@ def test_a_switch_turned_off_stays_off_after_a_restart(ui: Path, laptop_url: Sec
             "paddle": "on",
             "supabase": "on",
             "uptime": "on",
+            "check-slo": "on",
+            "trace-request": "on",
             "triage-failing-build": "on",
+            "triage-outage": "on",
         }
         response = client.post("/api/registry/switch-off", json=SKILL, headers=OURS)
         assert response.status_code == 200
-        assert {s["id"]: s["state"] for s in response.json()["skills"]} == {"triage-failing-build": "off"}
+        assert {s["id"]: s["state"] for s in response.json()["skills"]} == {
+            "check-slo": "on",
+            "trace-request": "on",
+            "triage-failing-build": "off",  # only the one switched off
+            "triage-outage": "on",
+        }
 
     with TestClient(start(ui, laptop_url), base_url="http://127.0.0.1") as client:
         assert states(client)["triage-failing-build"] == "off"

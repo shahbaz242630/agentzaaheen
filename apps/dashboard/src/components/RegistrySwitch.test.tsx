@@ -276,7 +276,8 @@ describe("the registry switches", () => {
     const onChange = view(skillOff);
     await userEvent.click(screen.getByRole("tab", { name: /Skills/ }));
     await userEvent.click(screen.getByRole("button", { name: "Discover" }));
-    await userEvent.click(screen.getByRole("button", { name: "Ask to switch on" }));
+    const triage = screen.getByRole("article", { name: "Triage failing build" });
+    await userEvent.click(within(triage).getByRole("button", { name: "Ask to switch on" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("You have already asked");
     expect(onChange).not.toHaveBeenCalled();
   });

@@ -243,7 +243,12 @@ def test_the_customize_page_lists_what_is_on_disk(ui: Path) -> None:
     assert [c["id"] for c in page["connectors"]] == ["github", "paddle", "supabase", "uptime"]
     assert {u["status"] for c in page["connectors"] for u in c["uses"]} == {"needs_key"}
     assert [u["project_id"] for u in page["connectors"][1]["uses"]] == ["zaaheen"]
-    assert [s["id"] for s in page["skills"]] == ["triage-failing-build"]
+    assert [s["id"] for s in page["skills"]] == [
+        "check-slo",
+        "trace-request",
+        "triage-failing-build",
+        "triage-outage",
+    ]
 
 
 def test_bundles_are_shown_and_bad_ones_explained(

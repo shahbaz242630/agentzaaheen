@@ -41,6 +41,9 @@ packages = ["src/yaqzan"]
 # Supply-chain cooldown (Rulebook §4): never resolve releases newer than this.
 # Move it forward deliberately, never to "today".
 exclude-newer = "2026-10-14T00:00:00Z"
+# One deliberate exception: certifi 2026.10.19 removes root CAs whose intermediate keys were
+# compromised (GHSA-6q48-6c7w-9gw2, critical, 20 Oct 2026). Drop this once the cooldown passes it.
+exclude-newer-package = { certifi = "2026-10-20T12:00:00Z" }
 
 # ---------------------------------------------------------------- ruff
 [tool.ruff]
