@@ -104,7 +104,12 @@ def test_a_switch_turned_off_stays_off_after_a_restart(ui: Path, laptop_url: Sec
     with TestClient(start(ui, laptop_url), base_url="http://127.0.0.1") as client:
         page = client.get("/api/registry").json()
         assert page["switches"] is True
-        assert states(client) == {"github": "on", "paddle": "on", "triage-failing-build": "on"}
+        assert states(client) == {
+            "github": "on",
+            "paddle": "on",
+            "uptime": "on",
+            "triage-failing-build": "on",
+        }
         response = client.post("/api/registry/switch-off", json=SKILL, headers=OURS)
         assert response.status_code == 200
         assert {s["id"]: s["state"] for s in response.json()["skills"]} == {"triage-failing-build": "off"}
@@ -195,3 +200,20 @@ def test_a_database_that_fails_at_start_is_explained(ui: Path, capsys: pytest.Ca
 def test_enrol_passkey_needs_switches(ui: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert dashboard.main(["--enrol-passkey"], static_dir=ui, serve=lambda *_: None) == 1
     assert "--enrol-passkey needs --switches" in capsys.readouterr().out
+
+
+def test_uptime_switched_off_checks_nothing_at_the_next_start(
+    ui: Path, laptop_url: SecretStr, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    listed = tmp_path / "uptime.yaml"
+    listed.write_text('eva:\n  - {url: "https://site.example/health"}\n', encoding="utf-8")
+    with TestClient(start(ui, laptop_url), base_url="http://127.0.0.1") as client:
+        uptime = {"kind": "connector", "id": "uptime"}
+        assert client.post("/api/registry/switch-off", json=uptime, headers=OURS).status_code == 200
+    capsys.readouterr()
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"an address was checked although uptime is off: {request.url}")
+
+    start(ui, laptop_url, ["--uptime", str(listed)], transport=httpx.MockTransport(refuse))
+    assert "uptime is switched off on the Customize page, so it was not read." in capsys.readouterr().out

@@ -10,11 +10,13 @@ What it does:
     (ADR-024). It is never retried. :meth:`JsonClient.get_redirected_bytes`
     follows exactly one redirect to a pre-signed download link whose host
     matches the client's :class:`DownloadPolicy` (ADR-029), sending it no
-    credentials.
+    credentials. :class:`StatusProbe` makes status-only GETs for uptime: it
+    reads the status line and closes, never the page, never a redirect.
 
 Public interface:
     ``JsonClient``, ``NetPolicy``, ``DownloadPolicy``, ``NetError``, ``NetErrorCode``,
-    ``check_base_url``, ``check_path``, ``ModelClient``, ``check_model_url``.
+    ``check_base_url``, ``check_path``, ``ModelClient``, ``check_model_url``,
+    ``StatusProbe``, ``check_probe_url``.
     A ``JsonClient`` satisfies the SDK's ``JsonGetter`` protocol, which is all
     a connector ever sees.
 
@@ -32,6 +34,7 @@ Must never:
 from yaqzan.core.net.client import DownloadPolicy, JsonClient, NetPolicy, check_base_url, check_path
 from yaqzan.core.net.errors import NetError, NetErrorCode
 from yaqzan.core.net.model import ModelClient, check_model_url
+from yaqzan.core.net.probe import StatusProbe, check_probe_url
 
 __all__ = [
     "DownloadPolicy",
@@ -40,7 +43,9 @@ __all__ = [
     "NetError",
     "NetErrorCode",
     "NetPolicy",
+    "StatusProbe",
     "check_base_url",
     "check_model_url",
     "check_path",
+    "check_probe_url",
 ]

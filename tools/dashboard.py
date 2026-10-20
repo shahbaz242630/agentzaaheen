@@ -33,7 +33,9 @@ and the chat may use only what is on. Requests are approved with a Windows
 Hello passkey (ADR-SEC-007); passkeys need a name, not an IP, so the
 dashboard is opened at http://localhost (it still listens on 127.0.0.1 only).
 ``--enrol-passkey`` allows the one-time passkey set-up and prints the code
-the page asks for.
+the page asks for. ``--uptime FILE`` checks each project's public addresses
+once (status only, never the page) from the local list ``projects/uptime.yaml``
+(``tools.dashboard_uptime``) and shows them on each project's Uptime card.
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
@@ -44,6 +46,7 @@ Usage:
     uv run python -m tools.dashboard --bundles ~/.claude/plugins
     uv run python -m tools.dashboard --switches     # after: uv run python -m tools.laptop_db up
     uv run python -m tools.dashboard --switches --enrol-passkey   # once, to set up the passkey
+    uv run python -m tools.dashboard --uptime projects/uptime.yaml
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
 
@@ -74,13 +77,16 @@ from tools.dashboard_sources import (
     utc_now,
 )
 from tools.dashboard_switches import LaptopSwitches, Prepare, connect, off_connectors
+from tools.dashboard_uptime import UptimeListError, load_uptime, uptime_portfolio
 from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
 from yaqzan.core.api.registry import RegistryPage, registry_page, uses_from_cards
+from yaqzan.core.api.uptime import CARD_ID as UPTIME_CARD
 from yaqzan.core.auth import Site
 from yaqzan.core.llm_gateway import Tool
 from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Registry, load_registry
+from yaqzan.core.sdk import SiteRule
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
@@ -90,10 +96,18 @@ CONTRACT_TIME = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 # Which card each connector feeds, on which projects (handoffs/CONNECTORS-CHECKLIST).
+# Uptime is added per run, for the projects on the local list.
 CONNECTOR_CARDS: dict[str, tuple[str, tuple[str, ...]]] = {
     "paddle": ("paddle", ("zaaheen",)),
     "github": (CODE_CARD, tuple(GITHUB_REPOS)),
 }
+
+type UptimeRules = dict[str, tuple[SiteRule, ...]]
+
+
+def wiring_for(uptime: UptimeRules) -> dict[str, tuple[str, tuple[str, ...]]]:
+    """Which card each connector feeds on this run: uptime only for the projects on its list."""
+    return {**CONNECTOR_CARDS, "uptime": (UPTIME_CARD, tuple(uptime))} if uptime else dict(CONNECTOR_CARDS)
 
 
 def load_plugins(bundles: Sequence[Path] = ()) -> Registry:
@@ -105,11 +119,14 @@ def load_plugins(bundles: Sequence[Path] = ()) -> Registry:
 
 
 def registry_for(
-    portfolio: Portfolio, bundles: Sequence[Path] = (), registry: Registry | None = None
+    portfolio: Portfolio,
+    bundles: Sequence[Path] = (),
+    registry: Registry | None = None,
+    uptime: UptimeRules | None = None,
 ) -> RegistryPage:
     """The Customize page: what is on disk, with each connector judged from the cards it feeds."""
     found = load_plugins(bundles) if registry is None else registry
-    return registry_page(found, uses_from_cards(portfolio.project, CONNECTOR_CARDS))
+    return registry_page(found, uses_from_cards(portfolio.project, wiring_for(uptime or {})))
 
 
 def contract_sample() -> str:
@@ -136,12 +153,14 @@ class _NotStartedError(Exception):
     """A requested real-data read failed, after saying why."""
 
 
-def _real_data(
+def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is switched off or listed
     ns: argparse.Namespace,
     env: Mapping[str, str],
     clock: Clock,
     transport: httpx.AsyncBaseTransport | None,
+    *,
     off: frozenset[str] = frozenset(),
+    uptime: UptimeRules | None = None,
 ) -> tuple[Portfolio | None, list[str]]:
     """The portfolio with every requested real source laid over the sample, and what is real.
 
@@ -149,7 +168,8 @@ def _real_data(
     """
     portfolio: Portfolio | None = None
     live: list[str] = []
-    for connector, asked in (("paddle", ns.paddle_key_env), ("github", ns.github_token_env)):
+    asked_for = (("paddle", ns.paddle_key_env), ("github", ns.github_token_env), ("uptime", uptime))
+    for connector, asked in asked_for:
         if asked and connector in off:
             print(f"dashboard: {connector} is switched off on the Customize page, so it was not read.")
     if ns.paddle_key_env and "paddle" not in off:
@@ -163,7 +183,23 @@ def _real_data(
         if portfolio is None:
             raise _NotStartedError
         live.append("GitHub for every project")
+    if uptime and "uptime" not in off:
+        base = portfolio or SamplePortfolio(clock())
+        portfolio = uptime_portfolio(base, uptime, clock=clock, transport=transport)
+        live.append("uptime checks")
     return portfolio, live
+
+
+def _uptime_rules(ns: argparse.Namespace, clock: Clock) -> UptimeRules:
+    """The local address list, if one was given (``--uptime``); a broken list stops the start, saying why."""
+    if ns.uptime is None:
+        return {}
+    projects = {p.id for p in SamplePortfolio(clock()).projects()}
+    try:
+        return load_uptime(ns.uptime, projects)
+    except UptimeListError as exc:
+        print(f"dashboard: {exc}.")
+        raise _NotStartedError from None
 
 
 def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock) is injectable for tests
@@ -204,6 +240,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--enrol-passkey", action="store_true", help="allow the one-time passkey set-up (needs --switches)"
     )
+    parser.add_argument(
+        "--uptime", type=Path, help="check the addresses in this local list (projects/uptime.yaml)"
+    )
     return parser
 
 
@@ -242,8 +281,9 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
     if ns.switches and connected is None:
         return 1
     try:
+        uptime = _uptime_rules(ns, clock)
         off = off_connectors(connected[1], registry) if connected else frozenset[str]()
-        portfolio, live = _real_data(ns, env, clock, transport, off)
+        portfolio, live = _real_data(ns, env, clock, transport, off=off, uptime=uptime)
     except _NotStartedError:
         return 1
     chosen = portfolio or SamplePortfolio(clock())
@@ -253,7 +293,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         switches = LaptopSwitches(
             connected[0],
             registry,
-            uses_from_cards(chosen.project, CONNECTOR_CARDS),
+            uses_from_cards(chosen.project, wiring_for(uptime)),
             clock,
             site=Site(origin=f"http://localhost:{ns.port}"),
             enrol_code=code,
@@ -268,7 +308,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         )
         if chat is None:
             return 1
-    page = registry_for(chosen, registry=registry)
+    page = registry_for(chosen, registry=registry, uptime=uptime)
     app = create_app(
         chosen, static_dir=static_dir, allowed_hosts=LOCAL_HOSTS, chat=chat, registry=page, switches=switches
     )
