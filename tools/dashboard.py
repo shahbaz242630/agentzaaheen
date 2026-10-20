@@ -20,7 +20,9 @@ repository that cannot be read shows why on its card; the others still show.
 With ``--model-url URL`` the chat on the right answers for real, from the
 cards on screen, using the model server at that address (the local model
 trial, F05: ``uv run python -m tools.local_model`` serves it on
-http://127.0.0.1:8766). Without it the chat says it is not connected.
+http://127.0.0.1:8766). Without it the chat says it is not connected. The
+connected chat may open skills and, with ``--github-token-env``, read a
+failed build's log (``tools.chat_tools``, ADR-029).
 
 The Customize page lists every connector, skill and plugin found on disk
 (read once at start, nothing is switched on). ``--bundles DIR`` also shows
@@ -52,6 +54,7 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import SecretStr
 
+from tools.chat_tools import chat_tools, model_chat
 from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
 from yaqzan.core.api.code import code_card, failed_code_card
@@ -59,8 +62,7 @@ from yaqzan.core.api.overlay import CardMaker, OverlayPortfolio
 from yaqzan.core.api.registry import RegistryPage, registry_page, uses_from_cards
 from yaqzan.core.api.revenue import revenue_card
 from yaqzan.core.api.views import Card
-from yaqzan.core.llm_gateway import FactChat
-from yaqzan.core.net import JsonClient, ModelClient, NetError, NetPolicy
+from yaqzan.core.net import JsonClient, NetPolicy
 from yaqzan.core.registry import load_registry
 from yaqzan.core.scheduler import snapshot_from_rows
 from yaqzan.core.sdk import RepoHealth, RevenueBatch, SourceError, explain
@@ -91,8 +93,6 @@ CONNECTOR_CARDS: dict[str, tuple[str, tuple[str, ...]]] = {
     "paddle": ("paddle", ("zaaheen",)),
     "github": (CODE_CARD, tuple(GITHUB_REPOS)),
 }
-# The model menu entry the local model trial connects (see SamplePortfolio.models).
-LOCAL_MODEL_ID = "local-gemma"
 
 Clock = Callable[[], datetime]
 
@@ -120,17 +120,6 @@ def registry_for(portfolio: Portfolio, bundles: Sequence[Path] = ()) -> Registry
     for problem in registry.problems:
         print(f"dashboard: the {problem.kind.value} at {problem.path} was not loaded: {problem.message}")
     return registry_page(registry, uses_from_cards(portfolio.project, CONNECTOR_CARDS))
-
-
-def model_chat(model_url: str, transport: httpx.AsyncBaseTransport | None = None) -> ChatBackend | None:
-    """The chat backed by the model server at ``model_url``, or ``None`` (after saying why) if refused."""
-    try:
-        client = ModelClient(model_url, transport=transport)
-    except NetError as exc:
-        print(f"dashboard: the model address was refused ({exc.net_code.value}).")
-        print("  Use the local model server, e.g. http://127.0.0.1:8766")
-        return None
-    return FactChat(client, LOCAL_MODEL_ID)
 
 
 def month_start(moment: datetime) -> datetime:
@@ -375,7 +364,10 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
         return 1
     chat: ChatBackend | None = None
     if ns.model_url:
-        chat = model_chat(ns.model_url, transport)
+        raw = env.get(ns.github_token_env or "", "").strip()
+        token = SecretStr(raw) if raw and _usable_secret(raw) else None
+        tools, skills = chat_tools(PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport)
+        chat = model_chat(ns.model_url, transport, tools, skills)
         if chat is None:
             return 1
     app = build_app(static_dir, portfolio=portfolio, chat=chat, bundles=[b.expanduser() for b in ns.bundles])

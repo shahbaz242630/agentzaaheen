@@ -84,7 +84,12 @@ export const ModelList = z.strictObject({ models: z.array(ModelChoice) }).refine
   { message: "there must be exactly one default model, and it must be local" },
 );
 
-export const ChatAnswer = z.strictObject({ model_id: slug, answer: z.string().min(1).max(4000), from_sample: z.boolean() });
+export const ChatAnswer = z.strictObject({
+  model_id: slug,
+  answer: z.string().min(1).max(4000),
+  from_sample: z.boolean(),
+  used: z.array(z.string().min(1).max(120)).max(8),
+});
 export type ChatAnswer = z.infer<typeof ChatAnswer>;
 
 // The Customize page (F06). Mirrors src/yaqzan/core/api/registry.py.

@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 
 import pytest
 
-from yaqzan.core.llm_gateway import SYSTEM_PROMPT, FactChat, build_messages
+from yaqzan.core.llm_gateway import SYSTEM_PROMPT, ChatReply, FactChat, build_messages
 from yaqzan.core.llm_gateway.chat import MAX_ANSWER_CHARS
 from yaqzan.core.sdk import SourceError, SourceErrorCode
 
@@ -27,7 +27,7 @@ class FakeModel:
 def test_sends_the_rules_then_the_facts_and_question() -> None:
     model = FakeModel("  Revenue is USD 58.50.  \n")
     chat = FactChat(model, "local-gemma", max_tokens=100, temperature=0.1)
-    assert asyncio.run(chat.ask("How is revenue?", "MRR: USD 58.50")) == "Revenue is USD 58.50."
+    assert asyncio.run(chat.ask("How is revenue?", "MRR: USD 58.50")) == ChatReply("Revenue is USD 58.50.")
     messages, max_tokens, temperature = model.calls[0]
     assert (max_tokens, temperature) == (100, 0.1)
     assert messages[0] == {"role": "system", "content": SYSTEM_PROMPT}
@@ -56,6 +56,6 @@ def test_an_empty_answer_is_a_bad_response() -> None:
 
 
 def test_a_long_answer_is_cut_to_fit_the_screen() -> None:
-    answer = asyncio.run(FactChat(FakeModel("x" * 10_000), "local-gemma").ask("q", "f"))
+    answer = asyncio.run(FactChat(FakeModel("x" * 10_000), "local-gemma").ask("q", "f")).answer
     assert len(answer) == MAX_ANSWER_CHARS
     assert answer.endswith("…")

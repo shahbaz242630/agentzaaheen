@@ -234,7 +234,7 @@ describe("the chat with the local model connected", () => {
 
   it("asks the model about the open project and shows its answer", async () => {
     const calls = serveChat(() =>
-      Promise.resolve(reply({ model_id: "local-gemma", answer: "MRR is $1,240.", from_sample: false })),
+      Promise.resolve(reply({ model_id: "local-gemma", answer: "MRR is $1,240.", from_sample: false, used: [] })),
     );
     await ask("How is revenue?");
     expect(await screen.findByText("MRR is $1,240.")).toBeInTheDocument();
@@ -249,10 +249,21 @@ describe("the chat with the local model connected", () => {
 
   it("says when an answer leans on sample data", async () => {
     serveChat(() =>
-      Promise.resolve(reply({ model_id: "local-gemma", answer: "There are 2 escalations.", from_sample: true })),
+      Promise.resolve(reply({ model_id: "local-gemma", answer: "There are 2 escalations.", from_sample: true, used: [] })),
     );
     await ask("What is escalated to me?");
     expect(await screen.findByText(/There are 2 escalations\./)).toHaveTextContent(SAMPLE_NOTE);
+  });
+
+  it("says which skill and reads an answer used", async () => {
+    const used = ["Skill: triage-failing-build", "Build log: eva"];
+    serveChat(() =>
+      Promise.resolve(reply({ model_id: "local-gemma", answer: "A test broke.", from_sample: false, used })),
+    );
+    await ask("Why is Eva red?");
+    expect(await screen.findByText(/A test broke\./)).toHaveTextContent(
+      "Used: Skill: triage-failing-build · Build log: eva",
+    );
   });
 
   it("shows a placeholder and blocks a second question while the model thinks", async () => {
@@ -267,7 +278,7 @@ describe("the chat with the local model connected", () => {
     expect(screen.getByText("Thinking…")).toHaveAttribute("aria-busy", "true");
     await userEvent.type(screen.getByLabelText("Message"), "again");
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-    finish(reply({ model_id: "local-gemma", answer: "Done.", from_sample: false }));
+    finish(reply({ model_id: "local-gemma", answer: "Done.", from_sample: false, used: [] }));
     expect(await screen.findByText("Done.")).toBeInTheDocument();
     expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();

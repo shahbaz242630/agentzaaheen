@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from yaqzan.core.sdk import RepoHealth, SourceError, SourceErrorCode
+from yaqzan.core.sdk import FailedStepLog, RepoHealth, SourceError, SourceErrorCode
 from yaqzan.plugins.connectors.github.mapping import SOURCE
 
 
@@ -37,3 +37,25 @@ class FakeGitHubSource:
         if self.fail_with is not None:
             raise SourceError(self.fail_with, "the fake was told to fail")
         return self.health.model_copy(update={"fetched_at": now})
+
+
+class FakeGitHubBuildLog:
+    """Serves one fixed failed-build log (or ``None``), stamped with the fetch time; or fails."""
+
+    def __init__(self, log: FailedStepLog | None, repo: str) -> None:
+        self.log = log
+        self._repo = repo
+        self.fail_with: SourceErrorCode | None = None
+        self.calls = 0
+
+    @property
+    def repo(self) -> str:
+        """The repository this fake stands in for."""
+        return self._repo
+
+    async def fetch(self, *, now: datetime) -> FailedStepLog | None:
+        """The fixed log as of ``now``."""
+        self.calls += 1
+        if self.fail_with is not None:
+            raise SourceError(self.fail_with, "the fake was told to fail")
+        return None if self.log is None else self.log.model_copy(update={"fetched_at": now})

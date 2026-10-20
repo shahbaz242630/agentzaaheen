@@ -23,6 +23,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from yaqzan.core.api.facts import portfolio_facts, project_facts, uses_sample
 from yaqzan.core.api.registry import RegistryPage
 from yaqzan.core.api.views import ChatAnswer, ChatQuestion, ModelList, ProjectDetail, ProjectSummary
+from yaqzan.core.llm_gateway import ChatReply
 from yaqzan.core.sdk import SourceError, get_logger
 
 LOCAL_HOSTS: tuple[str, ...] = ("127.0.0.1", "localhost")
@@ -77,8 +78,8 @@ class ChatBackend(Protocol):
         """Which entry of the model menu this is."""
         ...
 
-    async def ask(self, question: str, facts: str) -> str:
-        """The answer to ``question``, from ``facts`` only."""
+    async def ask(self, question: str, facts: str) -> ChatReply:
+        """The answer to ``question``, from ``facts`` and read-only tools, and what it used."""
         ...
 
 
@@ -170,11 +171,13 @@ def create_app(
             raise HTTPException(status_code=429, detail="chat.busy")
         async with busy:
             try:
-                answer = await chat.ask(question.question, facts)
+                reply = await chat.ask(question.question, facts)
             except SourceError as exc:
                 log.warning("chat_failed", code=exc.reason_code, status=exc.status)
                 raise HTTPException(status_code=502, detail=exc.reason_code) from None
-        return ChatAnswer(model_id=chat.model_id, answer=answer, from_sample=sample)
+        return ChatAnswer(
+            model_id=chat.model_id, answer=reply.answer, from_sample=sample, used=reply.used[:8]
+        )
 
     if static_dir is not None:
         if not (static_dir / "index.html").is_file():

@@ -3,7 +3,8 @@
 Every rule is checked in code before a byte leaves (SECURITY NET-1):
 https only, the host must be on this client's allowlist and must be a name,
 never an IP literal; no credentials in the URL; redirects are refused, not
-followed; responses are size-capped and must be a JSON object. Retries
+followed (one exception, :meth:`JsonClient.get_redirected_bytes`, ADR-029);
+responses are size-capped and must be a JSON object. Retries
 (429, 5xx, timeouts, dropped connections, and a 403 that carries ``Retry-After``)
 back off with full jitter and obey ``Retry-After``; a 403 saying the hourly
 allowance is used up is reported as rate-limited, not as a refused key.
@@ -16,6 +17,7 @@ import asyncio
 import ipaddress
 import json
 import random
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from types import TracebackType
@@ -33,6 +35,7 @@ _AUTH_STATUSES = frozenset({401, 403})
 # Some vendors (GitHub) answer 403 when slowing a caller down; its headers tell it from a refused key.
 _FORBIDDEN = 403
 _MAX_PATH = 512
+_REDIRECTS = frozenset({301, 302, 303, 307, 308})
 
 Sleep = Callable[[float], Awaitable[None]]
 
@@ -49,6 +52,19 @@ class NetPolicy:
     max_attempts: int = 4
     base_delay_s: float = 0.5
     max_delay_s: float = 30.0
+
+
+@dataclass(frozen=True)
+class DownloadPolicy:
+    """Where one signed download link may point, and how much may be read from it (ADR-029).
+
+    ``host_pattern`` must match the whole host name. The link is followed with
+    no credentials at all: it is pre-signed by the vendor.
+    """
+
+    host_pattern: re.Pattern[str]
+    max_bytes: int = 5 * 1024 * 1024
+    timeout_s: float = 30.0
 
 
 def check_host(host: str | None, policy: NetPolicy) -> str:
@@ -113,9 +129,12 @@ class JsonClient:
         transport: httpx.AsyncBaseTransport | None = None,
         sleep: Sleep = asyncio.sleep,
         jitter: Callable[[], float] = random.random,
+        download: DownloadPolicy | None = None,
     ) -> None:
         self._base = check_base_url(base_url, policy)
         self._policy = policy
+        self._download = download
+        self._transport = transport
         self._sleep = sleep
         self._jitter = jitter
         all_headers = {"Accept": "application/json", **(headers or {})}
@@ -208,6 +227,68 @@ class JsonClient:
             raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the host") from None
         return _decode(body)
 
+    async def get_redirected_bytes(self, path: str, params: Mapping[str, str]) -> bytes:
+        """GET ``path`` (with our headers), expect a redirect to a signed link, and read that link.
+
+        One redirect only; the link must be https, on the default port, carry no
+        credentials and match this client's ``DownloadPolicy``. Our headers
+        (the token) are never sent to it. Not retried: the caller asks again.
+        """
+        if self._download is None:
+            raise NetError(NetErrorCode.BLOCKED, "this client has no download policy").at("GET (download)")
+        try:
+            url = self._base + check_path(path)
+        except NetError as exc:
+            raise exc.at("GET (refused path)") from None
+        where = f"GET {path} (download)"
+        try:
+            async with asyncio.timeout(self._policy.total_timeout_s):
+                link = await self._signed_link(url, params)
+            return await self._read_link(link, self._download)
+        except TimeoutError:
+            raise NetError(NetErrorCode.TIMEOUT, "the download took too long").at(where) from None
+        except NetError as exc:
+            raise exc.at(where) from None
+
+    async def _signed_link(self, url: str, params: Mapping[str, str]) -> str:
+        try:
+            async with self._http.stream("GET", url, params=dict(params)) as response:
+                status = response.status_code
+                location: str = response.headers.get("Location", "")
+        except httpx.TimeoutException:
+            raise NetError(NetErrorCode.TIMEOUT, "the request timed out") from None
+        except httpx.TransportError:
+            raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the host") from None
+        if status not in _REDIRECTS:
+            if status == 200:
+                raise NetError(NetErrorCode.BAD_RESPONSE, "expected a download link", status=status)
+            refuse_status(status)
+        if not location:
+            raise NetError(NetErrorCode.BAD_RESPONSE, "the redirect has no link", status=status)
+        return location
+
+    async def _read_link(self, link: str, download: DownloadPolicy) -> bytes:
+        check_download_link(link, download)
+        async with httpx.AsyncClient(
+            headers={"Accept": "*/*"},
+            timeout=httpx.Timeout(download.timeout_s, connect=self._policy.connect_timeout_s),
+            follow_redirects=False,
+            trust_env=False,
+            transport=self._transport,
+        ) as plain:
+            try:
+                async with asyncio.timeout(download.timeout_s), plain.stream("GET", link) as response:
+                    refuse_status(response.status_code)
+                    body = await read_capped(response, download.max_bytes)
+            except TimeoutError:
+                raise NetError(NetErrorCode.TIMEOUT, "the download took too long") from None
+            except httpx.TimeoutException:
+                raise NetError(NetErrorCode.TIMEOUT, "the download timed out") from None
+            except httpx.TransportError:
+                raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the download host") from None
+        self._log.info("net_download", download_host=urlsplit(link).hostname, bytes=len(body))
+        return body
+
     @staticmethod
     def _refuse_status(status: int) -> None:
         refuse_status(status)
@@ -222,6 +303,19 @@ class JsonClient:
         delay = min(delay, self._policy.max_delay_s)
         self._log.warning("net_retry", path=path, attempt=attempt, reason=reason, delay_s=round(delay, 2))
         await self._sleep(delay)
+
+
+def check_download_link(link: str, download: DownloadPolicy) -> None:
+    """Raise ``NetError(BLOCKED)`` unless ``link`` is a plain https link to an allowed download host."""
+    parts = urlsplit(link)
+    if (
+        parts.scheme != "https"
+        or parts.username is not None
+        or parts.password is not None
+        or parts.port not in {None, 443}
+        or not download.host_pattern.fullmatch(parts.hostname or "")
+    ):
+        raise NetError(NetErrorCode.BLOCKED, "the download link points somewhere not allowed")
 
 
 def refuse_status(status: int) -> None:

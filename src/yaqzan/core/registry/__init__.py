@@ -10,7 +10,8 @@ What it does:
     still load. Design evidence: research/06 and research/07.
 
 Public interface:
-    ``load_registry`` and the shapes ``Registry``, ``Connector``, ``Skill``,
+    ``load_registry``, ``skill_instructions`` (a skill's body, refused if its
+    files changed since loading), ``ItemError`` and the shapes ``Registry``, ``Connector``, ``Skill``,
     ``Plugin``, ``Problem``, ``Kind``, ``Invocation``, ``Layout``.
 
 How to test:
@@ -25,12 +26,15 @@ Must never:
     database, the network or the vault.
 """
 
+from yaqzan.core.registry.files import ItemError
 from yaqzan.core.registry.load import load_registry
 from yaqzan.core.registry.models import Connector, Invocation, Kind, Layout, Plugin, Problem, Registry, Skill
+from yaqzan.core.registry.skills import skill_instructions
 
 __all__ = [
     "Connector",
     "Invocation",
+    "ItemError",
     "Kind",
     "Layout",
     "Plugin",
@@ -38,4 +42,5 @@ __all__ = [
     "Registry",
     "Skill",
     "load_registry",
+    "skill_instructions",
 ]

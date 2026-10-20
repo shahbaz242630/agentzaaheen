@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from yaqzan.core.api import SamplePortfolio, create_app
 from yaqzan.core.api.app import REQUEST_HEADER
+from yaqzan.core.llm_gateway import ChatReply
 from yaqzan.core.sdk import SourceError, SourceErrorCode
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
@@ -30,11 +31,11 @@ class FakeChat:
         self.error = error
         self.asked: list[tuple[str, str]] = []
 
-    async def ask(self, question: str, facts: str) -> str:
+    async def ask(self, question: str, facts: str) -> ChatReply:
         self.asked.append((question, facts))
         if self.error is not None:
             raise self.error
-        return self.reply
+        return ChatReply(self.reply)
 
 
 def client(chat: FakeChat | None) -> TestClient:
@@ -57,6 +58,7 @@ def test_answers_from_the_project_cards() -> None:
         "model_id": "local-gemma",
         "answer": "MRR is USD 1240.00 (sample data).",
         "from_sample": True,
+        "used": [],
     }
     question, facts = chat.asked[0]
     assert question == "How is revenue?"
@@ -178,10 +180,10 @@ def test_one_question_at_a_time() -> None:
     started = asyncio.Event()
 
     class SlowChat(FakeChat):
-        async def ask(self, question: str, facts: str) -> str:
+        async def ask(self, question: str, facts: str) -> ChatReply:
             started.set()
             await release.wait()
-            return "done"
+            return ChatReply("done")
 
     app = create_app(SamplePortfolio(NOW), chat=SlowChat())
 

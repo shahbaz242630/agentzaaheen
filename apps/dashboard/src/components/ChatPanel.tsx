@@ -1,7 +1,7 @@
 import { Bot, Mic, SendHorizontal } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { ApiError, api, type ModelChoice } from "../api";
+import { ApiError, api, type ChatAnswer, type ModelChoice } from "../api";
 
 interface Message {
   id: number;
@@ -28,6 +28,12 @@ export function notConnectedReply(model: ModelChoice | undefined, projectName: s
 }
 
 export const SAMPLE_NOTE = "(Some of the numbers behind this answer are sample data.)";
+
+// The answer as shown: the model's words, then the sample note and what it used (skills, reads).
+export function answerText(answer: ChatAnswer): string {
+  const notes = [answer.from_sample ? SAMPLE_NOTE : null, answer.used.length > 0 ? `Used: ${answer.used.join(" · ")}` : null];
+  return [answer.answer, ...notes.filter((note) => note !== null)].join("\n\n");
+}
 
 // What went wrong, in words: the server sends a code, never the question or answer.
 export function failureReply(error: unknown, model: ModelChoice | undefined, projectName: string | null): string {
@@ -93,7 +99,7 @@ export function ChatPanel({ models, projectId, projectName }: Props) {
       .ask(projectId, model.id, question)
       .then(
         (answer) => {
-          reply(id, answer.from_sample ? `${answer.answer}\n\n${SAMPLE_NOTE}` : answer.answer);
+          reply(id, answerText(answer));
         },
         (error: unknown) => {
           reply(id, failureReply(error, model, projectName));

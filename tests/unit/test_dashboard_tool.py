@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from tests.fixtures import paddle_world as world
-from tools import dashboard
+from tools import chat_tools, dashboard
 
 
 @pytest.fixture
@@ -189,10 +189,10 @@ def test_the_chat_answers_through_the_model_server(ui: Path, capsys: pytest.Capt
     assert "chat connected to the local model" in capsys.readouterr().out
     client = TestClient(apps[0], base_url="http://127.0.0.1")
     models = client.get("/api/models").json()["models"]
-    assert [m["id"] for m in models if m["available"]] == [dashboard.LOCAL_MODEL_ID]
+    assert [m["id"] for m in models if m["available"]] == [chat_tools.LOCAL_MODEL_ID]
     response = client.post(
         "/api/chat",
-        json={"project_id": "zaaheen", "model_id": dashboard.LOCAL_MODEL_ID, "question": "How is revenue?"},
+        json={"project_id": "zaaheen", "model_id": chat_tools.LOCAL_MODEL_ID, "question": "How is revenue?"},
         headers={"X-Yaqzan-Request": "1"},
     )
     assert response.status_code == 200
@@ -214,7 +214,7 @@ def test_a_stopped_model_server_is_reported_not_hidden(ui: Path) -> None:
     )
     response = TestClient(apps[0], base_url="http://127.0.0.1").post(
         "/api/chat",
-        json={"model_id": dashboard.LOCAL_MODEL_ID, "question": "hi"},
+        json={"model_id": chat_tools.LOCAL_MODEL_ID, "question": "hi"},
         headers={"X-Yaqzan-Request": "1"},
     )
     assert response.status_code == 502
