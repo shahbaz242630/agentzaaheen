@@ -1,0 +1,71 @@
+// Which projects to report to Healthchecks.io this round, in the fixed words of core/notify (ADR-031).
+//
+// Each project has its own Healthchecks check (its slug is the project id). A "fail" report makes
+// Healthchecks alert the Chairman (phone via ntfy, and email) when the project goes from up to down;
+// a success report alerts once when it is all up again. Healthchecks itself never repeats an alert,
+// so reporting the same state again is harmless: that is how the hourly report keeps each check fresh.
+// Messages hold counts and our own reason words: never an address.
+
+import type { Checked } from "./probe";
+import { REASON_WORDS } from "./probe";
+
+export interface Change {
+  readonly id: string;
+  readonly project: string;
+  readonly up: boolean;
+}
+
+export interface Report {
+  readonly project: string;
+  readonly down: boolean;
+  readonly message: string;
+}
+
+export interface Seen extends Checked {
+  readonly id: string;
+}
+
+// ``stored`` is each address's last saved state (true = up), by id.
+export function changes(seen: readonly Seen[], stored: ReadonlyMap<string, boolean>): Change[] {
+  const out: Change[] = [];
+  for (const s of seen) {
+    const before = stored.get(s.id);
+    if (before !== s.up) out.push({ id: s.id, project: s.target.project, up: s.up });
+  }
+  return out;
+}
+
+// One report per project at most: when something changed, or every project when ``hourly``.
+export function reports(
+  seen: readonly Seen[],
+  changed: readonly Change[],
+  stored: ReadonlyMap<string, boolean>,
+  hourly: boolean,
+): Report[] {
+  const byProject = new Map<string, Seen[]>();
+  for (const s of seen) byProject.set(s.target.project, [...(byProject.get(s.target.project) ?? []), s]);
+  const changedIds = new Set(changed.map((c) => c.id));
+  const out: Report[] = [];
+  for (const [project, sites] of [...byProject.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const up = sites.filter((s) => s.up).length;
+    const down = sites.length - up;
+    const newlyDown = sites.filter((s) => !s.up && changedIds.has(s.id));
+    // Back up only if it had been saved as down: a first sighting that is up is not news.
+    const backUp = sites.filter((s) => s.up && changedIds.has(s.id) && stored.get(s.id) === false).length;
+    if (newlyDown.length > 0) {
+      const why = [...new Set(newlyDown.map((s) => REASON_WORDS[s.reason]))].sort().join(", ");
+      const message = `${down} of ${plural(sites.length, "address")} down (${why}). Details on the dashboard.`;
+      out.push({ project, down: true, message });
+    } else if (backUp > 0) {
+      const message = `${plural(backUp, "address")} answering again; ${up} of ${sites.length} up now.`;
+      out.push({ project, down: down > 0, message });
+    } else if (hourly) {
+      out.push({ project, down: down > 0, message: `${up} of ${plural(sites.length, "address")} up.` });
+    }
+  }
+  return out;
+}
+
+function plural(count: number, word: string): string {
+  return count === 1 ? `${count} ${word}` : `${count} ${word}es`;
+}

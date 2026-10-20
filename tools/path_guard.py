@@ -48,6 +48,15 @@ ALLOWED: tuple[str, ...] = (
     "apps/dashboard/src/**/*.tsx",
     "apps/dashboard/src/**/*.css",
     "apps/dashboard/src/contract/sample.json",
+    # The external uptime checker (ADR-032): a Cloudflare Worker; its secrets are never files here
+    "apps/checker/package.json",
+    "apps/checker/package-lock.json",
+    "apps/checker/.npmrc",
+    "apps/checker/tsconfig.json",
+    "apps/checker/eslint.config.js",
+    "apps/checker/wrangler.jsonc",
+    "apps/checker/schema.sql",
+    "apps/checker/src/*.ts",
     # Project and tool configuration
     "pyproject.toml",
     "uv.lock",
