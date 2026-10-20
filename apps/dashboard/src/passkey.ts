@@ -1,0 +1,65 @@
+// Windows Hello through the browser's own WebAuthn (ADR-SEC-007). The server
+// makes the options and checks the answers; this file only hands them over.
+// It uses the browser's JSON helpers (Chrome and Edge 129+), so no library.
+import { api, type RegistryPage } from "./api";
+
+export class PasskeyProblem extends Error {
+  constructor(readonly reason: "unsupported" | "wrong_address" | "cancelled") {
+    super(reason);
+  }
+}
+
+// Passkeys need a name, not an IP: the page must be opened at localhost.
+export function onPasskeyAddress(): boolean {
+  return window.location.hostname === "localhost";
+}
+
+function supported(): boolean {
+  return (
+    typeof PublicKeyCredential !== "undefined" &&
+    typeof PublicKeyCredential.parseCreationOptionsFromJSON === "function" &&
+    typeof PublicKeyCredential.parseRequestOptionsFromJSON === "function"
+  );
+}
+
+function ready(): void {
+  if (!onPasskeyAddress()) throw new PasskeyProblem("wrong_address");
+  if (!supported()) throw new PasskeyProblem("unsupported");
+}
+
+async function windowsHello<T>(ask: () => Promise<T>): Promise<T> {
+  try {
+    return await ask();
+  } catch (failure) {
+    // The person closed the Windows Hello box, or it timed out.
+    if (failure instanceof DOMException && failure.name === "NotAllowedError") throw new PasskeyProblem("cancelled");
+    throw failure;
+  }
+}
+
+function asJson(credential: Credential | null): unknown {
+  if (!(credential instanceof PublicKeyCredential)) throw new PasskeyProblem("cancelled");
+  return credential.toJSON();
+}
+
+// Set up the Chairman's passkey on this laptop (once), using the code printed at start.
+export async function setUpPasskey(code: string) {
+  ready();
+  const options = await api.enrolOptions(code);
+  const publicKey = PublicKeyCredential.parseCreationOptionsFromJSON(
+    options as unknown as PublicKeyCredentialCreationOptionsJSON,
+  );
+  const credential = await windowsHello(() => navigator.credentials.create({ publicKey }));
+  return api.enrol(code, asJson(credential));
+}
+
+// Approve one request: Windows Hello signs a challenge made for that request only.
+export async function approveWithPasskey(requestId: string): Promise<RegistryPage> {
+  ready();
+  const options = await api.approveOptions(requestId);
+  const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(
+    options as unknown as PublicKeyCredentialRequestOptionsJSON,
+  );
+  const credential = await windowsHello(() => navigator.credentials.get({ publicKey }));
+  return api.approve(requestId, asJson(credential));
+}

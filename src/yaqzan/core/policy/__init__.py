@@ -61,6 +61,7 @@ from yaqzan.core.policy.gate import (
     decide,
 )
 from yaqzan.core.policy.ledger import Ledger, load_kill_switches
+from yaqzan.core.policy.passkey_approvals import PasskeyApprovals
 from yaqzan.core.policy.registry_control import OUTSIDE_KINDS, Pending, RegistryControl, Standing, Verdict
 
 __all__ = [
@@ -86,6 +87,7 @@ __all__ = [
     "KillSwitches",
     "Ledger",
     "Operation",
+    "PasskeyApprovals",
     "Pending",
     "ProjectPolicy",
     "RegistryControl",

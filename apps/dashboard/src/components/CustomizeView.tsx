@@ -1,9 +1,23 @@
-import { Compass, Info, Search, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { Compass, Search, TriangleAlert } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { ApiError, api, type ItemState, type Kind, type RegistryPage } from "../api";
+import { ApiError, api, type ItemState, type Kind, type PasskeyStatus, type RegistryPage } from "../api";
+import { PasskeyProblem, approveWithPasskey, onPasskeyAddress, setUpPasskey } from "../passkey";
+import { PasskeyPanel } from "./PasskeyPanel";
 import { ConnectorCard, PluginCard, SkillCard, skillTitle } from "./RegistryCards";
 import { RequestList, SwitchControl, reason } from "./RegistrySwitch";
+
+const PASSKEY_PROBLEM: Record<PasskeyProblem["reason"], string> = {
+  unsupported: "This browser can't use passkeys. Use Chrome or Edge (version 129 or newer).",
+  wrong_address: "Passkeys only work when the dashboard is opened at localhost.",
+  cancelled:
+    "Windows Hello was closed before confirming, so nothing changed. If Bitwarden or another password manager opened instead, choose its option to use another device.",
+};
+
+function explain(failure: unknown): string {
+  if (failure instanceof PasskeyProblem) return PASSKEY_PROBLEM[failure.reason];
+  return reason(failure instanceof ApiError ? failure.code : null);
+}
 
 type Shelf = "yours" | "discover";
 
@@ -54,6 +68,23 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [passkey, setPasskey] = useState<PasskeyStatus | null>(null);
+
+  useEffect(() => {
+    if (!page.switches) return;
+    let live = true;
+    api.passkey().then(
+      (status) => {
+        if (live) setPasskey(status);
+      },
+      () => {
+        if (live) setPasskey(null);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [page.switches]);
 
   const connectorName = (id: string) => page.connectors.find((c) => c.id === id)?.name ?? id;
   const title = (kind: Kind, id: string) =>
@@ -81,7 +112,22 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
         setBusy(false);
       },
       (failure: unknown) => {
-        setError(reason(failure instanceof ApiError ? failure.code : null));
+        setError(explain(failure));
+        setBusy(false);
+      },
+    );
+  }
+
+  function setUp(code: string) {
+    setBusy(true);
+    setError(null);
+    setUpPasskey(code).then(
+      (status) => {
+        setPasskey(status);
+        setBusy(false);
+      },
+      (failure: unknown) => {
+        setError(explain(failure));
         setBusy(false);
       },
     );
@@ -118,12 +164,8 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
         </p>
       </header>
 
-      {page.switches && (
-        <p className="flex items-start gap-2 rounded-xl border border-info bg-info-soft px-4 py-3 text-sm text-ink">
-          <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden="true" />
-          Heads up · Until the next slice adds the Approve button, anything you switch off on the Customize page
-          stays off.
-        </p>
+      {page.switches && passkey !== null && (
+        <PasskeyPanel status={passkey} onAddress={onPasskeyAddress()} busy={busy} onSetUp={setUp} />
       )}
 
       {error !== null && (
@@ -136,8 +178,15 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
         requests={page.requests}
         title={title}
         busy={busy}
+        canApprove={passkey?.enrolled === true && onPasskeyAddress()}
         onWithdraw={(requestId) => {
           act(api.withdraw(requestId));
+        }}
+        onRefuse={(requestId) => {
+          act(api.refuse(requestId));
+        }}
+        onApprove={(requestId) => {
+          act(approveWithPasskey(requestId));
         }}
       />
 

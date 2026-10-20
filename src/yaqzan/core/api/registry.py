@@ -9,8 +9,10 @@ Each item carries its ``state`` (ADR-030). With a database, the page also
 carries the requests waiting for approval and ``switches: true``, and
 :class:`DashboardSwitches` lets the dashboard switch an item off, ask for it
 to be switched on, or withdraw that request, always as the Chairman on the
-dashboard channel (there is no login yet; it serves 127.0.0.1 only). Nothing
-here switches anything on: that needs the passkey approval (slice 2c).
+dashboard channel (there is no login yet; it serves this laptop only). It
+also sets up the Chairman's passkey once and approves or refuses requests;
+approving needs a Windows Hello signature for that one request
+(``policy.PasskeyApprovals``, ADR-SEC-007).
 """
 
 from __future__ import annotations
@@ -18,13 +20,22 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from yaqzan.core.api.views import ProjectDetail
 from yaqzan.core.metrics import Freshness
-from yaqzan.core.policy import OUTSIDE_KINDS, Channel, RegistryControl, Role, Standing, Verdict
+from yaqzan.core.policy import (
+    OUTSIDE_KINDS,
+    Channel,
+    PasskeyApprovals,
+    RegistryControl,
+    Role,
+    Standing,
+    Verdict,
+)
 from yaqzan.core.registry import Invocation, Kind, Layout, Registry, State, state_of
 from yaqzan.core.sdk import ToolLevel
 
@@ -114,6 +125,37 @@ class ItemRef(_View):
     id: str = Field(pattern=_ITEM, max_length=64)
 
 
+class PasskeyStatus(_View):
+    """Whether the Chairman's passkey exists, and whether it may be set up on this run."""
+
+    enrolled: bool
+    enrolment_open: bool
+
+
+class EnrolCode(_View):
+    """The one-time code printed when the dashboard was started with ``--enrol-passkey``."""
+
+    code: str = Field(pattern=r"^[0-9a-f]{8}$")
+
+
+class EnrolAnswer(EnrolCode):
+    """The code again, and the browser's new passkey (``credential.toJSON()``)."""
+
+    credential: dict[str, Any]
+
+
+class SignedAnswer(_View):
+    """The browser's signed answer for one request (``credential.toJSON()``)."""
+
+    credential: dict[str, Any]
+
+
+class PasskeyOptions(_View):
+    """What the browser hands to ``navigator.credentials`` (WebAuthn options as JSON)."""
+
+    options: dict[str, Any]
+
+
 class ProblemView(_View):
     """An item that could not be read, and why."""
 
@@ -183,11 +225,13 @@ class DashboardSwitches:
     def __init__(
         self,
         control: RegistryControl,
+        passkeys: PasskeyApprovals,
         registry: Registry,
         uses: Mapping[str, Mapping[str, Use]],
         clock: Callable[[], datetime],
     ) -> None:
         self._control = control
+        self._passkeys = passkeys
         self._registry = registry
         self._uses = uses
         self._clock = clock
@@ -215,6 +259,33 @@ class DashboardSwitches:
     async def withdraw(self, request_id: UUID) -> Verdict:
         """Withdraw a waiting request."""
         return await self._control.withdraw(
+            request_id, role=Role.CHAIRMAN, channel=Channel.DASHBOARD, now=self._clock()
+        )
+
+    async def passkey(self) -> PasskeyStatus:
+        """Whether the passkey exists and may be set up now."""
+        enrolled, open_now = await self._passkeys.status()
+        return PasskeyStatus(enrolled=enrolled, enrolment_open=open_now)
+
+    async def enrol_options(self, code: str) -> dict[str, Any]:
+        """Options to make the passkey (needs the start-up code)."""
+        return await self._passkeys.enrol_options(code)
+
+    async def enrol(self, code: str, credential: dict[str, Any]) -> None:
+        """Keep the new passkey's public half."""
+        await self._passkeys.enrol(code, credential)
+
+    async def approve_options(self, request_id: UUID) -> dict[str, Any]:
+        """Options for Windows Hello to sign for this one request."""
+        return await self._passkeys.approve_options(request_id)
+
+    async def approve(self, request_id: UUID, credential: dict[str, Any]) -> Verdict:
+        """Approve with a signed answer; the item switches on if it holds."""
+        return await self._passkeys.approve(request_id, credential)
+
+    async def refuse(self, request_id: UUID) -> Verdict:
+        """Refuse a waiting request."""
+        return await self._control.refuse(
             request_id, role=Role.CHAIRMAN, channel=Channel.DASHBOARD, now=self._clock()
         )
 

@@ -58,6 +58,8 @@ class Operation(StrEnum):
     SWITCH_OFF = "switch_off"  # a registry item (ADR-030)
     REQUEST_ON = "request_on"  # ask for a registry item to be switched on
     WITHDRAW_REQUEST = "withdraw_request"
+    REFUSE_REQUEST = "refuse_request"
+    APPROVE_REGISTRY = "approve_registry"  # switch a registry item on (ADR-SEC-007): needs a fresh passkey
 
 
 REDUCES_RISK = frozenset(
@@ -72,6 +74,7 @@ REDUCES_RISK = frozenset(
         # Asking changes nothing; only approving the request does (ADR-030).
         Operation.REQUEST_ON,
         Operation.WITHDRAW_REQUEST,
+        Operation.REFUSE_REQUEST,
     }
 )
 INCREASES_RISK = frozenset(set(Operation) - REDUCES_RISK)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -10,7 +11,8 @@ from fastapi.testclient import TestClient
 
 from yaqzan.core.api import SamplePortfolio, create_app
 from yaqzan.core.api.app import REQUEST_HEADER
-from yaqzan.core.api.registry import RegistryPage, registry_page
+from yaqzan.core.api.registry import PasskeyStatus, RegistryPage, registry_page
+from yaqzan.core.auth import PasskeyError
 from yaqzan.core.policy import Pending, Standing, Verdict
 from yaqzan.core.registry import Kind, Layout, Plugin, Registry, Skill, State
 from yaqzan.core.registry.models import Invocation
@@ -40,6 +42,8 @@ class FakeSwitches:
         self.broken = broken
         self.calls: list[tuple[str, object]] = []
         self.request_id = uuid4()
+        self.enrolled = False
+        self.passkey_error: str | None = None
 
     async def page(self) -> RegistryPage:
         if self.broken:
@@ -65,6 +69,35 @@ class FakeSwitches:
     async def withdraw(self, request_id: UUID) -> Verdict:
         self.calls.append(("withdraw", request_id))
         return self.verdict
+
+    async def refuse(self, request_id: UUID) -> Verdict:
+        self.calls.append(("refuse", request_id))
+        return self.verdict
+
+    async def approve(self, request_id: UUID, credential: dict[str, Any]) -> Verdict:
+        self.calls.append(("approve", (request_id, credential)))
+        return self.verdict
+
+    async def approve_options(self, request_id: UUID) -> dict[str, Any]:
+        self.calls.append(("approve_options", request_id))
+        if self.passkey_error:
+            raise PasskeyError(self.passkey_error)
+        return {"challenge": "abc"}
+
+    async def passkey(self) -> PasskeyStatus:
+        return PasskeyStatus(enrolled=self.enrolled, enrolment_open=not self.enrolled)
+
+    async def enrol_options(self, code: str) -> dict[str, Any]:
+        self.calls.append(("enrol_options", code))
+        if self.passkey_error:
+            raise PasskeyError(self.passkey_error)
+        return {"challenge": "xyz"}
+
+    async def enrol(self, code: str, credential: dict[str, Any]) -> None:
+        self.calls.append(("enrol", (code, credential)))
+        if self.passkey_error:
+            raise PasskeyError(self.passkey_error)
+        self.enrolled = True
 
 
 def client(switches: FakeSwitches | None) -> TestClient:
@@ -167,11 +200,81 @@ def test_a_request_id_must_be_a_uuid() -> None:
     assert switches.calls == []
 
 
-def test_there_is_no_route_that_switches_on() -> None:
-    c = client(FakeSwitches())
-    for path in (
-        "/api/registry/switch-on",
-        "/api/registry/approve",
-        f"/api/registry/requests/{uuid4()}/approve",
-    ):
+def test_the_only_way_on_is_approving_a_request_with_a_signed_answer() -> None:
+    switches = FakeSwitches()
+    c = client(switches)
+    for path in ("/api/registry/switch-on", "/api/registry/approve"):
         assert c.post(path, json={"kind": "skill", "id": "a-skill"}, headers=OURS).status_code in {404, 405}
+    approve = f"/api/registry/requests/{uuid4()}/approve"
+    assert c.post(approve, json={}, headers=OURS).status_code == 422  # no signed answer
+    assert c.post(approve, json={"credential": {"id": "x"}}, headers={}).status_code == 403  # another site
+    assert switches.calls == []
+
+
+def test_approve_hands_the_signed_answer_over_and_returns_the_new_page() -> None:
+    switches = FakeSwitches()
+    request_id = uuid4()
+    credential = {"id": "abc", "response": {"signature": "s"}}
+    response = client(switches).post(
+        f"/api/registry/requests/{request_id}/approve", json={"credential": credential}, headers=OURS
+    )
+    assert response.status_code == 200
+    assert switches.calls == [("approve", (request_id, credential))]
+
+
+def test_a_failed_passkey_check_is_refused_with_its_reason() -> None:
+    response = client(FakeSwitches(Verdict.PASSKEY_FAILED)).post(
+        f"/api/registry/requests/{uuid4()}/approve", json={"credential": {"id": "x"}}, headers=OURS
+    )
+    assert (response.status_code, response.json()["detail"]) == (409, "registry.passkey_failed")
+
+
+def test_refuse_needs_no_passkey() -> None:
+    switches = FakeSwitches()
+    request_id = uuid4()
+    response = client(switches).post(f"/api/registry/requests/{request_id}/refuse", json={}, headers=OURS)
+    assert response.status_code == 200
+    assert switches.calls == [("refuse", request_id)]
+
+
+def test_approve_options_are_passed_through_or_refused_with_a_reason() -> None:
+    switches = FakeSwitches()
+    request_id = uuid4()
+    path = f"/api/registry/requests/{request_id}/approve/options"
+    assert client(switches).post(path, json={}, headers=OURS).json() == {"options": {"challenge": "abc"}}
+    switches.passkey_error = "registry.stale"
+    response = client(switches).post(path, json={}, headers=OURS)
+    assert (response.status_code, response.json()["detail"]) == (409, "registry.stale")
+
+
+def test_passkey_status_and_set_up() -> None:
+    switches = FakeSwitches()
+    c = client(switches)
+    assert c.get("/api/passkey").json() == {"enrolled": False, "enrolment_open": True}
+    options = c.post("/api/passkey/enrol/options", json={"code": "0a1b2c3d"}, headers=OURS)
+    assert options.json() == {"options": {"challenge": "xyz"}}
+    done = c.post("/api/passkey/enrol", json={"code": "0a1b2c3d", "credential": {"id": "n"}}, headers=OURS)
+    assert done.json() == {"enrolled": True, "enrolment_open": False}
+    assert switches.calls == [("enrol_options", "0a1b2c3d"), ("enrol", ("0a1b2c3d", {"id": "n"}))]
+
+
+@pytest.mark.parametrize("code", ["passkey.wrong_code", "passkey.enrol_closed"])
+def test_a_wrong_or_closed_set_up_is_forbidden(code: str) -> None:
+    switches = FakeSwitches()
+    switches.passkey_error = code
+    response = client(switches).post("/api/passkey/enrol/options", json={"code": "0a1b2c3d"}, headers=OURS)
+    assert (response.status_code, response.json()["detail"]) == (403, code)
+
+
+@pytest.mark.parametrize("body", [{"code": "short"}, {"code": "0A1B2C3D"}, {"code": "0a1b2c3d", "x": 1}, {}])
+def test_an_odd_set_up_code_is_refused_before_anything(body: object) -> None:
+    switches = FakeSwitches()
+    assert client(switches).post("/api/passkey/enrol/options", json=body, headers=OURS).status_code == 422
+    assert switches.calls == []
+
+
+def test_without_a_database_there_is_no_passkey() -> None:
+    c = client(None)
+    assert c.get("/api/passkey").json() == {"enrolled": False, "enrolment_open": False}
+    response = c.post("/api/passkey/enrol/options", json={"code": "0a1b2c3d"}, headers=OURS)
+    assert (response.status_code, response.json()["detail"]) == (503, "registry.read_only")
