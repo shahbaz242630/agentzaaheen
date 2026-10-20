@@ -3,9 +3,9 @@
 The store only keeps what it is told, under the database's own rules: "on"
 must point at an approved request for the same item and files, and a decided
 request never changes. Deciding *whether* something counts as on (defaults,
-changed files) is the registry's job; who may ask is the policy layer's.
-There is deliberately no way to switch an item on here yet: that arrives with
-the passkey approval (slice 2c).
+changed files) is the registry's job; who may ask, and whether a passkey
+was checked, is the policy layer's (ADR-SEC-007). The only way to switch an
+item on is :meth:`RegistrySwitchRows.approve`, which needs a step-up time.
 """
 
 from __future__ import annotations
@@ -47,6 +47,24 @@ INSERT INTO yaqzan.registry_requests (id, tenant_id, kind, item_id, fingerprint,
     requested_at)
 VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7)
 ON CONFLICT (tenant_id, kind, item_id) WHERE status = 'pending' DO NOTHING
+RETURNING id
+"""
+_APPROVE = """
+UPDATE yaqzan.registry_requests SET status = 'approved', decided_by = $3, decided_at = $4, step_up_at = $5
+WHERE tenant_id = $1 AND id = $2 AND status = 'pending'
+RETURNING kind, item_id, fingerprint
+"""
+_SWITCH_ON = """
+INSERT INTO yaqzan.registry_switches (tenant_id, kind, item_id, enabled, fingerprint, request_id, changed_by,
+    changed_at)
+VALUES ($1, $2, $3, true, $4, $5, $6, $7)
+ON CONFLICT (tenant_id, kind, item_id) DO UPDATE SET
+    enabled = true, fingerprint = EXCLUDED.fingerprint, request_id = EXCLUDED.request_id,
+    changed_by = EXCLUDED.changed_by, changed_at = EXCLUDED.changed_at
+"""
+_REFUSE = """
+UPDATE yaqzan.registry_requests SET status = 'refused', decided_by = $3, decided_at = $4
+WHERE tenant_id = $1 AND id = $2 AND status = 'pending'
 RETURNING id
 """
 _WITHDRAW = """
@@ -153,6 +171,37 @@ class RegistrySwitchRows:
                 request.requested_at,
             )
         return added is not None
+
+    async def approve(
+        self, tenant_id: UUID, request_id: UUID, *, by: str, at: datetime, step_up_at: datetime
+    ) -> bool:
+        """Approve a pending request and switch its item on, in one transaction. False if not pending.
+
+        The database refuses it without ``step_up_at`` or a person as ``by``, and the switch
+        is written for exactly the files that were asked for.
+        """
+        require_aware(at, step_up_at)
+        async with self._db.transaction() as conn:
+            asked = await conn.fetchrow(_APPROVE, tenant_id, request_id, by, at, step_up_at)
+            if asked is None:
+                return False
+            await conn.execute(
+                _SWITCH_ON,
+                tenant_id,
+                asked["kind"],
+                asked["item_id"],
+                asked["fingerprint"],
+                request_id,
+                by,
+                at,
+            )
+        return True
+
+    async def refuse(self, tenant_id: UUID, request_id: UUID, *, by: str, at: datetime) -> bool:
+        """Refuse a pending request. Returns False if it is unknown or already decided."""
+        require_aware(at)
+        async with self._db.connection() as conn:
+            return await conn.fetchval(_REFUSE, tenant_id, request_id, by, at) is not None
 
     async def withdraw(self, tenant_id: UUID, request_id: UUID, *, by: str, at: datetime) -> bool:
         """Withdraw a pending request. Returns False if it is unknown or already decided."""

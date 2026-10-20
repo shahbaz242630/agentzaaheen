@@ -19,9 +19,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from tests.fixtures.soft_authenticator import SoftAuthenticator
 from tests.integration.conftest import Server, run
 from tools import dashboard, laptop_db
 from yaqzan.core.api.app import REQUEST_HEADER
+from yaqzan.core.store import StoreError, StoreErrorCode
 
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}
 SKILL = {"kind": "skill", "id": "triage-failing-build"}
@@ -139,3 +141,57 @@ def test_a_connector_switched_off_is_not_read_at_the_next_start(
         transport=httpx.MockTransport(refuse),
     )
     assert "github is switched off on the Customize page, so it was not read." in capsys.readouterr().out
+
+
+HERE = {REQUEST_HEADER: "1", "Origin": "http://localhost:8765"}
+
+
+def test_set_up_a_passkey_then_approve_and_refuse_over_http(
+    ui: Path, laptop_url: SecretStr, capsys: pytest.CaptureFixture[str]
+) -> None:
+    device = SoftAuthenticator()
+    app = start(ui, laptop_url, ["--enrol-passkey"])
+    out = capsys.readouterr().out
+    code = out.split("The code to type on the Customize page is ")[1].split()[0]
+    assert "open http://localhost:8765" in out
+    with TestClient(app, base_url="http://localhost:8765") as client:
+        assert client.get("/api/passkey").json() == {"enrolled": False, "enrolment_open": True}
+        options = client.post("/api/passkey/enrol/options", json={"code": code}, headers=HERE).json()[
+            "options"
+        ]
+        done = client.post(
+            "/api/passkey/enrol", json={"code": code, "credential": device.register(options)}, headers=HERE
+        )
+        assert done.json() == {"enrolled": True, "enrolment_open": False}
+
+        # Off, ask, approve with Windows Hello: on again.
+        request = ask_after_switching_off(client)
+        path = f"/api/registry/requests/{request}/approve"
+        sign = client.post(f"{path}/options", json={}, headers=HERE).json()["options"]
+        assert client.post(path, json={"credential": device.sign(sign)}, headers=HERE).status_code == 200
+        assert states(client)["triage-failing-build"] == "on"
+
+        # Off, ask, refuse: stays off, nothing waiting.
+        request = ask_after_switching_off(client)
+        refused = client.post(f"/api/registry/requests/{request}/refuse", json={}, headers=HERE)
+        assert refused.json()["requests"] == []
+        assert states(client)["triage-failing-build"] == "off"
+
+
+def ask_after_switching_off(client: TestClient) -> str:
+    client.post("/api/registry/switch-off", json=SKILL, headers=HERE)
+    (request,) = client.post("/api/registry/requests", json=SKILL, headers=HERE).json()["requests"]
+    return str(request["id"])
+
+
+def test_a_database_that_fails_at_start_is_explained(ui: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    async def broken() -> SecretStr:
+        raise StoreError(StoreErrorCode.UNAVAILABLE, "down")
+
+    assert dashboard.main(["--switches"], static_dir=ui, serve=lambda *_: None, prepare=broken) == 1
+    assert "the laptop database could not be used (store.unavailable)" in capsys.readouterr().out
+
+
+def test_enrol_passkey_needs_switches(ui: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert dashboard.main(["--enrol-passkey"], static_dir=ui, serve=lambda *_: None) == 1
+    assert "--enrol-passkey needs --switches" in capsys.readouterr().out

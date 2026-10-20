@@ -171,6 +171,13 @@ export const RegistryPage = z.strictObject({
 });
 export type RegistryPage = z.infer<typeof RegistryPage>;
 
+// The Chairman's passkey (ADR-SEC-007): whether it exists, and whether it may be set up on this run.
+export const PasskeyStatus = z.strictObject({ enrolled: z.boolean(), enrolment_open: z.boolean() });
+export type PasskeyStatus = z.infer<typeof PasskeyStatus>;
+
+// WebAuthn options as JSON, handed straight to the browser's own parser (it checks them).
+const PasskeyOptions = z.strictObject({ options: z.record(z.string(), z.unknown()) });
+
 export class ApiError extends Error {
   constructor(readonly path: string, readonly status: number | null, readonly code: string | null = null) {
     super(status === null ? `${path}: the answer did not match the contract` : `${path}: HTTP ${status}`);
@@ -224,5 +231,17 @@ export const api = {
   requestOn: (kind: Kind, id: string) => postJson("/api/registry/requests", { kind, id }, RegistryPage),
   withdraw: (requestId: string) =>
     postJson(`/api/registry/requests/${encodeURIComponent(requestId)}/withdraw`, {}, RegistryPage),
+  refuse: (requestId: string) =>
+    postJson(`/api/registry/requests/${encodeURIComponent(requestId)}/refuse`, {}, RegistryPage),
+  // Approving: options for one request, Windows Hello signs, the server checks the signature.
+  approveOptions: async (requestId: string) =>
+    (await postJson(`/api/registry/requests/${encodeURIComponent(requestId)}/approve/options`, {}, PasskeyOptions))
+      .options,
+  approve: (requestId: string, credential: unknown) =>
+    postJson(`/api/registry/requests/${encodeURIComponent(requestId)}/approve`, { credential }, RegistryPage),
+  passkey: () => getJson("/api/passkey", PasskeyStatus),
+  enrolOptions: async (code: string) =>
+    (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
+  enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),
   ask: askChat,
 };

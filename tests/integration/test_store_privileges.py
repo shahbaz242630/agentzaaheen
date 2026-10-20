@@ -114,6 +114,7 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "source_syncs": mirror,
         "registry_requests": mirror,  # a request is decided, never deleted
         "registry_switches": mirror,
+        "passkeys": read_add,  # plus UPDATE on sign_count and last_used_at only (a column grant)
     }
 
 

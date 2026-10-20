@@ -3,7 +3,9 @@
 Only GET routes exist, plus a few POSTs: the chat (F05, ADR-024), which reads
 the cards and asks a model and changes nothing, and the Customize page's
 switches (ADR-030), which can only switch an item off, ask for it to be
-switched on, or withdraw that request. Every POST answers only same-origin
+switched on, withdraw that request, set up the Chairman's passkey once, and
+approve (with a Windows Hello signature for that one request, ADR-SEC-007)
+or refuse a request. Every POST answers only same-origin
 JSON requests that carry the ``X-Yaqzan-Request`` header, so another web page
 cannot use it. Every response carries a strict Content-Security-Policy
 (SECURITY: no inline script, no remote images), and only the expected host
@@ -16,7 +18,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -24,8 +26,17 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from yaqzan.core.api.facts import portfolio_facts, project_facts, uses_sample
-from yaqzan.core.api.registry import ItemRef, RegistryPage
+from yaqzan.core.api.registry import (
+    EnrolAnswer,
+    EnrolCode,
+    ItemRef,
+    PasskeyOptions,
+    PasskeyStatus,
+    RegistryPage,
+    SignedAnswer,
+)
 from yaqzan.core.api.views import ChatAnswer, ChatQuestion, ModelList, ProjectDetail, ProjectSummary
+from yaqzan.core.auth import PasskeyError
 from yaqzan.core.llm_gateway import ChatReply
 from yaqzan.core.policy import Verdict
 from yaqzan.core.registry import Kind
@@ -108,6 +119,30 @@ class RegistrySwitches(Protocol):
         """Withdraw a waiting request."""
         ...
 
+    async def passkey(self) -> PasskeyStatus:
+        """Whether the passkey exists and may be set up now."""
+        ...
+
+    async def enrol_options(self, code: str) -> dict[str, Any]:
+        """Options to make the passkey."""
+        ...
+
+    async def enrol(self, code: str, credential: dict[str, Any]) -> None:
+        """Keep the new passkey."""
+        ...
+
+    async def approve_options(self, request_id: UUID) -> dict[str, Any]:
+        """Options to sign for one request."""
+        ...
+
+    async def approve(self, request_id: UUID, credential: dict[str, Any]) -> Verdict:
+        """Approve with a signed answer."""
+        ...
+
+    async def refuse(self, request_id: UUID) -> Verdict:
+        """Refuse a waiting request."""
+        ...
+
 
 REQUEST_HEADER = "X-Yaqzan-Request"
 
@@ -133,28 +168,34 @@ def _refuse_foreign(request: Request) -> None:
         raise HTTPException(status_code=415, detail="chat.json_only")
 
 
-def _registry_routes(app: FastAPI, page: RegistryPage, switches: RegistrySwitches | None) -> None:
-    """The Customize page: read it, and (with a database) switch off, ask, withdraw (ADR-030)."""
-    log = get_logger("yaqzan.api")
+async def _stored[T](call: Awaitable[T]) -> T:
+    """Await a database-backed call; a database failure becomes 503 ``registry.store_unavailable``."""
+    try:
+        return await call
+    except StoreError as exc:
+        get_logger("yaqzan.api").warning("registry_store_failed", code=exc.code.value)
+        raise HTTPException(status_code=503, detail="registry.store_unavailable") from None
 
-    async def stored[T](call: Awaitable[T]) -> T:
-        try:
-            return await call
-        except StoreError as exc:
-            log.warning("registry_store_failed", code=exc.code.value)
-            raise HTTPException(status_code=503, detail="registry.store_unavailable") from None
+
+def _ready(switches: RegistrySwitches | None) -> RegistrySwitches:
+    if switches is None:
+        raise HTTPException(status_code=503, detail="registry.read_only")
+    return switches
+
+
+def _registry_routes(app: FastAPI, page: RegistryPage, switches: RegistrySwitches | None) -> None:
+    """The Customize page: read it, and (with a database) switch off, ask, withdraw, refuse, approve."""
 
     async def change(act: Callable[[RegistrySwitches], Awaitable[Verdict]]) -> RegistryPage:
-        if switches is None:
-            raise HTTPException(status_code=503, detail="registry.read_only")
-        verdict = await stored(act(switches))
+        ready = _ready(switches)
+        verdict = await _stored(act(ready))
         if verdict is not Verdict.DONE:
             raise HTTPException(status_code=409, detail=verdict.value)
-        return await stored(switches.page())
+        return await _stored(ready.page())
 
     @app.get("/api/registry")
     async def get_registry() -> RegistryPage:
-        return page if switches is None else await stored(switches.page())
+        return page if switches is None else await _stored(switches.page())
 
     @app.post("/api/registry/switch-off", dependencies=[Depends(_refuse_foreign)])
     async def switch_off(item: ItemRef) -> RegistryPage:
@@ -167,6 +208,44 @@ def _registry_routes(app: FastAPI, page: RegistryPage, switches: RegistrySwitche
     @app.post("/api/registry/requests/{request_id}/withdraw", dependencies=[Depends(_refuse_foreign)])
     async def withdraw(request_id: UUID) -> RegistryPage:
         return await change(lambda s: s.withdraw(request_id))
+
+    @app.post("/api/registry/requests/{request_id}/refuse", dependencies=[Depends(_refuse_foreign)])
+    async def refuse(request_id: UUID) -> RegistryPage:
+        return await change(lambda s: s.refuse(request_id))
+
+    @app.post("/api/registry/requests/{request_id}/approve", dependencies=[Depends(_refuse_foreign)])
+    async def approve(request_id: UUID, answer: SignedAnswer) -> RegistryPage:
+        return await change(lambda s: s.approve(request_id, answer.credential))
+
+
+def _passkey_routes(app: FastAPI, switches: RegistrySwitches | None) -> None:
+    """The passkey (ADR-SEC-007): its status, the one-time set-up, and options to sign one approval."""
+
+    async def checked[T](call: Awaitable[T]) -> T:
+        try:
+            return await _stored(call)
+        except PasskeyError as exc:
+            status = 403 if exc.code in {"passkey.wrong_code", "passkey.enrol_closed"} else 409
+            raise HTTPException(status_code=status, detail=exc.code) from None
+
+    @app.post("/api/registry/requests/{request_id}/approve/options", dependencies=[Depends(_refuse_foreign)])
+    async def approve_options(request_id: UUID) -> PasskeyOptions:
+        return PasskeyOptions(options=await checked(_ready(switches).approve_options(request_id)))
+
+    @app.get("/api/passkey")
+    async def passkey() -> PasskeyStatus:
+        if switches is None:
+            return PasskeyStatus(enrolled=False, enrolment_open=False)
+        return await _stored(switches.passkey())
+
+    @app.post("/api/passkey/enrol/options", dependencies=[Depends(_refuse_foreign)])
+    async def enrol_options(body: EnrolCode) -> PasskeyOptions:
+        return PasskeyOptions(options=await checked(_ready(switches).enrol_options(body.code)))
+
+    @app.post("/api/passkey/enrol", dependencies=[Depends(_refuse_foreign)])
+    async def enrol(body: EnrolAnswer) -> PasskeyStatus:
+        await checked(_ready(switches).enrol(body.code, body.credential))
+        return await _stored(_ready(switches).passkey())
 
 
 def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of the dashboard
@@ -217,6 +296,7 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
         return _connected(portfolio.models(), chat)
 
     _registry_routes(app, page, switches)
+    _passkey_routes(app, switches)
 
     @app.post("/api/chat", dependencies=[Depends(_refuse_foreign)])
     async def ask(question: ChatQuestion) -> ChatAnswer:

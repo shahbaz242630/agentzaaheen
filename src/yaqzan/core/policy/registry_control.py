@@ -2,9 +2,11 @@
 
 Every attempt is judged by :func:`authorize` (who, from where), then by the
 item's state (see ``registry.switches``), and written to the audit log, refusals
-included. Off happens at once. "On" is only ever *asked for* here: the request
-waits for the Chairman's approval with a passkey (slice 2c), so nothing in
-this module can widen what a model may use.
+included. Off happens at once. "On" is asked for, and only :meth:`approve`
+switches it on: it needs the time of a passkey check no older than 15
+minutes (``authorize``), a pending request, and the item's files unchanged
+since the asking (ADR-030, ADR-SEC-007). Checking the passkey itself is the
+caller's job (``policy.passkey_approvals``).
 
 The registry is the one read at start; an item's fingerprint is that of its
 files then. A request is tied to that fingerprint; one whose item has changed
@@ -56,6 +58,9 @@ class Verdict(StrEnum):
     NOT_OFF = "registry.not_off"
     ALREADY_ASKED = "registry.already_asked"
     UNKNOWN_REQUEST = "registry.unknown_request"
+    STALE = "registry.stale"  # the item's files changed since the request: ask again
+    NO_PASSKEY = "registry.no_passkey"
+    PASSKEY_FAILED = "registry.passkey_failed"
 
 
 @dataclass(frozen=True)
@@ -177,6 +182,49 @@ class RegistryControl:
             verdict = Verdict.UNKNOWN_REQUEST
         await self._audit(
             "registry.withdraw", verdict, role, now=now, target=f"request:{request_id}", request_id=request_id
+        )
+        return verdict
+
+    async def approvable(self, request_id: UUID) -> Verdict:
+        """Whether a request could be approved now (pending, files unchanged); asked before the passkey."""
+        request = await self._rows.get_request(self._tenant, request_id)
+        if request is None or request.status is not RequestStatus.PENDING:
+            return Verdict.UNKNOWN_REQUEST
+        key = (Kind(request.kind), request.item_id)
+        if key[0] in OUTSIDE_KINDS:
+            return Verdict.VIEW_ONLY
+        if self._items.get(key) != request.fingerprint:
+            return Verdict.STALE
+        return Verdict.DONE
+
+    async def approve(
+        self, request_id: UUID, *, role: Role, channel: Channel, step_up_at: datetime | None, now: datetime
+    ) -> Verdict:
+        """Approve a request and switch its item on; ``step_up_at`` is when the passkey was verified."""
+        allowed = authorize(role, Operation.APPROVE_REGISTRY, channel, step_up_at=step_up_at, now=now).allowed
+        if step_up_at is None or not allowed:
+            verdict = Verdict.NOT_ALLOWED
+        else:
+            verdict = await self.approvable(request_id)
+            approved = verdict is Verdict.DONE and await self._rows.approve(
+                self._tenant, request_id, by=_ACTORS[role], at=now, step_up_at=step_up_at
+            )
+            if verdict is Verdict.DONE and not approved:  # decided by someone else in between
+                verdict = Verdict.UNKNOWN_REQUEST
+        await self._audit(
+            "registry.approve", verdict, role, now=now, target=f"request:{request_id}", request_id=request_id
+        )
+        return verdict
+
+    async def refuse(self, request_id: UUID, *, role: Role, channel: Channel, now: datetime) -> Verdict:
+        """Refuse a pending request (no passkey needed: it only says no)."""
+        verdict = Verdict.DONE
+        if not authorize(role, Operation.REFUSE_REQUEST, channel, step_up_at=None, now=now).allowed:
+            verdict = Verdict.NOT_ALLOWED
+        elif not await self._rows.refuse(self._tenant, request_id, by=_ACTORS[role], at=now):
+            verdict = Verdict.UNKNOWN_REQUEST
+        await self._audit(
+            "registry.refuse", verdict, role, now=now, target=f"request:{request_id}", request_id=request_id
         )
         return verdict
 

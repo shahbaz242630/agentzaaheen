@@ -4,8 +4,10 @@
 sets up the laptop database (``tools.laptop_db``) and says how every item
 stands, so a connector that is switched off is not read at all. While the
 dashboard runs, :class:`LaptopSwitches` serves the Customize page's switches
-and tells the chat, before every question, what it may use. Its connection
-pool opens on first use, inside the web server's own event loop.
+and the passkey approvals (ADR-SEC-007), and tells the chat, before every
+question, what it may use. Its connection pool opens on first use, inside the
+web server's own event loop; the passkey's open challenges live with it, in
+memory, for the life of the dashboard.
 
 There is one tenant on the laptop: :data:`LAPTOP_TENANT`.
 """
@@ -15,13 +17,15 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid5
 
 from pydantic import SecretStr
 
 from tools import laptop_db
-from yaqzan.core.api.registry import DashboardSwitches, RegistryPage, Use
-from yaqzan.core.policy import RegistryControl, Standing, Verdict
+from yaqzan.core.api.registry import DashboardSwitches, PasskeyStatus, RegistryPage, Use
+from yaqzan.core.auth import Site
+from yaqzan.core.policy import PasskeyApprovals, RegistryControl, Standing, Verdict
 from yaqzan.core.registry import Kind, Registry
 from yaqzan.core.store import Database, DatabaseSettings, StoreError
 
@@ -62,14 +66,19 @@ def off_connectors(standing: Standing, registry: Registry) -> frozenset[str]:
 class LaptopSwitches:
     """The Customize page's switches and the chat's view of them, over one lazily opened pool."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913  # the database, what exists, where it is used, the time, the passkey site
         self,
         url: SecretStr,
         registry: Registry,
         uses: Mapping[str, Mapping[str, Use]],
         clock: Callable[[], datetime],
+        *,
+        site: Site,
+        enrol_code: str | None = None,
     ) -> None:
         self._settings = DatabaseSettings(dsn=url, min_size=1, max_size=4)
+        self._site = site
+        self._enrol_code = enrol_code
         self._registry = registry
         self._uses = uses
         self._clock = clock
@@ -83,7 +92,10 @@ class LaptopSwitches:
             if self._switches is None:
                 db = await Database.open(self._settings)
                 control = RegistryControl(db, LAPTOP_TENANT, self._registry)
-                self._switches = DashboardSwitches(control, self._registry, self._uses, self._clock)
+                passkeys = PasskeyApprovals(
+                    db, LAPTOP_TENANT, control, self._site, enrol_code=self._enrol_code, clock=self._clock
+                )
+                self._switches = DashboardSwitches(control, passkeys, self._registry, self._uses, self._clock)
         return self._switches
 
     async def standing(self) -> Standing:
@@ -105,3 +117,27 @@ class LaptopSwitches:
     async def withdraw(self, request_id: UUID) -> Verdict:
         """Withdraw a waiting request."""
         return await (await self._open()).withdraw(request_id)
+
+    async def refuse(self, request_id: UUID) -> Verdict:
+        """Refuse a waiting request."""
+        return await (await self._open()).refuse(request_id)
+
+    async def approve(self, request_id: UUID, credential: dict[str, Any]) -> Verdict:
+        """Approve with a Windows Hello signature for this one request."""
+        return await (await self._open()).approve(request_id, credential)
+
+    async def approve_options(self, request_id: UUID) -> dict[str, Any]:
+        """Options for Windows Hello to sign for this one request."""
+        return await (await self._open()).approve_options(request_id)
+
+    async def passkey(self) -> PasskeyStatus:
+        """Whether the passkey exists and may be set up now."""
+        return await (await self._open()).passkey()
+
+    async def enrol_options(self, code: str) -> dict[str, Any]:
+        """Options to make the passkey (needs the start-up code)."""
+        return await (await self._open()).enrol_options(code)
+
+    async def enrol(self, code: str, credential: dict[str, Any]) -> None:
+        """Keep the new passkey's public half."""
+        await (await self._open()).enrol(code, credential)

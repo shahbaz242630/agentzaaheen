@@ -23,8 +23,8 @@ def test_serves_on_the_laptop_only(ui: Path, capsys: pytest.CaptureFixture[str])
         calls.append((host, port))
 
     assert dashboard.main([], static_dir=ui, serve=fake_serve) == 0
-    assert calls == [("127.0.0.1", 8765)]
-    assert "http://127.0.0.1:8765" in capsys.readouterr().out
+    assert calls == [("127.0.0.1", 8765)]  # listens on this laptop only
+    assert "open http://localhost:8765" in capsys.readouterr().out  # passkeys need a name, not an IP
 
 
 def test_takes_another_port(ui: Path) -> None:

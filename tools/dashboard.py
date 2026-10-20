@@ -29,7 +29,11 @@ The Customize page lists every connector, skill and plugin found on disk
 DIR (Claude, Codex or Cursor layout), view only. With ``--switches`` the
 page's on/off switches work and are remembered in the laptop database
 (``tools.laptop_db up`` first, ADR-030): a connector that is off is not read,
-and the chat may use only what is on.
+and the chat may use only what is on. Requests are approved with a Windows
+Hello passkey (ADR-SEC-007); passkeys need a name, not an IP, so the
+dashboard is opened at http://localhost (it still listens on 127.0.0.1 only).
+``--enrol-passkey`` allows the one-time passkey set-up and prints the code
+the page asks for.
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
@@ -39,6 +43,7 @@ Usage:
     uv run python -m tools.dashboard --model-url http://127.0.0.1:8766
     uv run python -m tools.dashboard --bundles ~/.claude/plugins
     uv run python -m tools.dashboard --switches     # after: uv run python -m tools.laptop_db up
+    uv run python -m tools.dashboard --switches --enrol-passkey   # once, to set up the passkey
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
 
@@ -47,6 +52,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -71,6 +77,7 @@ from tools.dashboard_switches import LaptopSwitches, Prepare, connect, off_conne
 from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
 from yaqzan.core.api.registry import RegistryPage, registry_page, uses_from_cards
+from yaqzan.core.auth import Site
 from yaqzan.core.llm_gateway import Tool
 from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Registry, load_registry
@@ -194,6 +201,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--switches", action="store_true", help="on/off switches, kept in the laptop database"
     )
+    parser.add_argument(
+        "--enrol-passkey", action="store_true", help="allow the one-time passkey set-up (needs --switches)"
+    )
     return parser
 
 
@@ -209,6 +219,9 @@ def _preflight(ns: argparse.Namespace, static_dir: Path) -> int | None:
         return 1
     if not (static_dir / "index.html").is_file():
         print("dashboard: the web UI is not built yet. Run: cd apps/dashboard && npm ci && npm run build")
+        return 1
+    if ns.enrol_passkey and not ns.switches:
+        print("dashboard: --enrol-passkey needs --switches (the passkey is kept in the laptop database).")
         return 1
     return None
 
@@ -236,9 +249,17 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
     chosen = portfolio or SamplePortfolio(clock())
     switches = None
     if connected is not None:
+        code = secrets.token_hex(4) if ns.enrol_passkey else None
         switches = LaptopSwitches(
-            connected[0], registry, uses_from_cards(chosen.project, CONNECTOR_CARDS), clock
+            connected[0],
+            registry,
+            uses_from_cards(chosen.project, CONNECTOR_CARDS),
+            clock,
+            site=Site(origin=f"http://localhost:{ns.port}"),
+            enrol_code=code,
         )
+        if code is not None:
+            print(f"dashboard: passkey set-up is open. The code to type on the Customize page is {code}")
     chat: ChatBackend | None = None
     if ns.model_url:
         token = env.get(ns.github_token_env or "", "")
@@ -256,7 +277,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         what += "; chat connected to the local model"
     if switches is not None:
         what += "; switches remembered in the laptop database"
-    print(f"dashboard: open http://{HOST}:{ns.port} ({what}; press Ctrl+C to stop)")
+    print(f"dashboard: open http://localhost:{ns.port} ({what}; press Ctrl+C to stop)")
     (serve or _serve)(app, HOST, ns.port)
     return 0
 
