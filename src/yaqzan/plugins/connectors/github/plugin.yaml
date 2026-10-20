@@ -1,13 +1,15 @@
 id: github
 type: connector
-version: 0.1.0
-sdk: ">=1.4,<2"
+version: 0.2.0
+sdk: ">=1.6,<2"
 permissions: [read]
-egress: [api.github.com]
+egress: [api.github.com, "productionresultssa<n>.blob.core.windows.net"]
 endpoints:
   - GET /repos/{owner}/{repo}
   - GET /repos/{owner}/{repo}/actions/runs
   - GET /search/issues
+  - GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs
+  - GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs
 credentials:
   - name: token
     scope_hint: "fine-grained, read-only: issues, pull requests, actions, metadata; chosen repositories only"
@@ -16,4 +18,4 @@ data_class: internal
 interface:
   display_name: GitHub
   category: Code
-  description: "Open issues, open pull requests and the main branch's latest build, as counts only (never titles or text)."
+  description: "Open issues, open pull requests and the main branch's latest build as counts; a failed build's log only when triage asks (untrusted)."

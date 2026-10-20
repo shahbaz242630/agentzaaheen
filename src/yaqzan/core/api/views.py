@@ -172,8 +172,12 @@ class ChatQuestion(_View):
 
 
 class ChatAnswer(_View):
-    """The model's plain-text answer. ``from_sample`` says some facts it saw were sample data."""
+    """The model's plain-text answer. ``from_sample`` says some facts it saw were sample data.
+
+    ``used`` lists the skills and tools the answer rests on, e.g. ``"Skill: triage-failing-build"``.
+    """
 
     model_id: str = Field(pattern=_SLUG)
     answer: str = Field(min_length=1, max_length=4000)
     from_sample: bool
+    used: tuple[Annotated[str, Field(min_length=1, max_length=120)], ...] = Field(default=(), max_length=8)

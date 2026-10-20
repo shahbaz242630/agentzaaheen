@@ -772,21 +772,24 @@
         "id": "github",
         "name": "GitHub",
         "category": "Code",
-        "description": "Open issues, open pull requests and the main branch's latest build, as counts only (never titles or text).",
-        "version": "0.1.0",
+        "description": "Open issues, open pull requests and the main branch's latest build as counts; a failed build's log only when triage asks (untrusted).",
+        "version": "0.2.0",
         "level": "read",
         "hosts": [
-          "api.github.com"
+          "api.github.com",
+          "productionresultssa<n>.blob.core.windows.net"
         ],
         "endpoints": [
           "GET /repos/{owner}/{repo}",
           "GET /repos/{owner}/{repo}/actions/runs",
-          "GET /search/issues"
+          "GET /search/issues",
+          "GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
+          "GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs"
         ],
         "key_slots": [
           "token"
         ],
-        "fingerprint": "e0617b50e18e7cf5e0160cdfc9fc52f17eec7046efbb5c526fde530dc5254aea",
+        "fingerprint": "7414ad5387a0a27dca3a0bc682b67cbbd98bbb04a87ddc20d476fe041ed811a3",
         "uses": [
           {
             "project_id": "zaaheen",
@@ -848,7 +851,7 @@
           "github"
         ],
         "missing": [],
-        "fingerprint": "790e6f15d3ee8fc9b630c46861539a0aa017fcb14a00038c277ba0a5df7b0e0e"
+        "fingerprint": "b9b58c1dcfaee1a2b6ba4ffe4e4a0ca60555de863202f3cfd0e877caee575f79"
       }
     ],
     "plugins": [],

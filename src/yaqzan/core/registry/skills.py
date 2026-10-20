@@ -132,3 +132,17 @@ def _requires(value: str | None) -> tuple[str, ...]:
     if any(not _ID.match(part) for part in ids):
         raise ItemError("registry.bad_metadata", "'requires' must list connector ids separated by commas")
     return tuple(dict.fromkeys(ids))
+
+
+def skill_instructions(folder: Path, expected_fingerprint: str) -> str:
+    """The skill's instructions (its body), only if its files are exactly as when it was loaded.
+
+    A change since then (an edit, a new file) means it has not been reviewed
+    in that form, so it is refused rather than handed to a model.
+    """
+    if fingerprint(folder) != expected_fingerprint:
+        raise ItemError(
+            "registry.changed", "the skill's files changed since it was loaded; restart to review it"
+        )
+    _, body = split_frontmatter(read_text(folder / SKILL_FILE), SKILL_FILE)
+    return body.strip()
