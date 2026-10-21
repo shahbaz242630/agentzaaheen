@@ -7,7 +7,8 @@ nothing repeats while it stays down. Addresses already down at the first
 round are reported once, so the Chairman learns of them.
 
 Every word of an alert comes from this module's fixed template: the project's
-display name, counts, and our own words for each reason. Nothing a website,
+display name, the parts' own short names (``api``, ``sign-in``: ours, from the
+uptime list), counts, and our own words for each reason. Nothing a website,
 log or person wrote, and never a full address (ADR-031).
 """
 
@@ -63,20 +64,20 @@ class UptimeWatch:
         self._rounds += 1
         alerts: list[Alert] = []
         for project, report in sorted(reports.items()):
-            newly_down: list[str] = []
-            back_up = 0
+            newly_down: list[tuple[str | None, str]] = []
+            back_up: list[str | None] = []
             for site in report.sites:
                 key = (project, site.url)
                 if site.up:
                     self._fails.pop(key, None)
                     if key in self._alerted:
                         self._alerted.discard(key)
-                        back_up += 1
+                        back_up.append(site.part)
                     continue
                 self._fails[key] = self._fails.get(key, 0) + 1
                 if key not in self._alerted and (first or self._fails[key] >= self.threshold):
                     self._alerted.add(key)
-                    newly_down.append(REASON_WORDS.get(site.reason, "not as expected"))
+                    newly_down.append((site.part, REASON_WORDS.get(site.reason, "not as expected")))
             if newly_down:
                 alerts.append(self._down(project, report, newly_down))
             if back_up:
@@ -86,26 +87,34 @@ class UptimeWatch:
     def _name(self, project: str) -> str:
         return self.names.get(project, project)
 
-    def _down(self, project: str, report: UptimeReport, reasons: list[str]) -> Alert:
+    def _down(self, project: str, report: UptimeReport, newly: list[tuple[str | None, str]]) -> Alert:
         down = len(report.sites) - report.up
-        why = ", ".join(sorted(set(reasons)))
+        why = ", ".join(sorted({reason for _, reason in newly}))
+        counted = f"{down} of {_plural(len(report.sites), 'address')} down"
+        parts = _parts([part for part, _ in newly])
+        what = f"{parts} down ({why}); {counted}" if parts else f"{counted} ({why})"
         return Alert(
             project_id=project,
             down=True,
             title=f"Yaqzan: {self._name(project)} is down",
-            message=(
-                f"{down} of {_plural(len(report.sites), 'address')} down ({why}). Details on the dashboard."
-            ),
+            message=f"{what}. Details on the dashboard.",
             priority="high",
         )
 
-    def _up(self, project: str, report: UptimeReport, recovered: int) -> Alert:
+    def _up(self, project: str, report: UptimeReport, recovered: list[str | None]) -> Alert:
+        parts = _parts(recovered)
+        which = parts if parts else _plural(len(recovered), "address")
         return Alert(
             project_id=project,
             down=False,
             title=f"Yaqzan: {self._name(project)} is back up",
-            message=(
-                f"{_plural(recovered, 'address')} answering again; {report.up} of {len(report.sites)} up now."
-            ),
+            message=f"{which} answering again; {report.up} of {len(report.sites)} up now.",
             priority="default",
         )
+
+
+def _parts(parts: list[str | None]) -> str:
+    """The parts' names joined, or "" when any address has no part (then counts are used instead)."""
+    if not parts or any(part is None for part in parts):
+        return ""
+    return ", ".join(sorted({part for part in parts if part is not None}))

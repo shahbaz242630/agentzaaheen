@@ -3,9 +3,15 @@ import { describe, expect, it } from "vitest";
 import { changes, reports, type Seen } from "./alerts";
 import type { Reason } from "./probe";
 
-function seen(id: string, project: string, up: boolean, reason: Reason = up ? "ok" : "not_found"): Seen {
+function seen(
+  id: string,
+  project: string,
+  up: boolean,
+  reason: Reason = up ? "ok" : "not_found",
+  part: string | null = null,
+): Seen {
   const projectName = project === "eva" ? "Eva" : "Sandoq Kin";
-  return { id, up, reason, target: { project, projectName, url: `https://${id}.example.com`, expect: "ok" } };
+  return { id, up, reason, target: { project, projectName, url: `https://${id}.example.com`, expect: "ok", part } };
 }
 
 const NO_HOURLY = false;
@@ -84,5 +90,41 @@ describe("reports", () => {
       { project: "eva", down: true, message: "1 of 2 addresses up." },
       { project: "sandoq-kin", down: false, message: "1 of 1 address up." },
     ]);
+  });
+
+  it("names the parts that went down, and those back up, when every address has one", () => {
+    const stored = new Map([
+      ["a", true],
+      ["b", true],
+      ["c", true],
+    ]);
+    const now = [seen("a", "eva", false, "server_error", "api"), seen("b", "eva", false, "no_answer", "sign-in"), seen("c", "eva", true, "ok", "site")];
+    expect(reports(now, changes(now, stored), stored, NO_HOURLY)).toEqual([
+      {
+        project: "eva",
+        down: true,
+        message: "api, sign-in down (did not answer, server error); 2 of 3 addresses down. Details on the dashboard.",
+      },
+    ]);
+    const before = new Map([
+      ["a", false],
+      ["b", false],
+      ["c", true],
+    ]);
+    const later = [seen("a", "eva", true, "ok", "api"), seen("b", "eva", false, "no_answer", "sign-in"), seen("c", "eva", true, "ok", "site")];
+    expect(reports(later, changes(later, before), before, NO_HOURLY)).toEqual([
+      { project: "eva", down: true, message: "api answering again; 2 of 3 up now." },
+    ]);
+  });
+
+  it("falls back to counts when an address has no part", () => {
+    const stored = new Map([
+      ["a", true],
+      ["b", true],
+    ]);
+    const now = [seen("a", "eva", false, "server_error", "api"), seen("b", "eva", false, "server_error")];
+    expect(reports(now, changes(now, stored), stored, NO_HOURLY)[0]?.message).toBe(
+      "2 of 2 addresses down (server error). Details on the dashboard.",
+    );
   });
 });

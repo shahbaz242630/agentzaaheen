@@ -9,6 +9,8 @@ export interface Target {
   readonly projectName: string;
   readonly url: string;
   readonly expect: Expect;
+  // Our own short name for this part of the product ("api", "sign-in"), never an address.
+  readonly part: string | null;
 }
 
 export interface Settings {
@@ -28,6 +30,8 @@ export function callsNeeded(addresses: number, projects: number): number {
 const URL_RE = /^https:\/\/[a-z0-9.-]+(\/[A-Za-z0-9._~/-]*)?$/;
 const PROJECT_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const NAME_RE = /^[A-Za-z0-9 ]{1,40}$/;
+const PART_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const MAX_PART = 24;
 const IPV4_RE = /^[0-9.]+$/;
 const PING_KEY_RE = /^[A-Za-z0-9_-]{22}$/;
 export const PING_URL_RE = /^https:\/\/hc-ping\.com\/[0-9a-f-]{36}$/;
@@ -48,7 +52,8 @@ export function readSettings(env: RawEnv): Settings {
   return { targets: readTargets(env.TARGETS), pingKey, pingUrl };
 }
 
-// TARGETS: {"zaaheen": {"name": "Zaaheen", "sites": [{"url": "https://...", "expect": "ok"}]}}
+// TARGETS: {"zaaheen": {"name": "Zaaheen", "sites": [{"url": "https://...", "expect": "ok", "part": "site"}]}}
+// ("part" is optional.)
 export function readTargets(raw: string | undefined): Target[] {
   let data: unknown;
   try {
@@ -82,16 +87,19 @@ export function readTargets(raw: string | undefined): Target[] {
 }
 
 function readSite(project: string, projectName: string, site: unknown): Target {
-  if (!isRecord(site) || !onlyKeys(site, ["url", "expect"])) {
-    throw new SettingsError(`${project}: each site has only a url and an expect`);
+  if (!isRecord(site) || !onlyKeys(site, ["url", "expect", "part"])) {
+    throw new SettingsError(`${project}: each site has only a url, an expect and a part`);
   }
-  const { url, expect } = site;
+  const { url, expect, part } = site;
   if (typeof url !== "string" || url.length > 300 || !URL_RE.test(url)) {
     throw new SettingsError(`${project}: an address is not an https address by name`);
   }
   if (IPV4_RE.test(new URL(url).hostname)) throw new SettingsError(`${project}: use the address's name, not an IP address`);
   if (expect !== "ok" && expect !== "answer") throw new SettingsError(`${project}: expect must be "ok" or "answer"`);
-  return { project, projectName, url, expect };
+  if (part !== undefined && (typeof part !== "string" || part.length > MAX_PART || !PART_RE.test(part))) {
+    throw new SettingsError(`${project}: a part is not lowercase words joined by hyphens`);
+  }
+  return { project, projectName, url, expect, part: part ?? null };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

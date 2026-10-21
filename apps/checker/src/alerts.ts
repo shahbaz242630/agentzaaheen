@@ -4,7 +4,7 @@
 // Healthchecks alert the Chairman (phone via ntfy, and email) when the project goes from up to down;
 // a success report alerts once when it is all up again. Healthchecks itself never repeats an alert,
 // so reporting the same state again is harmless: that is how the hourly report keeps each check fresh.
-// Messages hold counts and our own reason words: never an address.
+// Messages hold counts, our own reason words and the parts' own short names: never an address.
 
 import type { Checked } from "./probe";
 import { REASON_WORDS } from "./probe";
@@ -51,19 +51,28 @@ export function reports(
     const down = sites.length - up;
     const newlyDown = sites.filter((s) => !s.up && changedIds.has(s.id));
     // Back up only if it had been saved as down: a first sighting that is up is not news.
-    const backUp = sites.filter((s) => s.up && changedIds.has(s.id) && stored.get(s.id) === false).length;
+    const backUp = sites.filter((s) => s.up && changedIds.has(s.id) && stored.get(s.id) === false);
     if (newlyDown.length > 0) {
       const why = [...new Set(newlyDown.map((s) => REASON_WORDS[s.reason]))].sort().join(", ");
-      const message = `${down} of ${plural(sites.length, "address")} down (${why}). Details on the dashboard.`;
-      out.push({ project, down: true, message });
-    } else if (backUp > 0) {
-      const message = `${plural(backUp, "address")} answering again; ${up} of ${sites.length} up now.`;
+      const counted = `${down} of ${plural(sites.length, "address")} down`;
+      const parts = partNames(newlyDown);
+      const what = parts ? `${parts} down (${why}); ${counted}` : `${counted} (${why})`;
+      out.push({ project, down: true, message: `${what}. Details on the dashboard.` });
+    } else if (backUp.length > 0) {
+      const which = partNames(backUp) || plural(backUp.length, "address");
+      const message = `${which} answering again; ${up} of ${sites.length} up now.`;
       out.push({ project, down: down > 0, message });
     } else if (hourly) {
       out.push({ project, down: down > 0, message: `${up} of ${plural(sites.length, "address")} up.` });
     }
   }
   return out;
+}
+
+// The parts' names joined, or "" when any address has no part (then counts are used instead).
+function partNames(sites: readonly Seen[]): string {
+  if (sites.length === 0 || sites.some((s) => s.target.part === null)) return "";
+  return [...new Set(sites.map((s) => s.target.part as string))].sort().join(", ");
 }
 
 function plural(count: number, word: string): string {

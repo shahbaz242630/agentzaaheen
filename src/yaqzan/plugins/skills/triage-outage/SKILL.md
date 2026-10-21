@@ -16,9 +16,13 @@ anyone.
 
 ## What you are given
 
-- The alert: which project, which addresses or objective, since when.
+- The alert: which project, which **parts** (``api``, ``sign-in``, ``site``) or
+  objective, since when, and the reason (did not answer, server error, page
+  not found, refused the request).
 - The Uptime card (external checks) and the Code card (builds, ADR-025).
-- When connected: the `slo_status` tool, the telemetry tools (traces, logs,
+- When connected: the `fix_guide` tool (one part's guide: what serves it, what
+  it depends on, its logs, how it is deployed and rolled back, and the steps
+  for each reason), the `slo_status` tool, the telemetry tools (traces, logs,
   metrics) and the `failed_build_log` tool. Each one that is not offered is a
   gap: name it in your report and lower your confidence.
 
@@ -34,8 +38,10 @@ escalate.
 1. **Is it real and still happening?** External checks still failing, or
    already back up? A single blip that recovered is not an outage: say so and
    stop.
-2. **How big?** Which addresses, which objectives; is the whole product down or
-   one part (site up, API down)? Use the `check-slo` way of reading budgets:
+2. **How big?** Which parts, which objectives; is the whole product down or
+   one part (site up, API down)? Read each down part's guide with `fix_guide`
+   (`project/part`) now: it says what serves the part and what it depends on,
+   so a sign-in outage can explain an account page that fails too. Use the `check-slo` way of reading budgets:
    numbers come from code only.
 3. **Since when, and what changed?** The first failing check; the latest builds
    and deploys on the Code card around that time; a key or outside service
@@ -43,24 +49,29 @@ escalate.
 4. **Where exactly?** If tracing is connected, take an example failing or slow
    request and follow it with the `trace-request` steps. If it is not, say the
    cause cannot be located beyond "the service does not answer".
-5. **Sort the cause:** our code (a recent change), a dependency or outside
+5. **Follow the guide's steps** for the reason the check gave, in order, and
+   note what each one showed. If a part has no guide, say so: the general
+   steps are a weaker fallback.
+6. **Sort the cause:** our code (a recent change), a dependency or outside
    service, the hosting (a removed or paused deployment, a 404 from the edge),
    a key or setting, or unknown. Back each claim with evidence.
-6. **Decide the next step:**
+7. **Decide the next step:**
    - A clear fix in a repository: write it as a **proposal** (what, where, why,
      how to check). Do not apply it.
-   - Hosting, a key or an account: say exactly what the owner must check, and
-     escalate to the Chairman.
+   - Hosting, a key or an account: say exactly what the owner must check (the
+     guide names the dashboard, the logs and the rollback), and escalate to
+     whoever the guide says approves fixes.
    - Anything else, or "unknown": escalate to Claude with your evidence.
 
 ## Report
 
 Write it for someone who does not code:
 
-- **What is down:** one sentence, with since when.
+- **What is down:** which project and part, in one sentence, with since when.
 - **Impact:** which parts, and the SLO budget it has cost (from code).
 - **Why:** one to three sentences, with the evidence.
-- **What next:** the proposal, or who it is escalated to and why.
+- **What next:** the proposal, or who it is escalated to and why; quote the
+  guide's step that leads there.
 - **Gaps:** tools that were not connected.
 - **Confidence:** high, medium or low, and what would raise it.
 
