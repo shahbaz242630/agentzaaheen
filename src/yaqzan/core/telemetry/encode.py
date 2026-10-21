@@ -39,8 +39,8 @@ def encode_spans(spans: Sequence[ReadableSpan]) -> Json:
     """One OTLP/JSON request body for ``spans`` (grouped by resource and scope)."""
     resources: dict[int, tuple[Json, dict[tuple[str, str], list[Json]]]] = {}
     for item in spans:
-        resource = item.resource
-        entry = resources.setdefault(id(resource), (_resource(resource.attributes), {}))
+        owner = item.resource
+        entry = resources.setdefault(id(owner), (resource(owner.attributes), {}))
         scope = item.instrumentation_scope
         key = (scope.name, scope.version or "") if scope is not None else ("", "")
         encoded = _span(item)
@@ -49,13 +49,13 @@ def encode_spans(spans: Sequence[ReadableSpan]) -> Json:
     return {
         "resourceSpans": [
             {
-                "resource": resource,
+                "resource": encoded_resource,
                 "scopeSpans": [
                     {"scope": {"name": name, "version": version}, "spans": encoded}
                     for (name, version), encoded in scopes.items()
                 ],
             }
-            for resource, scopes in resources.values()
+            for encoded_resource, scopes in resources.values()
             if scopes
         ]
     }
@@ -68,7 +68,7 @@ def _span(item: ReadableSpan) -> Json | None:
     out: Json = {
         "traceId": f"{context.trace_id:032x}",
         "spanId": f"{context.span_id:016x}",
-        "name": _text(item.name),
+        "name": text(item.name),
         "kind": _OTLP_KIND.get(item.kind, 1),
         "startTimeUnixNano": str(item.start_time),
         "endTimeUnixNano": str(item.end_time),
@@ -80,7 +80,7 @@ def _span(item: ReadableSpan) -> Json | None:
     events = [
         {
             "timeUnixNano": str(event.timestamp),
-            "name": _text(event.name),
+            "name": text(event.name),
             "attributes": attributes(event.attributes or {}, ALLOWED_ATTRIBUTES),
         }
         for event in item.events
@@ -90,7 +90,8 @@ def _span(item: ReadableSpan) -> Json | None:
     return out
 
 
-def _resource(values: Mapping[str, object]) -> Json:
+def resource(values: Mapping[str, object]) -> Json:
+    """An OTLP resource holding only :data:`RESOURCE_KEYS`."""
     return {"attributes": attributes(values, RESOURCE_KEYS)}
 
 
@@ -114,10 +115,11 @@ def _value(value: object) -> Json | None:
     if isinstance(value, float):
         return {"doubleValue": value} if math.isfinite(value) else None  # NaN is not JSON
     if isinstance(value, str):
-        return {"stringValue": _text(value)}
+        return {"stringValue": text(value)}
     return None  # lists and anything else: not part of our contract
 
 
-def _text(value: str) -> str:
+def text(value: str) -> str:
+    """``value`` redacted, then cut to :data:`MAX_TEXT`."""
     # Redact before cutting: a cut could split a secret so its pattern no longer matches.
     return redact_text(value)[:MAX_TEXT]

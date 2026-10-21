@@ -1,11 +1,12 @@
-"""Sends finished spans to the trace store over OTLP/HTTP as JSON (ADR-032): the core's only telemetry POST.
+"""Sends traces, metrics and logs over OTLP/HTTP as JSON (ADR-032): the core's only telemetry POST.
 
 One kind of host only, matched as a whole name (Grafana Cloud's OTLP gateway),
 https on the default port, no credentials or query in the url, no redirects and
 no retries: telemetry is dropped rather than slow Yaqzan down or pile up. The
 token is a ``SecretStr`` that only ever becomes the ``Authorization`` header.
-Synchronous on purpose: the OpenTelemetry batch worker calls it from its own
-thread. It never opens a span itself (a span about sending spans would loop).
+Synchronous on purpose: the telemetry workers call it from their own threads.
+It never opens a span itself (a span about sending spans would loop), and its
+own ``telemetry_dropped`` lines are never shipped (telemetry skips them).
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ from yaqzan.core.sdk import get_logger
 
 OTLP_HOST = re.compile(r"otlp-gateway-prod-[a-z0-9-]{1,40}\.grafana\.net")
 TRACES_PATH = "/v1/traces"
+METRICS_PATH = "/v1/metrics"
+LOGS_PATH = "/v1/logs"
 MAX_BODY_BYTES = 4 * 1024 * 1024
 _USER = re.compile(r"^[0-9]{1,12}$")
 _OK = range(200, 300)
@@ -43,7 +46,7 @@ def check_otlp_endpoint(endpoint: str) -> str:
 
 
 class OtlpSender:
-    """Posts encoded spans to one OTLP gateway. Implements the telemetry ``TraceSender``."""
+    """Posts encoded telemetry to one OTLP gateway. Implements the telemetry ``TelemetrySender``."""
 
     def __init__(
         self,
@@ -57,7 +60,7 @@ class OtlpSender:
         base = check_otlp_endpoint(endpoint)
         if not _USER.fullmatch(user):
             raise NetError(NetErrorCode.BLOCKED, "the telemetry user must be a numeric id")
-        self._url = base + TRACES_PATH
+        self._base = base
         basic = base64.b64encode(f"{user}:{token.get_secret_value()}".encode()).decode()
         self._http = httpx.Client(
             headers={"Authorization": f"Basic {basic}", "Content-Type": "application/json"},
@@ -73,21 +76,36 @@ class OtlpSender:
         self._http.close()
 
     def send_traces(self, body: bytes) -> bool:
-        """Post one batch. True if the gateway took it; a refusal or failure is logged and dropped."""
+        """Post one batch of spans. True if the gateway took it."""
+        return self._post(TRACES_PATH, body)
+
+    def send_metrics(self, body: bytes) -> bool:
+        """Post one batch of metrics. True if the gateway took it."""
+        return self._post(METRICS_PATH, body)
+
+    def send_logs(self, body: bytes) -> bool:
+        """Post one batch of log lines. True if the gateway took it."""
+        return self._post(LOGS_PATH, body)
+
+    def _post(self, path: str, body: bytes) -> bool:
+        # A refusal or failure is logged by code and dropped: never retried.
+        signal = path.rsplit("/", 1)[-1]
         if len(body) > MAX_BODY_BYTES:
-            self._log.warning("telemetry_dropped", reason="net.too_large", bytes=len(body))
+            self._log.warning("telemetry_dropped", kind=signal, reason="net.too_large", bytes=len(body))
             return False
         try:
-            response = self._http.post(self._url, content=body)
+            response = self._http.post(self._base + path, content=body)
         except httpx.TimeoutException:
-            self._log.warning("telemetry_dropped", reason=NetErrorCode.TIMEOUT.value)
+            self._log.warning("telemetry_dropped", kind=signal, reason=NetErrorCode.TIMEOUT.value)
             return False
         except httpx.TransportError:
-            self._log.warning("telemetry_dropped", reason=NetErrorCode.UNAVAILABLE.value)
+            self._log.warning("telemetry_dropped", kind=signal, reason=NetErrorCode.UNAVAILABLE.value)
             return False
         status = response.status_code
         if status not in _OK:
-            self._log.warning("telemetry_dropped", reason=_refusal(status).value, http_status=status)
+            self._log.warning(
+                "telemetry_dropped", kind=signal, reason=_refusal(status).value, http_status=status
+            )
             return False
         return True
 

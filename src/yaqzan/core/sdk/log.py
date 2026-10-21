@@ -17,10 +17,15 @@ each time, so there is no way to obtain an unredacted one by import order.
 Inside a recorded span every line also carries ``trace_id`` and ``span_id``, so
 a log line leads straight to its trace (ADR-032, R2). They are added after
 redaction: they are IDs we made, and redaction must not mangle them.
+
+When telemetry is on, :func:`install_sink` hands every finished (redacted) line
+to a sink as well, which ships an allow-listed part of it to the log store. A
+sink that fails is ignored: shipping must never break logging.
 """
 
 from __future__ import annotations
 
+import contextlib
 import re
 import sys
 from collections.abc import Callable, Mapping
@@ -172,6 +177,26 @@ def _trace_processor(_logger: object, _method: str, event_dict: dict[str, Any]) 
     return event_dict
 
 
+type LogSink = Callable[[Mapping[str, object]], None]
+
+
+class _Sink:
+    current: LogSink | None = None
+
+
+def install_sink(sink: LogSink | None) -> None:
+    """Hand every redacted log line to ``sink`` as well; ``None`` stops it."""
+    _Sink.current = sink
+
+
+def _sink_processor(_logger: object, _method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+    sink = _Sink.current
+    if sink is not None:
+        with contextlib.suppress(Exception):  # shipping must never break logging
+            sink(dict(event_dict))
+    return event_dict
+
+
 def get_logger(name: str, *, sink: TextIO | None = None, **context: object) -> Any:  # noqa: ANN401
     """Return a logger that writes redacted JSON lines to ``sink`` (stderr by default).
 
@@ -184,6 +209,7 @@ def get_logger(name: str, *, sink: TextIO | None = None, **context: object) -> A
         structlog.processors.format_exc_info,
         _redact_processor,
         _trace_processor,
+        _sink_processor,
         structlog.processors.JSONRenderer(sort_keys=True),
     ]
     logger = structlog.wrap_logger(
