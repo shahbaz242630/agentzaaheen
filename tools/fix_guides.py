@@ -159,12 +159,11 @@ def fixes_list(path: Path | None, projects: Collection[str]) -> dict[str, Projec
 
 def guide_text(guides: Mapping[str, Project], project: str, part: str, reason: str | None = None) -> str:
     """One part's guide in plain text: every reason, or only ``reason``."""
+    wanted = [r for r in REASONS if r == reason] or list(REASONS)
     entry = guides.get(project)
     found = entry.parts.get(part) if entry is not None else None
     if entry is None or found is None:
-        return f"There is no fix guide for {project}/{part}. Use the general steps:\n" + _reasons(
-            {}, [reason] if reason in REASONS else list(REASONS)
-        )
+        return f"There is no fix guide for {project}/{part}. Use the general steps:\n" + _reasons({}, wanted)
     lines = [
         f"{entry.name}: {part}",
         f"Served by: {found.serves}",
@@ -174,7 +173,6 @@ def guide_text(guides: Mapping[str, Project], project: str, part: str, reason: s
         f"Roll back: {found.rollback}",
         f"Fixes are approved by: {found.owner}",
     ]
-    wanted = [reason] if reason in REASONS else list(REASONS)
     return "\n".join(lines) + "\n" + _reasons(found.fixes, wanted)
 
 
