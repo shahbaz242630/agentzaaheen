@@ -19,7 +19,7 @@ from pydantic import SecretStr
 
 from yaqzan.core.net.client import NetPolicy, check_host
 from yaqzan.core.net.errors import NetError, NetErrorCode
-from yaqzan.core.sdk import get_logger
+from yaqzan.core.sdk import get_logger, span
 
 NTFY_HOST = "ntfy.sh"
 MAX_MESSAGE_BYTES = 1024
@@ -75,14 +75,16 @@ class PushClient:
         headers = {"Title": _plain_line(title, MAX_TITLE), "Priority": priority, "Content-Type": "text/plain"}
         body = _plain_line(message, MAX_MESSAGE_BYTES).encode()
         url = f"https://{self._host}/{self._topic.get_secret_value()}"
-        try:
-            response = await self._http.post(url, content=body, headers=headers)
-        except httpx.TimeoutException:
-            raise NetError(NetErrorCode.TIMEOUT, "the push service did not answer in time") from None
-        except httpx.TransportError:
-            raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the push service") from None
-        if response.status_code not in _OK:
-            raise NetError(
-                NetErrorCode.CLIENT_ERROR, "the push service refused the message", status=response.status_code
-            )
+        attributes = {"server.address": self._host, "http.request.method": "POST"}  # never the topic
+        with span(f"POST {self._host}", kind="client", attributes=attributes) as current:
+            try:
+                response = await self._http.post(url, content=body, headers=headers)
+            except httpx.TimeoutException:
+                raise NetError(NetErrorCode.TIMEOUT, "the push service did not answer in time") from None
+            except httpx.TransportError:
+                raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the push service") from None
+            status = response.status_code
+            current.set_attribute("http.response.status_code", status)
+            if status not in _OK:
+                raise NetError(NetErrorCode.CLIENT_ERROR, "the push service refused it", status=status)
         self._log.info("push_sent", bytes=len(body), priority=priority)

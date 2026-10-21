@@ -8,7 +8,9 @@ What it does:
     every module and plugin uses, and the error catalogue that puts every
     reason code into plain English (:func:`explain`), the uptime shapes
     (an address's rule, its status and timing, never its page) and the
-    backend health shapes (codes and numbers only).
+    backend health shapes (codes and numbers only), and spans: :func:`span`
+    opens one, :func:`traceparent` names the current one, and every log line
+    inside a span carries its IDs (ADR-032).
 
 Public interface:
     Everything listed in ``__all__`` below. Nothing else is public.
@@ -87,6 +89,17 @@ from yaqzan.core.sdk.revenue import (
     SubscriptionStatus,
 )
 from yaqzan.core.sdk.tools import ToolLevel, ToolSpec
+from yaqzan.core.sdk.trace import (
+    ALLOWED_ATTRIBUTES,
+    error_type,
+    event,
+    failed,
+    note,
+    span,
+    trace_ids,
+    traceparent,
+)
+from yaqzan.core.sdk.trace import install as install_tracing
 from yaqzan.core.sdk.uptime import (
     Expect,
     SiteCheck,
@@ -99,6 +112,7 @@ from yaqzan.core.sdk.uptime import (
 )
 
 __all__ = [
+    "ALLOWED_ATTRIBUTES",
     "KNOWN_CODES",
     "MAX_LOG_CHARS",
     "MAX_LOG_LINES",
@@ -158,14 +172,22 @@ __all__ = [
     "clean_log",
     "combine_trust",
     "contains_sensitive",
+    "error_type",
+    "event",
     "explain",
+    "failed",
     "get_logger",
+    "install_tracing",
     "is_sensitive_key",
     "judge",
     "log_digest",
     "make_failed_step_log",
     "make_idempotency_key",
     "max_data_class",
+    "note",
     "redact",
     "redact_text",
+    "span",
+    "trace_ids",
+    "traceparent",
 ]

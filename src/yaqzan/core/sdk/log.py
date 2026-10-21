@@ -13,6 +13,10 @@ Two layers:
 
 No global configuration: :func:`get_logger` builds a fully redacting logger
 each time, so there is no way to obtain an unredacted one by import order.
+
+Inside a recorded span every line also carries ``trace_id`` and ``span_id``, so
+a log line leads straight to its trace (ADR-032, R2). They are added after
+redaction: they are IDs we made, and redaction must not mangle them.
 """
 
 from __future__ import annotations
@@ -24,6 +28,8 @@ from typing import Any, TextIO
 
 import structlog
 from pydantic import SecretBytes, SecretStr
+
+from yaqzan.core.sdk.trace import trace_ids
 
 REDACTED = "[REDACTED]"
 _MAX_DEPTH = 8
@@ -159,6 +165,13 @@ def _redact_processor(_logger: object, _method: str, event_dict: dict[str, Any])
     return {redact_text(str(key)): _redact_item(str(key), value, 0) for key, value in event_dict.items()}
 
 
+def _trace_processor(_logger: object, _method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+    ids = trace_ids()
+    if ids is not None:
+        event_dict["trace_id"], event_dict["span_id"] = ids
+    return event_dict
+
+
 def get_logger(name: str, *, sink: TextIO | None = None, **context: object) -> Any:  # noqa: ANN401
     """Return a logger that writes redacted JSON lines to ``sink`` (stderr by default).
 
@@ -170,6 +183,7 @@ def get_logger(name: str, *, sink: TextIO | None = None, **context: object) -> A
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.format_exc_info,
         _redact_processor,
+        _trace_processor,
         structlog.processors.JSONRenderer(sort_keys=True),
     ]
     logger = structlog.wrap_logger(

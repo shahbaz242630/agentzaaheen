@@ -10,6 +10,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from tests.tracing import recorded
 from tools.dashboard_uptime import UptimeLive, start_watch
 from yaqzan.core.net import NetError, NetErrorCode, PushClient
 from yaqzan.core.notify import Alert, UptimeWatch, deliver
@@ -291,3 +292,21 @@ def test_start_watch_runs_the_first_round(capsys: pytest.CaptureFixture[str]) ->
     assert live.latest["eva"].up == 1
     assert "alerts go to your phone" in capsys.readouterr().out
     assert TOPIC.get_secret_value() not in capsys.readouterr().out
+
+
+def test_a_round_is_one_trace_holding_every_probe() -> None:
+    live = UptimeLive(
+        {"eva": (SiteRule(url=A),)},
+        NAMES,
+        clock=Clock(),
+        transport=httpx.MockTransport(lambda _r: httpx.Response(500)),
+    )
+    with recorded() as spans:
+        (alert,) = asyncio.run(live.round())
+    assert alert.down
+    round_span = spans.named("uptime round")
+    assert (round_span.attributes or {})["yaqzan.count"] == 1
+    probes = [s for s in spans.spans if s.name.startswith("probe ")]
+    assert probes
+    assert round_span.context is not None
+    assert all(p.context is not None and p.context.trace_id == round_span.context.trace_id for p in probes)

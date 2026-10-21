@@ -2,7 +2,8 @@
 
 Every query in the store is a fixed SQL string with ``$n`` parameters; values are
 never formatted into SQL. Tables are always schema-qualified (``yaqzan.x``) so a
-changed ``search_path`` cannot redirect a query.
+changed ``search_path`` cannot redirect a query. Each borrowed connection is
+one client span (no SQL text, no values: ADR-032).
 """
 
 from __future__ import annotations
@@ -16,11 +17,13 @@ import asyncpg
 from asyncpg.pool import PoolConnectionProxy
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from yaqzan.core.sdk import span
 from yaqzan.core.store.errors import StoreError, StoreErrorCode
 
 type Connection = PoolConnectionProxy[asyncpg.Record]
 
 _UNAVAILABLE_CLASSES = ("08", "28", "53", "57")  # connection, auth, resources, shutdown
+_DB = {"db.system.name": "postgresql"}
 
 
 class DatabaseSettings(BaseModel):
@@ -113,11 +116,13 @@ class Database:
     @asynccontextmanager
     async def connection(self) -> AsyncIterator[Connection]:
         """Borrow one connection (autocommit). Database errors leave as ``StoreError``."""
-        async with _translated(), self._pool.acquire() as conn:
-            yield conn
+        with span("db connection", kind="client", attributes=_DB):
+            async with _translated(), self._pool.acquire() as conn:
+                yield conn
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[Connection]:
         """Borrow one connection inside a transaction: all of it commits, or none of it."""
-        async with _translated(), self._pool.acquire() as conn, conn.transaction():
-            yield conn
+        with span("db transaction", kind="client", attributes=_DB):
+            async with _translated(), self._pool.acquire() as conn, conn.transaction():
+                yield conn

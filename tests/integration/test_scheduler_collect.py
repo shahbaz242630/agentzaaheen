@@ -12,6 +12,7 @@ from pydantic import SecretStr
 
 from tests.fixtures import paddle_world as world
 from tests.integration.conftest import ScratchDb, open_db, run
+from tests.tracing import recorded
 from yaqzan.core.metrics import CountAndAmounts, Freshness, Unknown
 from yaqzan.core.net import JsonClient, NetPolicy
 from yaqzan.core.scheduler import CURSOR_OVERLAP, RevenueSnapshot, SyncOutcome, revenue_snapshot, sync_revenue
@@ -211,3 +212,27 @@ def test_a_crash_is_recorded_then_raised(test_db: ScratchDb) -> None:
     assert state is not None
     assert state.last_error_code == "collect.crashed"
     assert state.last_success_at is None
+
+
+def test_each_sync_is_one_span_with_its_count_or_its_failure(test_db: ScratchDb) -> None:
+    source = fake()
+
+    async def body() -> None:
+        async with open_db(test_db.app_url) as db:
+            await sync_revenue(db, TENANT, PROJECT, source, now=world.NOW)
+            source.fail_with = SourceErrorCode.AUTH
+            await sync_revenue(db, TENANT, PROJECT, source, now=world.NOW + SCHEDULE)
+
+    with recorded() as spans:
+        run(body())
+    good, bad = [s for s in spans.spans if s.name == "sync revenue paddle"]
+    expected = len(world.EXPECTED_SUBSCRIPTIONS) + len(world.EXPECTED_PAYMENTS) + len(world.EXPECTED_REFUNDS)
+    assert dict(good.attributes or {}) == {
+        "yaqzan.source": "paddle",
+        "yaqzan.project": str(PROJECT),
+        "yaqzan.count": expected,
+    }
+    assert (bad.attributes or {})["error.type"] == "source.auth"
+    assert good.context is not None
+    db_spans = [s for s in spans.spans if s.name.startswith("db ") and s.parent is not None]
+    assert any(s.parent.span_id == good.context.span_id for s in db_spans if s.parent is not None)
