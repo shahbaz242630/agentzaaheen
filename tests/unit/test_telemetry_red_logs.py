@@ -422,3 +422,28 @@ def test_a_log_line_inside_a_span_ships_with_its_trace() -> None:
     assert names == {SERVER}
     assert sender.order[-1] == "close"  # closed only after the last logs and metrics
     assert len(sender.traces) == 1
+
+
+def test_counts_never_split_a_series() -> None:
+    red = RedMetrics(0)
+    for count in (1, 2, 3):
+        attrs = {"server.address": "api.paddle.com", "yaqzan.count": count, "yaqzan.attempts": count}
+        red.on_end(finished("GET api.paddle.com", 0.01, kind=SpanKind.CLIENT, attributes=attrs))
+    [point] = points(red)[CLIENT]
+    assert point["count"] == "3"
+
+
+def test_nothing_is_queued_after_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
+    queued: list[object] = []
+
+    class Watched(LogQueue):
+        def __call__(self, line: Any) -> None:
+            queued.append(line.get("event"))
+            super().__call__(line)
+
+    monkeypatch.setattr(tracing_module, "LogQueue", Watched)
+    tracing = start_tracing(FakeSender(), version="1")
+    get_logger("t", sink=io.StringIO()).info("while_on")
+    tracing.shutdown()
+    get_logger("t", sink=io.StringIO()).info("after_off")
+    assert queued == ["while_on"]
