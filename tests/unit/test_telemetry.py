@@ -95,7 +95,8 @@ def test_strings_are_redacted_and_cut(spans: Recorded) -> None:
 
 
 def test_a_secret_split_by_the_cut_is_still_redacted() -> None:
-    pairs = attributes({"yaqzan.reason": "x" * (MAX_TEXT - 10) + FAKE_TOKEN}, ALLOWED_ATTRIBUTES)
+    # Cut first, 16 of the token's characters would survive, too few for its pattern to match.
+    pairs = attributes({"yaqzan.reason": "x" * (MAX_TEXT - 21) + " " + FAKE_TOKEN}, ALLOWED_ATTRIBUTES)
     assert "AAAAAAAA" not in json.dumps(pairs)
 
 
