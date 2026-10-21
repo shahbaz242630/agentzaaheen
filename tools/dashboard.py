@@ -40,7 +40,9 @@ re-checking every 5 minutes; with ``--ntfy-topic-env NAME`` a site going
 down (two failed checks in a row) or coming back is pushed to the
 Chairman's phone (ADR-031). With ``--otel-token-env NAME --otel-endpoint URL
 --otel-user ID`` every API request, outside call and database use is traced
-and sent to the trace store (``tools.dashboard_tracing``, ADR-032).
+and sent to the trace store (``tools.dashboard_tracing``, ADR-032). With
+``--fixes FILE`` the chat can read each project part's fix guide
+(``tools.fix_guides``, the local ``projects/fixes.yaml``).
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
@@ -53,6 +55,7 @@ Usage:
     uv run python -m tools.dashboard --switches --enrol-passkey   # once, to set up the passkey
     uv run python -m tools.dashboard --uptime projects/uptime.yaml --ntfy-topic-env YAQZAN_NTFY_TOPIC
     uv run python -m tools.dashboard --supabase projects/supabase.yaml
+    uv run python -m tools.dashboard --model-url http://127.0.0.1:8766 --fixes projects/fixes.yaml
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
 
@@ -87,6 +90,7 @@ from tools.dashboard_supabase import SupabaseProject, supabase_list, supabase_po
 from tools.dashboard_switches import LaptopSwitches, Prepare, connect, off_connectors
 from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options, tracing_from
 from tools.dashboard_uptime import start_watch, uptime_list, uptime_portfolio
+from tools.fix_guides import Project, fixes_list
 from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
 from yaqzan.core.api.registry import RegistryPage, registry_page, uses_from_cards
@@ -276,6 +280,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--ntfy-topic-env", help="env var holding the secret ntfy topic for uptime alerts")
     parser.add_argument("--supabase", type=Path, help="read the Supabase projects in this local list")
+    parser.add_argument("--fixes", type=Path, help="give the chat the fix guides in this local file")
     add_tracing_options(parser)
     return parser
 
@@ -318,6 +323,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         projects = {p.id for p in SamplePortfolio(clock()).projects()}
         uptime = uptime_list(ns.uptime, projects)
         backends = supabase_list(ns.supabase, projects)
+        fixes = fixes_list(ns.fixes, projects)
         off = off_connectors(connected[1], registry) if connected else frozenset[str]()
         with span("dashboard start"):  # every start-up read in one trace
             portfolio, live = _real_data(ns, env, clock, transport, off=off, uptime=uptime, backends=backends)
@@ -341,7 +347,13 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
     if ns.model_url:
         token = env.get(ns.github_token_env or "", "")
         chat = _chat(
-            ns.model_url, token, registry=registry, switches=switches, clock=clock, transport=transport
+            ns.model_url,
+            token,
+            registry=registry,
+            switches=switches,
+            clock=clock,
+            transport=transport,
+            fixes=fixes,
         )
         if chat is None:
             return 1
@@ -367,17 +379,27 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
     switches: LaptopSwitches | None,
     clock: Clock,
     transport: httpx.AsyncBaseTransport | None,
+    fixes: Mapping[str, Project],
 ) -> ChatBackend | None:
     """The chat, with tools for what is on (with switches, it asks them before every question)."""
     raw = raw_token.strip()
     token = SecretStr(raw) if raw and usable_secret(raw) else None
     if switches is None:
-        tools, skills = tools_for(registry, PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport=transport)
+        tools, skills = tools_for(
+            registry, PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport=transport, fixes=fixes
+        )
         return model_chat(model_url, transport, tools, skills)
 
     def build(standing: Standing) -> tuple[list[Tool], str]:
         return tools_for(
-            registry, PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport=transport, standing=standing
+            registry,
+            PLUGINS_ROOT,
+            token,
+            GITHUB_REPOS,
+            clock,
+            transport=transport,
+            standing=standing,
+            fixes=fixes,
         )
 
     return model_chat(model_url, transport, switched=Switched(build=build, standing=switches.standing))

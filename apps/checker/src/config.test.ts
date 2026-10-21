@@ -12,8 +12,13 @@ describe("settings", () => {
     expect(settings.pingKey).toBe(KEY);
     expect(settings.pingUrl).toBe(PING);
     expect(settings.targets).toEqual([
-      { project: "eva", projectName: "Eva", url: "https://api.example.com/health", expect: "ok" },
+      { project: "eva", projectName: "Eva", url: "https://api.example.com/health", expect: "ok", part: null },
     ]);
+  });
+
+  it("reads a part's name when one is given", () => {
+    const raw = JSON.stringify({ eva: { name: "Eva", sites: [{ url: "https://a.example.com", expect: "ok", part: "sign-in" }] } });
+    expect(readTargets(raw)[0]?.part).toBe("sign-in");
   });
 
   it.each([
@@ -45,8 +50,12 @@ describe("targets", () => {
     [JSON.stringify({ eva: { name: "Eva<script>", sites: [] } }), "name is not usable"],
     [JSON.stringify({ eva: { name: "Eva", sites: [] } }), "list of sites"],
     [JSON.stringify({ eva: { name: "Eva", sites: "x" } }), "list of sites"],
-    [JSON.stringify({ eva: { name: "Eva", sites: ["x"] } }), "only a url and an expect"],
-    [site({ note: "x" }), "only a url and an expect"],
+    [JSON.stringify({ eva: { name: "Eva", sites: ["x"] } }), "only a url, an expect and a part"],
+    [site({ note: "x" }), "only a url, an expect and a part"],
+    [site({ part: "API" }), "a part is not lowercase"],
+    [site({ part: "sign in" }), "a part is not lowercase"],
+    [site({ part: "a".repeat(25) }), "a part is not lowercase"],
+    [site({ part: 7 }), "a part is not lowercase"],
     [site({ url: "http://a.example.com" }), "https address"],
     [site({ url: "https://a.example.com/?q=1" }), "https address"],
     [site({ url: "https://user@a.example.com" }), "https address"],

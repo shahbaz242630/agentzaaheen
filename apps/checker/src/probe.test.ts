@@ -4,7 +4,7 @@ import type { Target } from "./config";
 import { fakeDeps } from "./fakes.test-support";
 import { checkAll, judge, RECHECK_AFTER_MS, statusOf } from "./probe";
 
-const site = (url: string, expect: "ok" | "answer" = "ok"): Target => ({ project: "eva", projectName: "Eva", url, expect });
+const site = (url: string, expect: "ok" | "answer" = "ok"): Target => ({ project: "eva", projectName: "Eva", url, expect, part: null });
 
 describe("judge (same rules as core/sdk/uptime.py)", () => {
   it.each([

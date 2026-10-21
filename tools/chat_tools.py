@@ -8,6 +8,8 @@ each with a closed list of arguments:
 - ``failed_build_log``: the newest failed build's log on one project's main
   branch, read from GitHub only when asked (needs the read-only token), and
   always handed to the model as untrusted text.
+- ``fix_guide`` (with ``--fixes``): what serves one part of a project and what
+  to check or fix when it is down (``tools.fix_guides``, our own local file).
 
 The skill catalogue in the prompt lists the same skills, one line each.
 
@@ -28,6 +30,7 @@ from pathlib import Path
 import httpx
 from pydantic import SecretStr
 
+from tools.fix_guides import Project, fix_guide_tool
 from yaqzan.core.api import ChatBackend
 from yaqzan.core.llm_gateway import ChatModel, ChatReply, FactChat, Tool, catalogue
 from yaqzan.core.net import DownloadPolicy, JsonClient, ModelClient, NetError, NetPolicy
@@ -199,6 +202,7 @@ def tools_for(  # noqa: PLR0913  # the registry, where it lives, the outside wor
     *,
     transport: httpx.AsyncBaseTransport | None = None,
     standing: Standing | None = None,
+    fixes: Mapping[str, Project] | None = None,
 ) -> ToolSet:
     """The chat's tools and skill catalogue for what is on (``standing``; ``None``: no switches, so all)."""
     skill, skills = skill_tool(registry, plugins_root, None if standing is None else standing.on(Kind.SKILL))
@@ -206,4 +210,7 @@ def tools_for(  # noqa: PLR0913  # the registry, where it lives, the outside wor
     github_on = standing is None or GITHUB_CONNECTOR in standing.on(Kind.CONNECTOR)
     if token is not None and github_on:
         tools.append(build_log_tool(token, repos, clock, transport))
+    guide = fix_guide_tool(fixes or {})
+    if guide is not None:
+        tools.append(guide)
     return tools, skills

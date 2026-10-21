@@ -62,7 +62,8 @@ def _down(site: SiteCheck) -> Entry:
 
 
 def _where(site: SiteCheck) -> str:
-    return site.url.removeprefix("https://").rstrip("/")
+    host = site.url.removeprefix("https://").rstrip("/")
+    return f"{site.part} ({host})" if site.part else host
 
 
 def _card(

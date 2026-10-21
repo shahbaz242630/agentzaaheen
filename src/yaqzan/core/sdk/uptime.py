@@ -10,6 +10,11 @@ Each address has a rule:
   and health pages.
 - ``answer``: it must answer at all without a server error (anything below
   500). For a bare API address that has no page of its own.
+
+An address may also name its **part** of the product (``site``, ``api``,
+``sign-in``; SDK 1.9.0), so an alert and the fix guides can say which part is
+down rather than "1 of 6 addresses". A part is our own short name, never an
+address.
 """
 
 from __future__ import annotations
@@ -25,6 +30,8 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 URL = r"^https://[a-z0-9.-]+(/[A-Za-z0-9._~/-]*)?$"
 _REASON = r"^uptime\.[a-z_]+$"
+PART = r"^[a-z0-9]+(-[a-z0-9]+)*$"
+MAX_PART = 24
 MAX_SITES = 50
 _SERVER_ERROR = 500
 _REDIRECT = range(300, 400)
@@ -46,6 +53,7 @@ class SiteRule(BaseModel):
 
     url: str = Field(pattern=URL, max_length=300)
     expect: Expect = Expect.OK
+    part: str | None = Field(default=None, pattern=PART, max_length=MAX_PART)
 
     @field_validator("url")
     @classmethod
@@ -80,6 +88,7 @@ class SiteCheck(BaseModel):
 
     url: str = Field(pattern=URL, max_length=300)
     expect: Expect
+    part: str | None = Field(default=None, pattern=PART, max_length=MAX_PART)
     up: bool
     status: int | None = Field(default=None, ge=100, le=599)
     latency_ms: int | None = Field(default=None, ge=0)
@@ -119,12 +128,18 @@ def check_site(rule: SiteRule, answer: StatusAnswer | None, checked_at: datetime
     """The check for one address; ``answer`` is None when it did not answer at all."""
     if answer is None:
         return SiteCheck(
-            url=rule.url, expect=rule.expect, up=False, reason="uptime.no_answer", checked_at=checked_at
+            url=rule.url,
+            expect=rule.expect,
+            part=rule.part,
+            up=False,
+            reason="uptime.no_answer",
+            checked_at=checked_at,
         )
     up, reason = judge(rule, answer.status)
     return SiteCheck(
         url=rule.url,
         expect=rule.expect,
+        part=rule.part,
         up=up,
         status=answer.status,
         latency_ms=answer.elapsed_ms,
