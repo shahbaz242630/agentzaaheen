@@ -13,12 +13,15 @@ What it does:
     credentials. :class:`StatusProbe` makes status-only GETs for uptime: it
     reads the status line and closes, never the page, never a redirect.
     :class:`PushClient` posts one short alert to the Chairman's secret ntfy
-    topic (ADR-031), the core's only outbound message.
+    topic (ADR-031), the core's only outbound message. :class:`OtlpSender`
+    posts finished spans to the trace store's OTLP gateway (ADR-032), never
+    retried, dropped on failure.
 
 Public interface:
     ``JsonClient``, ``NetPolicy``, ``DownloadPolicy``, ``NetError``, ``NetErrorCode``,
     ``check_base_url``, ``check_path``, ``ModelClient``, ``check_model_url``,
-    ``StatusProbe``, ``check_probe_url``, ``PushClient``, ``NTFY_HOST``.
+    ``StatusProbe``, ``check_probe_url``, ``PushClient``, ``NTFY_HOST``,
+    ``OtlpSender``, ``check_otlp_endpoint``.
     A ``JsonClient`` satisfies the SDK's ``JsonGetter`` protocol, which is all
     a connector ever sees.
 
@@ -27,8 +30,9 @@ How to test:
     test runs through ``httpx.MockTransport``).
 
 Must never:
-    Send anything but GET (the model chat POST and the ntfy alert aside); follow a redirect (the one signed
-    download aside, with no credentials); talk to a host not on the
+    Send anything but GET (the model chat POST, the ntfy alert and the
+    telemetry POST aside); follow a redirect (the one signed download aside,
+    with no credentials); talk to a host not on the
     allowlist; put a key in a url, an error or a log line. No other module
     may import an HTTP library (import-linter).
 """
@@ -36,6 +40,7 @@ Must never:
 from yaqzan.core.net.client import DownloadPolicy, JsonClient, NetPolicy, check_base_url, check_path
 from yaqzan.core.net.errors import NetError, NetErrorCode
 from yaqzan.core.net.model import ModelClient, check_model_url
+from yaqzan.core.net.otlp import OtlpSender, check_otlp_endpoint
 from yaqzan.core.net.probe import StatusProbe, check_probe_url
 from yaqzan.core.net.push import NTFY_HOST, PushClient
 
@@ -47,10 +52,12 @@ __all__ = [
     "NetError",
     "NetErrorCode",
     "NetPolicy",
+    "OtlpSender",
     "PushClient",
     "StatusProbe",
     "check_base_url",
     "check_model_url",
+    "check_otlp_endpoint",
     "check_path",
     "check_probe_url",
 ]

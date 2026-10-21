@@ -26,7 +26,7 @@ from pydantic import SecretStr
 
 from yaqzan.core.net.client import NetPolicy, check_host, decode_object, read_capped, refuse_status
 from yaqzan.core.net.errors import NetError, NetErrorCode
-from yaqzan.core.sdk import get_logger
+from yaqzan.core.sdk import get_logger, span
 
 LOOPBACK = "127.0.0.1"
 CHAT_PATH = "/v1/chat/completions"
@@ -116,19 +116,24 @@ class ModelClient:
             "temperature": temperature,
             "stream": False,
         }
+        host = urlsplit(self._base).hostname or ""
         try:
-            try:
-                async with self._http.stream("POST", self._base + CHAT_PATH, json=body) as response:
-                    refuse_status(response.status_code)
-                    raw = await read_capped(response, self._limit)
-            except httpx.TimeoutException:
-                raise NetError(NetErrorCode.TIMEOUT, "the model took too long") from None
-            except httpx.TransportError:
-                raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the model server") from None
-            return _first_answer(decode_object(raw))
+            with span(f"POST {host}", kind="client", attributes={"server.address": host}):
+                return await self._ask(body)
         except NetError as exc:
             self._log.warning("model_call_failed", code=exc.net_code.value, status=exc.status)
             raise exc.at(_OPERATION, 1, 1) from None
+
+    async def _ask(self, body: dict[str, object]) -> str:
+        try:
+            async with self._http.stream("POST", self._base + CHAT_PATH, json=body) as response:
+                refuse_status(response.status_code)
+                raw = await read_capped(response, self._limit)
+        except httpx.TimeoutException:
+            raise NetError(NetErrorCode.TIMEOUT, "the model took too long") from None
+        except httpx.TransportError:
+            raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the model server") from None
+        return _first_answer(decode_object(raw))
 
 
 def _first_answer(payload: dict[str, object]) -> str:

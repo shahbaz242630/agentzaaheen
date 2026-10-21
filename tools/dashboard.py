@@ -38,7 +38,9 @@ once (status only, never the page) from the local list ``projects/uptime.yaml``
 (``tools.dashboard_uptime``) and shows them on each project's Uptime card,
 re-checking every 5 minutes; with ``--ntfy-topic-env NAME`` a site going
 down (two failed checks in a row) or coming back is pushed to the
-Chairman's phone (ADR-031).
+Chairman's phone (ADR-031). With ``--otel-token-env NAME --otel-endpoint URL
+--otel-user ID`` every API request, outside call and database use is traced
+and sent to the trace store (``tools.dashboard_tracing``, ADR-032).
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
@@ -83,6 +85,7 @@ from tools.dashboard_sources import (
 )
 from tools.dashboard_supabase import SupabaseProject, supabase_list, supabase_portfolio
 from tools.dashboard_switches import LaptopSwitches, Prepare, connect, off_connectors
+from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options, tracing_from
 from tools.dashboard_uptime import start_watch, uptime_list, uptime_portfolio
 from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
@@ -92,7 +95,7 @@ from yaqzan.core.auth import Site
 from yaqzan.core.llm_gateway import Tool
 from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Registry, load_registry
-from yaqzan.core.sdk import SiteRule
+from yaqzan.core.sdk import SiteRule, span
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
@@ -238,9 +241,17 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
     if done is not None:
         return done
     env = os.environ if environ is None else environ
-    return _start(
-        ns, env, static_dir=static_dir, serve=serve, transport=transport, clock=clock, prepare=prepare
-    )
+    try:
+        tracing = tracing_from(ns, env)
+    except TracingNotStartedError:
+        return 1
+    try:
+        return _start(
+            ns, env, static_dir=static_dir, serve=serve, transport=transport, clock=clock, prepare=prepare
+        )
+    finally:
+        if tracing is not None:
+            tracing.shutdown()
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -265,6 +276,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--ntfy-topic-env", help="env var holding the secret ntfy topic for uptime alerts")
     parser.add_argument("--supabase", type=Path, help="read the Supabase projects in this local list")
+    add_tracing_options(parser)
     return parser
 
 
@@ -307,7 +319,8 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         uptime = uptime_list(ns.uptime, projects)
         backends = supabase_list(ns.supabase, projects)
         off = off_connectors(connected[1], registry) if connected else frozenset[str]()
-        portfolio, live = _real_data(ns, env, clock, transport, off=off, uptime=uptime, backends=backends)
+        with span("dashboard start"):  # every start-up read in one trace
+            portfolio, live = _real_data(ns, env, clock, transport, off=off, uptime=uptime, backends=backends)
     except (_NotStartedError, ListNotUsableError):
         return 1
     chosen = portfolio or SamplePortfolio(clock())

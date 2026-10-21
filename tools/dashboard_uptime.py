@@ -34,7 +34,7 @@ from yaqzan.core.api.uptime import CARD_ID, uptime_card
 from yaqzan.core.api.views import Card
 from yaqzan.core.net import PushClient, StatusProbe
 from yaqzan.core.notify import Alert, UptimeWatch, deliver
-from yaqzan.core.sdk import SiteRule, UptimeReport, get_logger
+from yaqzan.core.sdk import SiteRule, UptimeReport, get_logger, span
 from yaqzan.plugins.connectors.uptime import UptimeSource
 
 # Re-checked every 5 minutes while the dashboard runs (ADR-031); "unknown" if no check for two hours.
@@ -119,12 +119,14 @@ class UptimeLive:
 
     async def round(self) -> list[Alert]:
         """Check every address once, keep the result, and send any alerts it calls for."""
-        reports = await read_uptime(self._rules, self._clock(), self._transport)
-        self.latest = {**self.latest, **reports}
-        alerts = self._watch.observe(reports)
-        if alerts and self._topic is not None:
-            async with PushClient(self._topic, transport=self._transport) as pusher:
-                await deliver(alerts, pusher)
+        with span("uptime round") as current:  # one trace per round: every probe and alert inside it
+            reports = await read_uptime(self._rules, self._clock(), self._transport)
+            self.latest = {**self.latest, **reports}
+            alerts = self._watch.observe(reports)
+            current.set_attribute("yaqzan.count", len(alerts))
+            if alerts and self._topic is not None:
+                async with PushClient(self._topic, transport=self._transport) as pusher:
+                    await deliver(alerts, pusher)
         for alert in alerts:
             print(f"dashboard: {alert.title}: {alert.message}")
         return alerts

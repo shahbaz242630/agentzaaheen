@@ -8,7 +8,9 @@ responses are size-capped and must be a JSON object. Retries
 (429, 5xx, timeouts, dropped connections, and a 403 that carries ``Retry-After``)
 back off with full jitter and obey ``Retry-After``; a 403 saying the hourly
 allowance is used up is reported as rate-limited, not as a refused key.
-Errors carry a code and status only, never a body or header.
+Errors carry a code and status only, never a body or header. Each call is
+one client span named after the host (never the path, which can hold names),
+with the final status, the attempts made and one event per retry (ADR-032).
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ import httpx
 from pydantic import SecretStr
 
 from yaqzan.core.net.errors import NetError, NetErrorCode
-from yaqzan.core.sdk import get_logger
+from yaqzan.core.sdk import event, get_logger, note, span
 
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 _AUTH_STATUSES = frozenset({401, 403})
@@ -147,7 +149,8 @@ class JsonClient:
             trust_env=False,
             transport=transport,
         )
-        self._log = get_logger("yaqzan.net", host=urlsplit(self._base).hostname)
+        self._host = urlsplit(self._base).hostname or ""
+        self._log = get_logger("yaqzan.net", host=self._host)
 
     async def __aenter__(self) -> Self:
         return self
@@ -176,6 +179,21 @@ class JsonClient:
 
     async def _get(self, path: str, params: Mapping[str, str]) -> bytes:
         """The body of a 200 answer to GET ``path``, retrying where it is safe."""
+        with span(f"GET {self._host}", kind="client", attributes=self._span_attributes()) as current:
+            try:
+                body = await self._get_retrying(path, params)
+            except NetError as exc:
+                current.set_attribute("yaqzan.attempts", exc.attempt or 0)
+                if exc.status is not None:
+                    current.set_attribute("http.response.status_code", exc.status)
+                raise
+            current.set_attribute("http.response.status_code", 200)
+            return body
+
+    def _span_attributes(self) -> dict[str, str | int]:
+        return {"server.address": self._host, "http.request.method": "GET"}
+
+    async def _get_retrying(self, path: str, params: Mapping[str, str]) -> bytes:
         try:
             url = self._base + check_path(path)
         except NetError as exc:
@@ -199,6 +217,7 @@ class JsonClient:
                     await self._back_off(attempt, None, path, exc.net_code.value)
                     continue
                 if isinstance(outcome, bytes):
+                    note("yaqzan.attempts", attempt)
                     return outcome
                 status, retry_after = outcome
                 if last:
@@ -249,14 +268,15 @@ class JsonClient:
         except NetError as exc:
             raise exc.at("GET (refused path)") from None
         where = f"GET {path} (download)"
-        try:
-            async with asyncio.timeout(self._policy.total_timeout_s):
-                link = await self._signed_link(url, params)
-            return await self._read_link(link, self._download)
-        except TimeoutError:
-            raise NetError(NetErrorCode.TIMEOUT, "the download took too long").at(where) from None
-        except NetError as exc:
-            raise exc.at(where) from None
+        with span(f"GET {self._host} (download)", kind="client", attributes=self._span_attributes()):
+            try:
+                async with asyncio.timeout(self._policy.total_timeout_s):
+                    link = await self._signed_link(url, params)
+                return await self._read_link(link, self._download)
+            except TimeoutError:
+                raise NetError(NetErrorCode.TIMEOUT, "the download took too long").at(where) from None
+            except NetError as exc:
+                raise exc.at(where) from None
 
     async def _signed_link(self, url: str, params: Mapping[str, str]) -> str:
         try:
@@ -310,6 +330,7 @@ class JsonClient:
             delay = max(delay, float(retry_after.strip()))
         delay = min(delay, self._policy.max_delay_s)
         self._log.warning("net_retry", path=path, attempt=attempt, reason=reason, delay_s=round(delay, 2))
+        event("retry", {"yaqzan.attempt": attempt, "yaqzan.reason": reason})
         await self._sleep(delay)
 
 

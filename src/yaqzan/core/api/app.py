@@ -10,7 +10,11 @@ JSON requests that carry the ``X-Yaqzan-Request`` header, so another web page
 cannot use it. Every response carries a strict Content-Security-Policy
 (SECURITY: no inline script, no remote images), and only the expected host
 names are answered, which stops a hostile web page reaching this server
-through DNS rebinding while it runs on the laptop.
+through DNS rebinding while it runs on the laptop. Each API request is one
+server span named by its route template (never the filled-in path), and the
+answer carries its ``traceparent``, so any error shown leads to its trace
+(ADR-032). A ``traceparent`` sent to us is ignored: every request starts its
+own trace.
 """
 
 from __future__ import annotations
@@ -40,7 +44,7 @@ from yaqzan.core.auth import PasskeyError
 from yaqzan.core.llm_gateway import ChatReply
 from yaqzan.core.policy import Verdict
 from yaqzan.core.registry import Kind
-from yaqzan.core.sdk import SourceError, get_logger
+from yaqzan.core.sdk import SourceError, failed, get_logger, span, traceparent
 from yaqzan.core.store import StoreError
 
 LOCAL_HOSTS: tuple[str, ...] = ("127.0.0.1", "localhost")
@@ -248,6 +252,35 @@ def _passkey_routes(app: FastAPI, switches: RegistrySwitches | None) -> None:
         return await _stored(_ready(switches).passkey())
 
 
+async def _with_headers(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    """Security headers on every answer; for API requests also a server span and its ``traceparent``."""
+    if not request.url.path.startswith("/api/"):
+        response = await call_next(request)
+        response.headers.update(SECURITY_HEADERS)
+        return response
+    method = request.method
+    with span(f"{method} /api", kind="server", attributes={"http.request.method": method}) as current:
+        response = await call_next(request)
+        route = _route_template(request)
+        current.update_name(f"{method} {route}")
+        current.set_attribute("http.route", route)
+        current.set_attribute("http.response.status_code", response.status_code)
+        if response.status_code >= 500:  # a server error, not a refusal
+            failed(current, str(response.status_code))
+        parent = traceparent()
+    response.headers.update(SECURITY_HEADERS)
+    response.headers["Cache-Control"] = "no-store"
+    if parent is not None:
+        response.headers["traceparent"] = parent
+    return response
+
+
+def _route_template(request: Request) -> str:
+    """The matched route's template (``/api/projects/{project_id}``), never the filled-in path."""
+    template = getattr(request.scope.get("route"), "path", None)
+    return template if isinstance(template, str) and template else "unmatched"
+
+
 def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of the dashboard
     portfolio: Portfolio,
     *,
@@ -270,15 +303,7 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     app = FastAPI(title="Yaqzan", docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
 
-    @app.middleware("http")
-    async def _security_headers(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        response = await call_next(request)
-        response.headers.update(SECURITY_HEADERS)
-        if request.url.path.startswith("/api/"):
-            response.headers["Cache-Control"] = "no-store"
-        return response
+    app.middleware("http")(_with_headers)
 
     @app.get("/api/projects")
     def list_projects() -> tuple[ProjectSummary, ...]:

@@ -7,9 +7,11 @@ from datetime import UTC, datetime
 
 import asyncpg
 import pytest
+from opentelemetry.trace import SpanKind, StatusCode
 
+from tests.tracing import recorded
 from yaqzan.core.store import MIGRATIONS, Migration, StoreError, StoreErrorCode
-from yaqzan.core.store.db import _translated, json_dumps, require_aware, translate
+from yaqzan.core.store.db import Database, _translated, json_dumps, require_aware, translate
 from yaqzan.core.store.migrations import check_history
 
 
@@ -128,3 +130,55 @@ def test_history_with_a_changed_checksum_is_refused() -> None:
     with pytest.raises(StoreError) as caught:
         check_history({1: Migration(1, "initial", "something else").checksum})
     assert caught.value.code is StoreErrorCode.MIGRATION_CHANGED
+
+
+class _FakeConnection:
+    def transaction(self) -> _Borrowed:
+        return _Borrowed(None)
+
+
+class _Borrowed:
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    async def __aenter__(self) -> object:
+        return self._value
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+
+class _FakePool:
+    def acquire(self) -> _Borrowed:
+        return _Borrowed(_FakeConnection())
+
+
+def test_each_borrowed_connection_is_one_client_span_without_sql() -> None:
+    db = Database(_FakePool())  # type: ignore[arg-type]  # a stand-in pool: no database needed
+
+    async def go() -> None:
+        async with db.connection():
+            pass
+        async with db.transaction():
+            pass
+
+    with recorded() as spans:
+        asyncio.run(go())
+    for name in ("db connection", "db transaction"):
+        done = spans.named(name)
+        assert done.kind is SpanKind.CLIENT
+        assert dict(done.attributes or {}) == {"db.system.name": "postgresql"}
+
+
+def test_a_database_failure_marks_the_span_with_the_store_code() -> None:
+    db = Database(_FakePool())  # type: ignore[arg-type]
+
+    async def go() -> None:
+        async with db.connection():
+            raise OSError("connection reset")
+
+    with recorded() as spans, pytest.raises(StoreError):
+        asyncio.run(go())
+    done = spans.named("db connection")
+    assert done.status.status_code is StatusCode.ERROR
+    assert (done.attributes or {})["error.type"] == "store.unavailable"

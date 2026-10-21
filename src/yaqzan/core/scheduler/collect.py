@@ -27,7 +27,9 @@ from yaqzan.core.sdk import (
     SourceErrorCode,
     Subscription,
     explain,
+    failed,
     get_logger,
+    span,
 )
 from yaqzan.core.store import Database, RevenueRows, StoreError
 
@@ -50,6 +52,19 @@ async def sync_revenue(
     db: Database, tenant_id: UUID, project_id: UUID, source: RevenueSource, *, now: datetime
 ) -> SyncOutcome:
     """Fetch from ``source``, save, and record the result in the source's sync state."""
+    attributes = {"yaqzan.source": source.source, "yaqzan.project": str(project_id)}
+    with span(f"sync revenue {source.source}", attributes=attributes) as current:
+        outcome = await _sync(db, tenant_id, project_id, source, now=now)
+        if outcome.error_code is not None:
+            failed(current, outcome.error_code)
+        else:
+            current.set_attribute("yaqzan.count", outcome.subscriptions + outcome.payments + outcome.refunds)
+        return outcome
+
+
+async def _sync(
+    db: Database, tenant_id: UUID, project_id: UUID, source: RevenueSource, *, now: datetime
+) -> SyncOutcome:
     rows = RevenueRows(db)
     log = get_logger("yaqzan.collect", source=source.source, project_id=str(project_id))
     state = await rows.sync_state(tenant_id, project_id, source.source)
