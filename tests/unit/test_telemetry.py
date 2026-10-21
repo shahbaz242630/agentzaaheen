@@ -174,11 +174,21 @@ def test_an_unfinished_or_invalid_span_is_skipped() -> None:
 class FakeSender:
     def __init__(self, *, accept: bool = True) -> None:
         self.bodies: list[bytes] = []
+        self.metrics: list[bytes] = []
+        self.logs: list[bytes] = []
         self.accept = accept
         self.closed = False
 
     def send_traces(self, body: bytes) -> bool:
         self.bodies.append(body)
+        return self.accept
+
+    def send_metrics(self, body: bytes) -> bool:
+        self.metrics.append(body)
+        return self.accept
+
+    def send_logs(self, body: bytes) -> bool:
+        self.logs.append(body)
         return self.accept
 
     def close(self) -> None:

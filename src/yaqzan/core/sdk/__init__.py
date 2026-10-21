@@ -10,7 +10,8 @@ What it does:
     (an address's rule, its status and timing, never its page) and the
     backend health shapes (codes and numbers only), and spans: :func:`span`
     opens one, :func:`traceparent` names the current one, and every log line
-    inside a span carries its IDs (ADR-032).
+    inside a span carries its IDs (ADR-032); :func:`install_log_sink` lets
+    telemetry ship each redacted line.
 
 Public interface:
     Everything listed in ``__all__`` below. Nothing else is public.
@@ -36,12 +37,14 @@ from yaqzan.core.sdk.code import REPO_PATTERN, BuildState, RepoHealth, RepoSourc
 from yaqzan.core.sdk.explain import KNOWN_CODES, Explanation, explain
 from yaqzan.core.sdk.log import (
     REDACTED,
+    LogSink,
     contains_sensitive,
     get_logger,
     is_sensitive_key,
     redact,
     redact_text,
 )
+from yaqzan.core.sdk.log import install_sink as install_log_sink
 from yaqzan.core.sdk.logs import (
     MAX_LOG_CHARS,
     MAX_LOG_LINES,
@@ -141,6 +144,7 @@ __all__ = [
     "Interval",
     "JsonGetter",
     "JsonReader",
+    "LogSink",
     "ModelInfo",
     "Payment",
     "PaymentStatus",
@@ -177,6 +181,7 @@ __all__ = [
     "explain",
     "failed",
     "get_logger",
+    "install_log_sink",
     "install_tracing",
     "is_sensitive_key",
     "judge",

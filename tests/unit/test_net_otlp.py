@@ -142,3 +142,20 @@ def test_an_oversized_batch_is_dropped_before_sending(capsys: pytest.CaptureFixt
 
 def test_a_batch_at_the_cap_is_sent() -> None:
     assert sender(lambda _r: httpx.Response(204)).send_traces(b"x" * MAX_BODY_BYTES) is True
+
+
+@pytest.mark.parametrize(("method", "path"), [("send_metrics", "/v1/metrics"), ("send_logs", "/v1/logs")])
+def test_metrics_and_logs_go_to_their_own_paths(method: str, path: str) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200)
+
+    assert getattr(sender(handler), method)(b"{}") is True
+    assert [str(r.url) for r in seen] == [ENDPOINT + path]
+
+
+def test_a_drop_says_which_signal(capsys: pytest.CaptureFixture[str]) -> None:
+    assert sender(lambda _r: httpx.Response(401)).send_logs(b"{}") is False
+    assert '"kind": "logs"' in capsys.readouterr().err

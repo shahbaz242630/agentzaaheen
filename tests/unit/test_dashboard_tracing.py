@@ -71,7 +71,8 @@ def test_started_tracing_sends_spans_and_never_prints_the_token(capsys: pytest.C
     bodies: list[bytes] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        bodies.append(request.content)
+        if request.url.path.endswith("/v1/traces"):
+            bodies.append(request.content)
         return httpx.Response(200)
 
     tracing = tracing_from(parse(FULL), ENV, transport=httpx.MockTransport(handler))
@@ -104,7 +105,8 @@ def test_the_dashboard_traces_while_it_serves_and_stops_after(
     bodies: list[bytes] = []
 
     def keep(request: httpx.Request) -> httpx.Response:
-        bodies.append(request.content)
+        if request.url.path.endswith("/v1/traces"):
+            bodies.append(request.content)
         return httpx.Response(200)
 
     transport = httpx.MockTransport(keep)
