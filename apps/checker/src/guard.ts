@@ -52,9 +52,9 @@ export interface GuardReport {
   readonly message: string;
 }
 
-// Two reads per guarded Worker, and one report per project.
+// Two reads per guarded Worker, each possibly tried twice, and one report per project.
 export function guardCalls(projects: readonly GuardProject[]): number {
-  return projects.reduce((sum, p) => sum + 2 * p.guards.length + 1, 0);
+  return projects.reduce((sum, p) => sum + 4 * p.guards.length + 1, 0);
 }
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -122,18 +122,22 @@ function readGuard(slug: string, raw: unknown): Guard {
 
 const API = "https://api.cloudflare.com/client/v4/accounts";
 const READ_TIMEOUT_MS = 8_000;
+// 22 Oct, 18:01 UTC: Cloudflare did not answer one read in 8 s, and the phone rang for a Worker that
+// was fine. A read that got no answer, a server error or "slow down" is tried once more after this
+// wait; a refusal (401/403/404) is not, since waiting cannot fix it.
+export const GUARD_RETRY_AFTER_MS = 5_000;
 const MAX_ANSWER_BYTES = 256 * 1024;
 
 // One guard: its settings, then its deploy history. Any failure to read is "unread", never "ok".
 export async function checkGuard(guard: Guard, settings: GuardSettings, deps: Deps): Promise<GuardResult> {
   const base = `${API}/${settings.accountId}/workers/scripts/${guard.worker}`;
-  const config = await readJson(`${base}/settings`, settings.token, deps);
+  const config = await readTwice(`${base}/settings`, settings.token, deps);
   if (!config.ok) return { guard, verdict: { kind: "unread", status: config.status } };
   const names = secretNames(config.body);
   if (names === null) return { guard, verdict: { kind: "unread", status: config.status } };
   const missing = guard.secrets.filter((s) => !names.has(s));
   if (missing.length > 0) return { guard, verdict: { kind: "missing", missing } };
-  const history = await readJson(`${base}/deployments`, settings.token, deps);
+  const history = await readTwice(`${base}/deployments`, settings.token, deps);
   if (!history.ok) return { guard, verdict: { kind: "unread", status: history.status } };
   const message = latestMessage(history.body);
   if (message === undefined) return { guard, verdict: { kind: "unread", status: history.status } };
@@ -142,6 +146,14 @@ export async function checkGuard(guard: Guard, settings: GuardSettings, deps: De
 }
 
 type Read = { readonly ok: true; readonly status: number; readonly body: unknown } | { readonly ok: false; readonly status: number | null };
+
+async function readTwice(url: string, token: string, deps: Deps): Promise<Read> {
+  const first = await readJson(url, token, deps);
+  if (first.ok || !(first.status === null || first.status === 429 || first.status >= 500)) return first;
+  console.log(`Worker guards: Cloudflare gave ${first.status === null ? "no answer" : `http ${first.status}`} to one read, so it is tried once more in ${GUARD_RETRY_AFTER_MS / 1000} s before anything is reported.`);
+  await deps.wait(GUARD_RETRY_AFTER_MS);
+  return readJson(url, token, deps);
+}
 
 async function readJson(url: string, token: string, deps: Deps): Promise<Read> {
   try {

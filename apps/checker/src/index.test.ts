@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { FakeD1, fakeDeps } from "./fakes.test-support";
-import worker, { run, SECOND_ROUND_MS, type Env } from "./index";
+import { GUARD_RETRY_AFTER_MS } from "./guard";
+import worker, { GUARD_MINUTE, remind, run, SECOND_ROUND_MS, type Env } from "./index";
 import { RECHECK_AFTER_MS, type Deps } from "./probe";
 import { addressId, DB_RETRY_AFTER_MS, KEEP_HOURS } from "./store";
 
@@ -152,7 +153,7 @@ describe("one run", () => {
     expect(db.state.get(await addressId(A))?.up).toBe(0);
   });
 
-  describe("Worker guards (hourly)", () => {
+  describe("Worker guards (hourly, in the 5-minute run at minute 2)", () => {
     const ACCOUNT = "0123456789abcdef0123456789abcdef";
     const CF = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/scripts/api-worker`;
     const GUARDED = `https://hc-ping.com/${KEY}/eva-workers`;
@@ -176,15 +177,15 @@ describe("one run", () => {
       };
       return { ...fake, deps };
     };
-    const HOUR = Date.UTC(2026, 9, 20, 23, 0, 1);
+    const HOUR = Date.UTC(2026, 9, 20, 23, GUARD_MINUTE, 1);
 
-    it("the run at minute 0 reports each guarded project to its own check, then the heartbeat", async () => {
+    it("the 5-minute run at minute 2 reports each guarded project to its own check", async () => {
       const { deps, sent } = withCloudflare(HOUR, {
         [`${CF}/settings`]: { success: true, result: { bindings: [] } },
       });
-      await run(guarded(new FakeD1()), deps);
-      expect(sent.map((s) => s.url)).toEqual([EVA, `${GUARDED}/fail`, PING]);
-      expect(sent[1]?.init.body).toBe(
+      await remind(guarded(new FakeD1()), deps);
+      expect(sent.map((s) => s.url)).toEqual([`${GUARDED}/fail`]);
+      expect(sent[0]?.init.body).toBe(
         "Eva api is missing 1 of its 1 settings (A_KEY), so whatever uses them will fail. Most likely a deploy replaced the Worker or a setting was deleted: check its deploy history, then re-enter the missing settings.",
       );
     });
@@ -194,21 +195,25 @@ describe("one run", () => {
         [`${CF}/settings`]: { success: true, result: { bindings: [{ type: "secret_text", name: "A_KEY" }] } },
         [`${CF}/deployments`]: { success: true, result: { deployments: [{ created_on: "2026-10-20T22:00:00Z" }] } },
       });
-      await run(guarded(new FakeD1()), deps);
-      expect(sent.map((s) => s.url)).toEqual([EVA, GUARDED, PING]);
+      await remind(guarded(new FakeD1()), deps);
+      expect(sent.map((s) => s.url)).toEqual([GUARDED]);
     });
 
-    it("other minutes never read Cloudflare", async () => {
-      const { deps, calls } = withCloudflare(Date.UTC(2026, 9, 20, 23, 7, 1), {});
-      await run(guarded(new FakeD1()), deps);
-      expect(calls.some((u) => u.startsWith(CF))).toBe(false);
+    it("other minutes, and the every-minute run (even at minute 0), never read Cloudflare", async () => {
+      for (const [at, step] of [[Date.UTC(2026, 9, 20, 23, 7, 1), remind], [Date.UTC(2026, 9, 20, 23, 0, 1), run]] as const) {
+        const { deps, calls } = withCloudflare(at, {});
+        await step(guarded(new FakeD1()), deps);
+        expect(calls.some((u) => u.startsWith(CF))).toBe(false);
+      }
     });
 
-    it("Cloudflare not answering is reported as unknown, and the heartbeat still goes", async () => {
-      const { deps, sent } = withCloudflare(HOUR, {});
-      await run(guarded(new FakeD1()), deps);
-      expect(sent.map((s) => s.url)).toEqual([EVA, `${GUARDED}/fail`, PING]);
-      expect(sent[1]?.init.body).toContain("could not read its settings from Cloudflare (no answer)");
+    it("Cloudflare not answering is tried once more, then reported as unknown", async () => {
+      const { deps, sent, calls, waits } = withCloudflare(HOUR, {});
+      await remind(guarded(new FakeD1()), deps);
+      expect(calls.filter((u) => u === `${CF}/settings`)).toHaveLength(2);
+      expect(waits).toEqual([GUARD_RETRY_AFTER_MS]);
+      expect(sent.map((s) => s.url)).toEqual([`${GUARDED}/fail`]);
+      expect(sent[0]?.init.body).toContain("could not read its settings from Cloudflare (no answer)");
     });
   });
 

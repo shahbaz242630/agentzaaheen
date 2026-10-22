@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkGuard, guardCalls, guardReport, readGuards, type Guard, type GuardProject, type GuardSettings } from "./guard";
+import { checkGuard, GUARD_RETRY_AFTER_MS, guardCalls, guardReport, readGuards, type Guard, type GuardProject, type GuardSettings } from "./guard";
 import type { Deps } from "./probe";
 
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
@@ -101,8 +101,8 @@ describe("readGuards", () => {
     expect(readGuards(env({ z: { name: "Z", guards: Array(5).fill(valid) } }))?.projects[0]?.guards).toHaveLength(5);
   });
 
-  it("counts two reads per guard and one report per project", () => {
-    expect(guardCalls([PROJECT, { ...PROJECT, guards: [GUARD, GUARD] }])).toBe(3 + 5);
+  it("counts two reads per guard, each maybe twice, and one report per project", () => {
+    expect(guardCalls([PROJECT, { ...PROJECT, guards: [GUARD, GUARD] }])).toBe(5 + 9);
     expect(guardCalls([])).toBe(0);
   });
 });
@@ -181,6 +181,38 @@ describe("checkGuard", () => {
   ] as [string, Record<string, Answer>, number | null][])("%s: unread, never ok", async (_name, answers, status) => {
     const { deps } = cloudflare(answers);
     expect((await checkGuard(GUARD, SETTINGS, deps)).verdict).toEqual({ kind: "unread", status });
+  });
+
+  it("a read that got no answer or a server error is tried once more, and a good second answer counts", async () => {
+    for (const first of [null, { status: 500 }, { status: 429 }] as Answer[]) {
+      const queue: Answer[] = [first, { status: 200, body: settingsBody("A_KEY", "B_KEY") }];
+      const waits: number[] = [];
+      const urls: string[] = [];
+      const deps: Deps = {
+        fetch: (url) => {
+          urls.push(url);
+          const a = url.endsWith("/settings") ? queue.shift() : { status: 200, body: OWN };
+          if (a === null || a === undefined) return Promise.reject(new TypeError("network error"));
+          return Promise.resolve(new Response(JSON.stringify(a.body ?? {}), { status: a.status }));
+        },
+        wait: (ms) => {
+          waits.push(ms);
+          return Promise.resolve();
+        },
+        now: () => 0,
+      };
+      expect((await checkGuard(GUARD, SETTINGS, deps)).verdict).toEqual({ kind: "ok" });
+      expect(urls).toEqual([`${BASE}/settings`, `${BASE}/settings`, `${BASE}/deployments`]);
+      expect(waits).toEqual([GUARD_RETRY_AFTER_MS]);
+    }
+  });
+
+  it("a refusal is not retried: waiting cannot fix a token without access", async () => {
+    for (const status of [401, 403, 404]) {
+      const { deps, calls } = cloudflare({ [`${BASE}/settings`]: { status } });
+      expect((await checkGuard(GUARD, SETTINGS, deps)).verdict).toEqual({ kind: "unread", status });
+      expect(calls).toHaveLength(1);
+    }
   });
 
   it("a deploy list with an entry that is not an object is unread", async () => {
