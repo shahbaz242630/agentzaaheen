@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { FakeD1, fakeDeps } from "./fakes.test-support";
 import worker, { run, SECOND_ROUND_MS, type Env } from "./index";
 import { RECHECK_AFTER_MS, type Deps } from "./probe";
-import { addressId, KEEP_HOURS } from "./store";
+import { addressId, DB_RETRY_AFTER_MS, KEEP_HOURS } from "./store";
 
 const KEY = "abcdefghijklmnopqrstuv";
 const PING = "https://hc-ping.com/12345678-1234-1234-1234-123456789abc";
@@ -115,6 +115,25 @@ describe("one run", () => {
     const { deps, sent } = fakeDeps({ [A]: [503], [B]: [200] });
     await expect(run(env(db), deps)).rejects.toThrow("D1 unavailable");
     expect(sent.map((s) => s.url)).toEqual([`${EVA}/fail`, `${PING}/fail`]);
+  });
+
+  it("a database blip is tried again a second later, and the run finishes with a normal heartbeat", async () => {
+    // 22 Oct, 15:40 UTC: one refused D1 call failed the whole run and rang the phone.
+    const db = new FakeD1();
+    db.blips = 1;
+    const { deps, sent, waits } = fakeDeps({ [A]: [200], [B]: [200] });
+    await expect(run(env(db), deps)).resolves.toBeUndefined();
+    expect(waits).toContain(DB_RETRY_AFTER_MS);
+    expect(sent.map((s) => s.url)).toEqual([PING]);
+    expect([...db.hourly.values()].map((c) => c.total)).toEqual([2, 2]);
+  });
+
+  it("a blip on both tries still reports the run as failed", async () => {
+    const db = new FakeD1();
+    db.blips = 2;
+    const { deps, sent } = fakeDeps({ [A]: [200], [B]: [200] });
+    await expect(run(env(db), deps)).rejects.toThrow("D1 blip");
+    expect(sent.map((s) => s.url)).toEqual([`${PING}/fail`]);
   });
 
   it("a failed report or heartbeat never stops the run", async () => {

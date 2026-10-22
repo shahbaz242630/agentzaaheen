@@ -48,6 +48,8 @@ export class FakeD1 {
   readonly hourly = new Map<string, { project: string; total: number; good: number }>();
   readonly deleted: number[] = [];
   failBatch = false;
+  // How many of the next D1 calls fail once (a brief database blip).
+  blips = 0;
 
   prepare = (sql: string): Statement => {
     let args: unknown[] = [];
@@ -57,6 +59,7 @@ export class FakeD1 {
         return statement;
       },
       all: () => {
+        if (this.blip()) return Promise.reject(new Error("D1 blip"));
         if (!sql.startsWith("SELECT id, up FROM state")) return Promise.reject(new Error(`unexpected query: ${sql}`));
         return Promise.resolve({ results: [...this.state.entries()].map(([id, row]) => ({ id, up: row.up })) });
       },
@@ -69,12 +72,19 @@ export class FakeD1 {
 
   batch = (statements: Statement[]): Promise<unknown[]> => {
     if (this.failBatch) return Promise.reject(new Error("D1 unavailable"));
+    if (this.blip()) return Promise.reject(new Error("D1 blip"));
     for (const s of statements) s.apply();
     return Promise.resolve([]);
   };
 
   asD1(): D1Database {
     return this as unknown as D1Database;
+  }
+
+  private blip(): boolean {
+    if (this.blips === 0) return false;
+    this.blips -= 1;
+    return true;
   }
 
   private apply(sql: string, args: unknown[]): void {

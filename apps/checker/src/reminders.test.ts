@@ -207,6 +207,8 @@ describe("pingsFor", () => {
 // Just enough of D1 for the reminders table.
 class RemindersD1 {
   readonly rows = new Map<string, Remembered>();
+  // How many of the next saves fail once (a brief database blip).
+  blips = 0;
   prepare = (sql: string) => {
     let args: unknown[] = [];
     const statement = {
@@ -219,6 +221,10 @@ class RemindersD1 {
           results: [...this.rows.entries()].map(([project, r]) => ({ project, down_since: r.downSince, last_sent: r.lastSent, last_refresh: r.lastRefresh })),
         }),
       run: () => {
+        if (this.blips > 0) {
+          this.blips -= 1;
+          return Promise.reject(new Error("D1 blip"));
+        }
         if (!sql.startsWith("INSERT INTO reminders")) throw new Error(`unexpected: ${sql}`);
         const [project, downSince, lastSent, lastRefresh] = args as [string, number | null, number | null, number | null];
         this.rows.set(project, { downSince, lastSent, lastRefresh });
@@ -254,6 +260,15 @@ describe("runReminders", () => {
     expect(db.rows.get("zaaheen")).toEqual({ downSince: NOON - 60 * MIN, lastSent: NOON - EVERY_MS, lastRefresh: null });
   });
 
+  it("a database blip on saving is tried again, so the reminder is still remembered", async () => {
+    const db = new RemindersD1();
+    db.rows.set("zaaheen", { downSince: NOON - 60 * MIN, lastSent: NOON - EVERY_MS, lastRefresh: null });
+    db.blips = 1;
+    const { deps } = fakeHttp(checks({ zaaheen: "down", "zaaheen-reminder": "down" }));
+    await runReminders(db.asD1(), SETTINGS, deps);
+    expect(db.rows.get("zaaheen")?.lastSent).toBe(NOON);
+  });
+
   it("a refused ping is also not remembered", async () => {
     const db = new RemindersD1();
     const { deps } = fakeHttp({ ...checks({ zaaheen: "up", "zaaheen-reminder": "up" }), [REMIND]: { status: 500 } });
@@ -279,7 +294,7 @@ describe("runReminders", () => {
   });
 });
 
-describe("the */5 schedule", () => {
+describe("the 5-minute schedule", () => {
   const env = (extra: Partial<Env>, db = new RemindersD1()): Env => ({ DB: db.asD1(), ...extra });
 
   it("runs the reminders, and nothing when they are not set up", async () => {
@@ -290,7 +305,11 @@ describe("the */5 schedule", () => {
     expect(calls[0]?.url).toBe(API);
   });
 
-  it("the Worker sends the */5 cron to the reminders, never to the address checks", async () => {
+  it("never runs at minute 0, where the hourly Worker guards run", () => {
+    expect(REMINDER_CRON.split(" ")[0]).toBe("2-59/5");
+  });
+
+  it("the Worker sends the 5-minute cron to the reminders, never to the address checks", async () => {
     const bad = { DB: new RemindersD1().asD1(), REMINDERS: "{", HEALTHCHECKS_READ_KEY: READ, HEALTHCHECKS_PING_KEY: PING } as Env;
     await expect(worker.scheduled({ cron: REMINDER_CRON } as ScheduledController, bad)).rejects.toThrow("REMINDERS is not valid JSON");
     // The every-minute run reads TARGETS and the ping URL instead, so it fails on those.

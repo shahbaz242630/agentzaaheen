@@ -15,7 +15,7 @@ import { PING_URL_RE, readSettings, type RawEnv, type Settings } from "./config"
 import { checkGuard, guardReport, type GuardSettings } from "./guard";
 import { checkAll, type Deps } from "./probe";
 import { readReminders, runReminders, type RawReminderEnv } from "./reminders";
-import { addressId, loadState, saveRound } from "./store";
+import { addressId, loadState, saveRound, withRetry } from "./store";
 
 export interface Env extends RawEnv, RawReminderEnv {
   readonly DB: D1Database;
@@ -38,6 +38,10 @@ export async function run(env: Env, deps: Deps): Promise<void> {
     await send(deps, settings.pingUrl, { method: "POST" });
   } catch (error) {
     // Tell Healthchecks at once that the run failed (it alerts); then let Cloudflare log it.
+    // Our settings errors are our own words; anything else is D1's (never an address or key).
+    const kind = error instanceof Error ? error.name : "unknown";
+    const detail = error instanceof Error ? error.message.slice(0, 200) : "";
+    console.log(`The check run stopped before it finished, so the checker reports itself as failing: ${kind}: ${detail}`);
     const ping = settings?.pingUrl ?? (env.HEALTHCHECKS_PING_URL ?? "").trim();
     if (PING_URL_RE.test(ping)) await send(deps, `${ping}/fail`, { method: "POST" });
     throw error;
@@ -47,7 +51,7 @@ export async function run(env: Env, deps: Deps): Promise<void> {
 async function round(db: D1Database, settings: Settings, deps: Deps, hourly: boolean): Promise<void> {
   const checked = await checkAll(settings.targets, deps);
   const seen: Seen[] = await Promise.all(checked.map(async (c) => ({ ...c, id: await addressId(c.target.url) })));
-  const stored = await loadState(db);
+  const stored = await withRetry("read the last known states", async () => loadState(db), deps.wait);
   const changed = changes(seen, stored);
   // Report before saving, and keep a project's old state if its report did not arrive:
   // the next round sees the same change and reports again (twice beats never).
@@ -56,7 +60,8 @@ async function round(db: D1Database, settings: Settings, deps: Deps, hourly: boo
     if (!(await tell(deps, settings.pingKey, report))) unreported.add(report.project);
   }
   const saved = changed.filter((c) => !unreported.has(c.project));
-  await saveRound(db, seen, saved, deps.now(), hourly);
+  const savedAt = deps.now();
+  await withRetry("save this round's counts", async () => saveRound(db, seen, saved, savedAt, hourly), deps.wait);
   const down = seen.filter((s) => !s.up);
   const why = down.map((s) => `${s.target.project}/${s.id}=${s.reason}`).join(" ");
   console.log(`checked ${seen.length} addresses: ${seen.length - down.length} up, ${down.length} down, ${changed.length} changed ${why}`.trim());
@@ -105,7 +110,8 @@ const live: Deps = {
 };
 
 // The second schedule: reminders until acknowledged (reminders.ts), in its own run and call budget.
-export const REMINDER_CRON = "*/5 * * * *";
+// Minutes 2, 7, 12 ... so it never shares a minute with the hourly Worker guards (minute 0).
+export const REMINDER_CRON = "2-59/5 * * * *";
 
 export async function remind(env: Env, deps: Deps): Promise<void> {
   const settings = readReminders(env);
