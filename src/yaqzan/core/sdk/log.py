@@ -94,7 +94,9 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
 )
 
-_CARD_CANDIDATE = re.compile(r"(?<![\d-])\d(?:[ -]?\d){12,18}(?![\d-])")
+# A card number stands alone: digits touching letters or other digits are part of something else,
+# such as a UUID (49570537-1026-47dc-...) whose first digits happen to pass Luhn.
+_CARD_CANDIDATE = re.compile(r"(?<![\w-])\d(?:[ -]?\d){12,18}(?![\w-])")
 
 
 def _luhn_ok(digits: str) -> bool:
