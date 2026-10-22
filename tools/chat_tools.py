@@ -36,7 +36,7 @@ from yaqzan.core.llm_gateway import ChatModel, ChatReply, FactChat, Tool, catalo
 from yaqzan.core.net import DownloadPolicy, JsonClient, ModelClient, NetError, NetPolicy
 from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Invocation, ItemError, Kind, Registry, load_registry, skill_instructions
-from yaqzan.core.sdk import FailedStepLog, get_logger
+from yaqzan.core.sdk import FailedStepLog, get_logger, say
 from yaqzan.core.store import StoreError
 from yaqzan.plugins.connectors import github
 
@@ -76,7 +76,7 @@ class SwitchedChat:
         try:
             tools, skills = self._switched.build(await self._switched.standing())
         except StoreError as exc:
-            self._log.warning("chat_switches_unreadable", code=exc.code.value, effect="no_tools")
+            say(self._log, "chat_switches_unreadable", code=exc.code.value, effect="no_tools")
             tools, skills = [], ""
         return await FactChat(self._model, self.model_id, tools=tools, skills=skills).ask(question, facts)
 

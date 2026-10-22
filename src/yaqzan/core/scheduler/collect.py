@@ -26,9 +26,9 @@ from yaqzan.core.sdk import (
     SourceError,
     SourceErrorCode,
     Subscription,
-    explain,
     failed,
     get_logger,
+    say,
     span,
 )
 from yaqzan.core.store import Database, RevenueRows, StoreError
@@ -80,15 +80,15 @@ async def _sync(
     except (SourceError, StoreError) as exc:
         code = exc.reason_code if isinstance(exc, SourceError) else exc.code.value
         await rows.mark_failure(tenant_id, project_id, source.source, at=now, error_code=code)
-        log.warning("revenue_sync_failed", stage=stage, **_where(exc), **_words(code, source.source))
+        say(log, "revenue_sync_failed", stage=stage, reason_code=code, source=source.source, **_where(exc))
         return SyncOutcome(ok=False, error_code=code)
     except Exception:
         # A bug, not an outage: record it so the tile goes grey, then fail loudly.
         await rows.mark_failure(tenant_id, project_id, source.source, at=now, error_code=_CRASHED)
-        log.error("revenue_sync_crashed", stage=stage, **_words(_CRASHED, source.source))
+        say(log, "revenue_sync_crashed", stage=stage, reason_code=_CRASHED, source=source.source)
         raise
     counts = (len(batch.subscriptions), len(batch.payments), len(batch.refunds))
-    log.info("revenue_synced", subscriptions=counts[0], payments=counts[1], refunds=counts[2])
+    say(log, "revenue_synced", subscriptions=counts[0], payments=counts[1], refunds=counts[2])
     return SyncOutcome(True, None, *counts)
 
 
@@ -104,12 +104,6 @@ def _where(exc: SourceError | StoreError) -> dict[str, object]:
     if exc.status is not None:
         where["http_status"] = exc.status
     return where
-
-
-def _words(code: str, vendor: str) -> dict[str, object]:
-    """The code with its catalogue text: what broke, why, and what to do."""
-    said = explain(code, vendor=vendor)
-    return {"reason_code": code, "what": said.what, "why": said.why, "fix": said.fix}
 
 
 @dataclass(frozen=True)

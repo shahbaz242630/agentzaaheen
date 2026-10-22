@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from yaqzan.core.notify.uptime import DEFAULT_THRESHOLD, REASON_WORDS, Alert, UptimeWatch
-from yaqzan.core.sdk import SourceError, get_logger
+from yaqzan.core.sdk import SourceError, get_logger, say
 
 
 class Pusher(Protocol):
@@ -44,10 +44,10 @@ async def deliver(alerts: Sequence[Alert], pusher: Pusher) -> int:
         try:
             await pusher.send(alert.title, alert.message, priority=alert.priority)
         except SourceError as exc:
-            log.warning("alert_not_sent", project=alert.project_id, down=alert.down, code=exc.reason_code)
+            say(log, "alert_not_sent", project=alert.project_id, down=alert.down, code=exc.reason_code)
             continue
         sent += 1
-        log.info("alert_sent", project=alert.project_id, down=alert.down)
+        say(log, "alert_sent", project=alert.project_id, down=alert.down)
     return sent
 
 

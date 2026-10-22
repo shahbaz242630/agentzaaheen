@@ -23,7 +23,7 @@ from yaqzan.core.registry.connectors import read_connector
 from yaqzan.core.registry.files import SKIPPED_DIRS, ItemError
 from yaqzan.core.registry.models import Connector, Kind, Plugin, Problem, Registry, Skill
 from yaqzan.core.registry.skills import read_skill
-from yaqzan.core.sdk import get_logger
+from yaqzan.core.sdk import get_logger, say
 
 BUNDLE_SEARCH_DEPTH = 3  # e.g. <marketplace>/<plugin>/<version>/ in Claude Code's plugin cache
 _SKIPPED_SEARCH = SKIPPED_DIRS | {"node_modules"}
@@ -50,7 +50,7 @@ def load_registry(plugins_root: Path, bundle_roots: Sequence[Path] = ()) -> Regi
     )
     log = get_logger("yaqzan.registry")
     for problem in registry.problems:
-        log.warning("registry_item_refused", kind=problem.kind.value, path=problem.path, code=problem.code)
+        say(log, "registry_item_refused", kind=problem.kind.value, path=problem.path, code=problem.code)
     return registry
 
 

@@ -44,7 +44,7 @@ from yaqzan.core.auth import PasskeyError
 from yaqzan.core.llm_gateway import ChatReply
 from yaqzan.core.policy import Verdict
 from yaqzan.core.registry import Kind
-from yaqzan.core.sdk import SourceError, failed, get_logger, span, traceparent
+from yaqzan.core.sdk import SourceError, failed, get_logger, say, span, traceparent
 from yaqzan.core.store import StoreError
 
 LOCAL_HOSTS: tuple[str, ...] = ("127.0.0.1", "localhost")
@@ -177,7 +177,7 @@ async def _stored[T](call: Awaitable[T]) -> T:
     try:
         return await call
     except StoreError as exc:
-        get_logger("yaqzan.api").warning("registry_store_failed", code=exc.code.value)
+        say(get_logger("yaqzan.api"), "registry_store_failed", code=exc.code.value)
         raise HTTPException(status_code=503, detail="registry.store_unavailable") from None
 
 
@@ -341,7 +341,7 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
             try:
                 reply = await chat.ask(question.question, facts)
             except SourceError as exc:
-                log.warning("chat_failed", code=exc.reason_code, status=exc.status)
+                say(log, "chat_failed", code=exc.reason_code, status=exc.status)
                 raise HTTPException(status_code=502, detail=exc.reason_code) from None
         return ChatAnswer(
             model_id=chat.model_id, answer=reply.answer, from_sample=sample, used=reply.used[:8]
