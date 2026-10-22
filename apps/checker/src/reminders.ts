@@ -15,6 +15,7 @@
 
 import { SettingsError } from "./errors";
 import type { Deps } from "./probe";
+import { withRetry } from "./store";
 
 export interface Reminder {
   // Our project id, as in TARGETS.
@@ -212,7 +213,7 @@ export async function runReminders(db: D1Database, settings: ReminderSettings, d
     console.log("Reminders: could not read the checks' states from Healthchecks, so no reminder was decided this time; the next run is in 5 minutes.");
     return;
   }
-  const remembered = await loadRemembered(db);
+  const remembered = await withRetry("read the reminders' memory", async () => loadRemembered(db), deps.wait);
   for (const reminder of settings.reminders) {
     const before = remembered.get(reminder.project) ?? { downSince: null, lastSent: null, lastRefresh: null };
     const decision = decide(reminder, statuses, before, deps.now());
@@ -222,7 +223,7 @@ export async function runReminders(db: D1Database, settings: ReminderSettings, d
     }
     // A reminder that did not reach Healthchecks is not remembered as sent, so the next run tries again.
     const next = delivered ? decision.next : { ...decision.next, lastSent: before.lastSent, lastRefresh: before.lastRefresh };
-    await saveRemembered(db, reminder.project, next);
+    await withRetry(`remember ${reminder.name}'s reminder`, async () => saveRemembered(db, reminder.project, next), deps.wait);
     const outcome = decision.action === "none" ? "" : delivered ? " Done." : " Healthchecks did not take it; the next run tries again.";
     console.log(`Reminders: ${decision.why}${outcome}`);
   }

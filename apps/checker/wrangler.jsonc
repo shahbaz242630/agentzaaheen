@@ -2,7 +2,7 @@
 // it never touches another Worker on the account. No web address (cron only).
 // Secrets (set with `wrangler secret bulk`, never committed): TARGETS, HEALTHCHECKS_PING_KEY, HEALTHCHECKS_PING_URL;
 // optional Worker guards: WORKER_GUARDS, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_READ_TOKEN (metadata read-only);
-// optional reminders (the */5 schedule): REMINDERS, HEALTHCHECKS_READ_KEY (read-only API key).
+// optional reminders (the 5-minute schedule, at minutes 2, 7, 12 ... so never with the hourly guards at minute 0): REMINDERS, HEALTHCHECKS_READ_KEY (read-only API key).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "yaqzan-checker",
@@ -10,7 +10,9 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": false,
   "preview_urls": false,
-  "triggers": { "crons": ["* * * * *", "*/5 * * * *"] },
+  "triggers": { "crons": ["* * * * *", "2-59/5 * * * *"] },
+  // Workers Logs: every run's log lines kept by Cloudflare (free plan: 3 days), so a failed run can be read afterwards.
+  "observability": { "enabled": true },
   "d1_databases": [
     { "binding": "DB", "database_name": "yaqzan-checker", "database_id": "72a627f7-aca9-4984-b5e0-c5aca19aebe8" }
   ]
