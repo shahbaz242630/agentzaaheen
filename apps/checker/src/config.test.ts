@@ -99,15 +99,17 @@ describe("targets", () => {
     expect(() => readTargets(JSON.stringify({ eva: { name: "Eva", sites: sites(12) } }))).toThrow(`at most ${MAX_CALLS} calls`);
   });
 
-  it("counts Worker guards in the same budget", () => {
+  it("counts Worker guards in the 5-minute run's budget, not the address checks'", () => {
     const sites = (n: number) => Array.from({ length: n }, (_, i) => ({ url: `https://s${i}.example.com`, expect: "ok" }));
     const guard = { worker: "api-worker", part: "api", secrets: ["A_KEY"], not_from: [] };
     const base = { HEALTHCHECKS_PING_KEY: KEY, HEALTHCHECKS_PING_URL: PING, CLOUDFLARE_ACCOUNT_ID: "0".repeat(32), CLOUDFLARE_READ_TOKEN: "t".repeat(40) };
     const guards = (n: number) => JSON.stringify({ "eva-workers": { name: "Eva", guards: Array(n).fill(guard) } });
-    // 4 x 11 + 2 + 1 = 47 for the addresses; one guard adds 2 + 1 = 50 (fits), two add 5 = 52 (does not).
+    // The addresses may use all 47 of their run; the guards run elsewhere. There, the reminders' 11
+    // plus 4 per guard (two reads, each maybe twice) and 1 per project must fit 50.
     const targets = JSON.stringify({ eva: { name: "Eva", sites: sites(11) } });
-    expect(readSettings({ ...base, TARGETS: targets, WORKER_GUARDS: guards(1) }).guards?.projects).toHaveLength(1);
-    expect(() => readSettings({ ...base, TARGETS: targets, WORKER_GUARDS: guards(2) })).toThrow("WORKER_GUARDS together need more than the 50 calls");
+    expect(readSettings({ ...base, TARGETS: targets, WORKER_GUARDS: guards(5) }).guards?.projects).toHaveLength(1); // 11 + 21
+    const two = JSON.stringify({ a: { name: "A", guards: Array(5).fill(guard) }, b: { name: "B", guards: Array(5).fill(guard) } });
+    expect(() => readSettings({ ...base, TARGETS: targets, WORKER_GUARDS: two })).toThrow("the reminders and WORKER_GUARDS together need more than the 50 calls"); // 11 + 42
     expect(readSettings({ ...base, TARGETS: targets }).guards).toBeNull();
   });
 });

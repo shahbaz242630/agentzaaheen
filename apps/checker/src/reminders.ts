@@ -46,6 +46,8 @@ const NAME_RE = /^[A-Za-z0-9 ]{1,40}$/;
 const READ_KEY_RE = /^[A-Za-z0-9_-]{32}$/;
 const PING_KEY_RE = /^[A-Za-z0-9_-]{22}$/;
 const MAX_REMINDERS = 5;
+// The 5-minute run's worst case: one read of every check, then up and down pings per reminder.
+export const MAX_REMINDER_CALLS = 1 + 2 * MAX_REMINDERS;
 const MAX_WATCH = 5;
 const API = "https://healthchecks.io/api/v3/checks/";
 const TIMEOUT_MS = 8_000;

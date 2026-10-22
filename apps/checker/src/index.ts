@@ -5,8 +5,8 @@
 // Changes are reported to each project's Healthchecks.io check, which alerts the Chairman's
 // phone (ntfy) and email: Healthchecks sends from its own servers, because ntfy.sh refuses
 // Cloudflare's shared addresses (http 429). Hourly counts feed the availability SLO. Each run
-// ends with a heartbeat to Healthchecks, which alerts if the checker itself stops. The run at minute 0
-// also checks each guarded Worker's settings and deploys (guard.ts) and reports to its own check.
+// ends with a heartbeat to Healthchecks, which alerts if the checker itself stops. The Worker guards
+// (guard.ts) run hourly in the 5-minute run at minute 2, where the call budget leaves room to retry.
 //
 // The Worker has no web address of its own and never reads a page: status codes only.
 
@@ -34,7 +34,6 @@ export async function run(env: Env, deps: Deps): Promise<void> {
     await round(env.DB, settings, deps, hourly);
     await deps.wait(Math.max(0, start + SECOND_ROUND_MS - deps.now()));
     await round(env.DB, settings, deps, false);
-    if (hourly && settings.guards !== null) await guardRound(settings.guards, settings.pingKey, deps);
     await send(deps, settings.pingUrl, { method: "POST" });
   } catch (error) {
     // Tell Healthchecks at once that the run failed (it alerts); then let Cloudflare log it.
@@ -67,8 +66,8 @@ async function round(db: D1Database, settings: Settings, deps: Deps, hourly: boo
   console.log(`checked ${seen.length} addresses: ${seen.length - down.length} up, ${down.length} down, ${changed.length} changed ${why}`.trim());
 }
 
-// Hourly: every guarded Worker, one plain-English report per project to its own check. A guard
-// never stops the uptime checks: anything unexpected is reported as "could not read".
+// Hourly: every guarded Worker, one plain-English report per project to its own check. Anything
+// unexpected is reported as "could not read".
 async function guardRound(guards: GuardSettings, pingKey: string, deps: Deps): Promise<void> {
   for (const project of guards.projects) {
     const results = [];
@@ -109,14 +108,19 @@ const live: Deps = {
   now: () => Date.now(),
 };
 
-// The second schedule: reminders until acknowledged (reminders.ts), in its own run and call budget.
-// Minutes 2, 7, 12 ... so it never shares a minute with the hourly Worker guards (minute 0).
+// The second schedule, in its own run and call budget, at minutes 2, 7, 12 ...: reminders until
+// acknowledged (reminders.ts), and once an hour (minute 2) the Worker guards.
 export const REMINDER_CRON = "2-59/5 * * * *";
+export const GUARD_MINUTE = 2;
 
 export async function remind(env: Env, deps: Deps): Promise<void> {
+  const guardsDue = new Date(deps.now()).getUTCMinutes() === GUARD_MINUTE;
   const settings = readReminders(env);
-  if (settings === null) return;
-  await runReminders(env.DB, settings, deps);
+  if (settings !== null) await runReminders(env.DB, settings, deps);
+  if (guardsDue) {
+    const checker = readSettings(env);
+    if (checker.guards !== null) await guardRound(checker.guards, checker.pingKey, deps);
+  }
 }
 
 export default {

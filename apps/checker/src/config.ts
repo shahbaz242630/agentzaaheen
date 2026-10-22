@@ -5,6 +5,7 @@
 // "status": up only on exactly the code in `status` (a route only the real service answers that way).
 import { SettingsError } from "./errors";
 import { guardCalls, readGuards, type GuardSettings, type RawGuardEnv } from "./guard";
+import { MAX_REMINDER_CALLS } from "./reminders";
 
 export { SettingsError };
 
@@ -61,9 +62,12 @@ export function readSettings(env: RawEnv): Settings {
   const targets = readTargets(env.TARGETS);
   const guards = readGuards(env);
   const projects = new Set(targets.map((t) => t.project)).size;
-  const extra = guards === null ? 0 : guardCalls(guards.projects);
-  if (callsNeeded(targets.length, projects) + extra > MAX_CALLS) {
-    throw new SettingsError(`TARGETS and WORKER_GUARDS together need more than the ${MAX_CALLS} calls one run can make`);
+  if (callsNeeded(targets.length, projects) > MAX_CALLS) {
+    throw new SettingsError(`TARGETS needs more than the ${MAX_CALLS} calls one run can make`);
+  }
+  // The guards run in the 5-minute run (index.ts), so they share its budget with the reminders.
+  if (guards !== null && MAX_REMINDER_CALLS + guardCalls(guards.projects) > MAX_CALLS) {
+    throw new SettingsError(`the reminders and WORKER_GUARDS together need more than the ${MAX_CALLS} calls one run can make`);
   }
   return { targets, pingKey, pingUrl, guards };
 }
