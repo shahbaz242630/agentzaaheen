@@ -3,6 +3,11 @@
 // which makes Healthchecks.io alert (the checker is the thing that broke).
 
 // "status": up only on exactly the code in `status` (a route only the real service answers that way).
+import { SettingsError } from "./errors";
+import { guardCalls, readGuards, type GuardSettings, type RawGuardEnv } from "./guard";
+
+export { SettingsError };
+
 export type Expect = "ok" | "answer" | "status";
 
 export interface Target {
@@ -20,6 +25,8 @@ export interface Settings {
   readonly targets: readonly Target[];
   readonly pingKey: string;
   readonly pingUrl: string;
+  // Worker guards, checked hourly (null when WORKER_GUARDS is not set).
+  readonly guards: GuardSettings | null;
 }
 
 // Two rounds of probes plus re-checks must fit Cloudflare's free 50 outbound calls per run:
@@ -39,9 +46,8 @@ const IPV4_RE = /^[0-9.]+$/;
 const PING_KEY_RE = /^[A-Za-z0-9_-]{22}$/;
 export const PING_URL_RE = /^https:\/\/hc-ping\.com\/[0-9a-f-]{36}$/;
 
-export class SettingsError extends Error {}
 
-export interface RawEnv {
+export interface RawEnv extends RawGuardEnv {
   readonly TARGETS?: string;
   readonly HEALTHCHECKS_PING_KEY?: string;
   readonly HEALTHCHECKS_PING_URL?: string;
@@ -52,7 +58,14 @@ export function readSettings(env: RawEnv): Settings {
   if (!PING_KEY_RE.test(pingKey)) throw new SettingsError("HEALTHCHECKS_PING_KEY is missing or not a ping key");
   const pingUrl = (env.HEALTHCHECKS_PING_URL ?? "").trim();
   if (!PING_URL_RE.test(pingUrl)) throw new SettingsError("HEALTHCHECKS_PING_URL is missing or not a ping URL");
-  return { targets: readTargets(env.TARGETS), pingKey, pingUrl };
+  const targets = readTargets(env.TARGETS);
+  const guards = readGuards(env);
+  const projects = new Set(targets.map((t) => t.project)).size;
+  const extra = guards === null ? 0 : guardCalls(guards.projects);
+  if (callsNeeded(targets.length, projects) + extra > MAX_CALLS) {
+    throw new SettingsError(`TARGETS and WORKER_GUARDS together need more than the ${MAX_CALLS} calls one run can make`);
+  }
+  return { targets, pingKey, pingUrl, guards };
 }
 
 // TARGETS: {"zaaheen": {"name": "Zaaheen", "sites": [{"url": "https://...", "expect": "ok", "part": "site"}]}}
