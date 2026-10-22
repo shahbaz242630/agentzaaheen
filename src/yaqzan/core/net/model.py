@@ -26,7 +26,7 @@ from pydantic import SecretStr
 
 from yaqzan.core.net.client import NetPolicy, check_host, decode_object, read_capped, refuse_status
 from yaqzan.core.net.errors import NetError, NetErrorCode
-from yaqzan.core.sdk import get_logger, span
+from yaqzan.core.sdk import get_logger, say, span
 
 LOOPBACK = "127.0.0.1"
 CHAT_PATH = "/v1/chat/completions"
@@ -121,7 +121,7 @@ class ModelClient:
             with span(f"POST {host}", kind="client", attributes={"server.address": host}):
                 return await self._ask(body)
         except NetError as exc:
-            self._log.warning("model_call_failed", code=exc.net_code.value, status=exc.status)
+            say(self._log, "model_call_failed", code=exc.net_code.value, status=exc.status)
             raise exc.at(_OPERATION, 1, 1) from None
 
     async def _ask(self, body: dict[str, object]) -> str:

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from yaqzan.core.llm_gateway.tools import Tool, parse_call, strip_calls, tools_prompt, wrap_result
-from yaqzan.core.sdk import SourceError, SourceErrorCode, explain, get_logger
+from yaqzan.core.sdk import SourceError, SourceErrorCode, explain, get_logger, say
 
 SYSTEM_PROMPT = """\
 You are Yaqzan, the assistant on a private operations dashboard for a small company.
@@ -118,10 +118,10 @@ class FactChat:
             text = await tool.run(arg)
         except SourceError as exc:
             said = explain(exc.detail_code or exc.code)
-            self._log.warning("chat_tool_failed", tool=name, arg=arg, code=exc.reason_code)
+            say(self._log, "chat_tool_failed", tool=name, arg=arg, code=exc.reason_code)
             return wrap_result(name, f"The read failed: {said.what} {said.fix}", trusted=True), None
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        self._log.info("chat_tool_used", tool=name, arg=arg, chars=len(text), sha256=digest)
+        say(self._log, "chat_tool_used", tool=name, arg=arg, chars=len(text), sha256=digest)
         return wrap_result(name, text, trusted=tool.trusted), f"{tool.label}: {arg}"
 
 

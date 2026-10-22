@@ -35,7 +35,7 @@ from yaqzan.core.api.uptime import CARD_ID, uptime_card
 from yaqzan.core.api.views import Card
 from yaqzan.core.net import PushClient, StatusProbe
 from yaqzan.core.notify import Alert, UptimeWatch, deliver
-from yaqzan.core.sdk import SiteRule, UptimeReport, get_logger, span
+from yaqzan.core.sdk import SiteRule, UptimeReport, get_logger, say, span
 from yaqzan.plugins.connectors.uptime import UptimeSource
 
 # Re-checked every 5 minutes while the dashboard runs (ADR-031); "unknown" if no check for two hours.
@@ -147,7 +147,7 @@ class UptimeLive:
             try:
                 asyncio.run(self.round())
             except Exception as exc:  # noqa: BLE001  # a failed round must never end the re-checking
-                self._log.warning("uptime_round_failed", error=type(exc).__name__)
+                say(self._log, "uptime_round_failed", kind=type(exc).__name__)
 
 
 def uptime_maker(live: UptimeLive, project: str, clock: Clock) -> CardMaker:

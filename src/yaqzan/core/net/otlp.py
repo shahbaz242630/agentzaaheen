@@ -20,7 +20,7 @@ from pydantic import SecretStr
 
 from yaqzan.core.net.client import check_path
 from yaqzan.core.net.errors import NetError, NetErrorCode
-from yaqzan.core.sdk import get_logger
+from yaqzan.core.sdk import get_logger, say
 
 OTLP_HOST = re.compile(r"otlp-gateway-prod-[a-z0-9-]{1,40}\.grafana\.net")
 TRACES_PATH = "/v1/traces"
@@ -91,20 +91,20 @@ class OtlpSender:
         # A refusal or failure is logged by code and dropped: never retried.
         signal = path.rsplit("/", 1)[-1]
         if len(body) > MAX_BODY_BYTES:
-            self._log.warning("telemetry_dropped", kind=signal, reason="net.too_large", bytes=len(body))
+            say(self._log, "telemetry_dropped", kind=signal, reason="net.too_large", bytes=len(body))
             return False
         try:
             response = self._http.post(self._base + path, content=body)
         except httpx.TimeoutException:
-            self._log.warning("telemetry_dropped", kind=signal, reason=NetErrorCode.TIMEOUT.value)
+            say(self._log, "telemetry_dropped", kind=signal, reason=NetErrorCode.TIMEOUT.value)
             return False
         except httpx.TransportError:
-            self._log.warning("telemetry_dropped", kind=signal, reason=NetErrorCode.UNAVAILABLE.value)
+            say(self._log, "telemetry_dropped", kind=signal, reason=NetErrorCode.UNAVAILABLE.value)
             return False
         status = response.status_code
         if status not in _OK:
-            self._log.warning(
-                "telemetry_dropped", kind=signal, reason=_refusal(status).value, http_status=status
+            say(
+                self._log, "telemetry_dropped", kind=signal, reason=_refusal(status).value, http_status=status
             )
             return False
         return True

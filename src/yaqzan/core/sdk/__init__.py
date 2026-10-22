@@ -34,6 +34,7 @@ from yaqzan.core.sdk.backend import (
     ServiceHealth,
 )
 from yaqzan.core.sdk.code import REPO_PATTERN, BuildState, RepoHealth, RepoSource
+from yaqzan.core.sdk.events import LOG_EVENTS, LogEvent, say
 from yaqzan.core.sdk.explain import KNOWN_CODES, Explanation, explain
 from yaqzan.core.sdk.log import (
     REDACTED,
@@ -117,6 +118,7 @@ from yaqzan.core.sdk.uptime import (
 __all__ = [
     "ALLOWED_ATTRIBUTES",
     "KNOWN_CODES",
+    "LOG_EVENTS",
     "MAX_LOG_CHARS",
     "MAX_LOG_LINES",
     "PROJECT_REF",
@@ -144,6 +146,7 @@ __all__ = [
     "Interval",
     "JsonGetter",
     "JsonReader",
+    "LogEvent",
     "LogSink",
     "ModelInfo",
     "Payment",
@@ -192,6 +195,7 @@ __all__ = [
     "note",
     "redact",
     "redact_text",
+    "say",
     "span",
     "trace_ids",
     "traceparent",

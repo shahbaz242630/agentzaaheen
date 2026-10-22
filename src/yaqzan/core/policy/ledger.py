@@ -25,7 +25,7 @@ from yaqzan.core.policy.audit import (
     verify_chain,
 )
 from yaqzan.core.policy.gate import KillSwitches
-from yaqzan.core.sdk import get_logger
+from yaqzan.core.sdk import get_logger, say
 from yaqzan.core.store import AuditRow, AuditRows, Database, KillSwitchRows, StoreError, SwitchScope
 
 _STOP_EVERYTHING = KillSwitches(stop_all=True)
@@ -108,8 +108,8 @@ async def load_kill_switches(
         engaged = await KillSwitchRows(db).engaged(tenant_id)
         return _switches_from([(s.scope, s.ref) for s in engaged])
     except StoreError as exc:
-        log.error("kill_switches_unreadable", reason_code=exc.code.value, effect="stop_all")
+        say(log, "kill_switches_unreadable", reason_code=exc.code.value, effect="stop_all")
         return _STOP_EVERYTHING
     except ValueError:  # a stored scope or ref that makes no sense
-        log.error("kill_switch_row_invalid", reason_code="policy.bad_switch_row", effect="stop_all")
+        say(log, "kill_switch_row_invalid", reason_code="policy.bad_switch_row", effect="stop_all")
         return _STOP_EVERYTHING

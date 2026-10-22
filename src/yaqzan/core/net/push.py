@@ -19,7 +19,7 @@ from pydantic import SecretStr
 
 from yaqzan.core.net.client import NetPolicy, check_host
 from yaqzan.core.net.errors import NetError, NetErrorCode
-from yaqzan.core.sdk import get_logger, span
+from yaqzan.core.sdk import get_logger, say, span
 
 NTFY_HOST = "ntfy.sh"
 MAX_MESSAGE_BYTES = 1024
@@ -87,4 +87,4 @@ class PushClient:
             current.set_attribute("http.response.status_code", status)
             if status not in _OK:
                 raise NetError(NetErrorCode.CLIENT_ERROR, "the push service refused it", status=status)
-        self._log.info("push_sent", bytes=len(body), priority=priority)
+        say(self._log, "push_sent", bytes=len(body), priority=priority)

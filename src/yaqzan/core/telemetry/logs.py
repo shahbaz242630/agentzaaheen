@@ -3,8 +3,12 @@
 The logger hands every finished line to :class:`LogQueue` (through
 ``core.sdk.install_log_sink``). Only the fields in :data:`LOG_FIELDS` leave, each
 a plain number, flag or short redacted string; free text, paths, tool arguments,
-tenant IDs and tracebacks stay on the laptop. The event name becomes the body,
-the level its severity, and ``trace_id``/``span_id`` join the line to its trace.
+tenant IDs and tracebacks stay on the laptop. Each line's plain-English ``what``
+becomes the body (ADR-034; the event name when a line has none), ``why`` and
+``next`` travel as attributes with the ``event`` code, the level becomes its
+severity, and ``trace_id``/``span_id`` join the line to its trace. The sentences
+are safe to send: they are built only from our own templates and these fields
+(``core.sdk.events``).
 
 The queue is bounded: when it is full, new lines are dropped and counted.
 The sender's own ``telemetry_dropped`` lines are never queued, so a store that
@@ -25,10 +29,15 @@ QUEUE_SIZE = 2_000
 BATCH_SIZE = 500
 SKIPPED_EVENTS = frozenset({"telemetry_dropped"})
 
-# Codes, names, counts and durations: what the log calls in the code carry today.
+# Codes, names, counts and durations, and the plain-English sentences built from them (ADR-034).
 LOG_FIELDS: frozenset[str] = frozenset(
     {
         "component",
+        "event",
+        "what",
+        "why",
+        "next",
+        "down",
         "code",
         "reason",
         "reason_code",
@@ -103,7 +112,7 @@ def encode_record(line: Mapping[str, object], now_ns: int) -> Json:
         "timeUnixNano": str(now_ns),
         "severityNumber": _SEVERITY.get(level, 9),
         "severityText": text(level.upper()),
-        "body": {"stringValue": text(str(line.get("event", "")))},
+        "body": {"stringValue": text(str(line.get("what") or line.get("event", "")))},
         "attributes": attributes(line, LOG_FIELDS),
     }
     trace_id, span_id = str(line.get("trace_id", "")), str(line.get("span_id", ""))

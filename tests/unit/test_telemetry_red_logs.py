@@ -128,10 +128,24 @@ def test_only_allowed_fields_leave() -> None:
         "timestamp": "2026-10-21T00:00:00Z",
     }
     record = encode_record(line, 7)
-    assert set(as_dict(record["attributes"])) == {"component", "tool", "bytes"}
-    assert record["body"] == {"stringValue": "chat_tool_used"}
+    assert set(as_dict(record["attributes"])) == {"event", "component", "tool", "bytes"}
+    assert record["body"] == {"stringValue": "chat_tool_used"}  # no sentence on this line: the code
     assert record["timeUnixNano"] == "7"
     assert "traceId" not in record
+
+
+def test_the_plain_english_sentence_is_the_body_and_its_parts_travel_along() -> None:
+    line = {
+        "event": "alert_sent",
+        "what": "The phone alert for eva was sent.",
+        "why": "It changed.",
+        "next": "",
+    }
+    record = encode_record({**line, "level": "info", "down": True}, 7)
+    assert record["body"] == {"stringValue": "The phone alert for eva was sent."}
+    sent = as_dict(record["attributes"])
+    assert {k: v["stringValue"] for k, v in sent.items() if k != "down"} == line
+    assert sent["down"] == {"boolValue": True}
 
 
 @pytest.mark.parametrize(

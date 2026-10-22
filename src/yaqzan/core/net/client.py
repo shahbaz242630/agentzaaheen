@@ -30,7 +30,7 @@ import httpx
 from pydantic import SecretStr
 
 from yaqzan.core.net.errors import NetError, NetErrorCode
-from yaqzan.core.sdk import event, get_logger, note, span
+from yaqzan.core.sdk import event, get_logger, note, say, span
 
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 _AUTH_STATUSES = frozenset({401, 403})
@@ -314,7 +314,7 @@ class JsonClient:
                 raise NetError(NetErrorCode.TIMEOUT, "the download timed out") from None
             except httpx.TransportError:
                 raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the download host") from None
-        self._log.info("net_download", download_host=urlsplit(link).hostname, bytes=len(body))
+        say(self._log, "net_download", download_host=urlsplit(link).hostname, bytes=len(body))
         return body
 
     @staticmethod
@@ -329,7 +329,7 @@ class JsonClient:
         if retry_after is not None and retry_after.strip().isdigit():
             delay = max(delay, float(retry_after.strip()))
         delay = min(delay, self._policy.max_delay_s)
-        self._log.warning("net_retry", path=path, attempt=attempt, reason=reason, delay_s=round(delay, 2))
+        say(self._log, "net_retry", path=path, attempt=attempt, reason=reason, delay_s=round(delay, 2))
         event("retry", {"yaqzan.attempt": attempt, "yaqzan.reason": reason})
         await self._sleep(delay)
 
