@@ -14,9 +14,10 @@ import { changes, reports, type Report, type Seen } from "./alerts";
 import { PING_URL_RE, readSettings, type RawEnv, type Settings } from "./config";
 import { checkGuard, guardReport, type GuardSettings } from "./guard";
 import { checkAll, type Deps } from "./probe";
+import { readReminders, runReminders, type RawReminderEnv } from "./reminders";
 import { addressId, loadState, saveRound } from "./store";
 
-export interface Env extends RawEnv {
+export interface Env extends RawEnv, RawReminderEnv {
   readonly DB: D1Database;
 }
 
@@ -103,8 +104,18 @@ const live: Deps = {
   now: () => Date.now(),
 };
 
+// The second schedule: reminders until acknowledged (reminders.ts), in its own run and call budget.
+export const REMINDER_CRON = "*/5 * * * *";
+
+export async function remind(env: Env, deps: Deps): Promise<void> {
+  const settings = readReminders(env);
+  if (settings === null) return;
+  await runReminders(env.DB, settings, deps);
+}
+
 export default {
-  async scheduled(_controller, env) {
-    await run(env, live);
+  async scheduled(controller, env) {
+    if (controller.cron === REMINDER_CRON) await remind(env, live);
+    else await run(env, live);
   },
 } satisfies ExportedHandler<Env>;

@@ -18,3 +18,12 @@ CREATE TABLE IF NOT EXISTS hourly (
   good INTEGER NOT NULL CHECK (good >= 0 AND good <= total),
   PRIMARY KEY (id, hour)
 );
+
+-- Reminders until acknowledged (reminders.ts): per project, when its outage began, when the
+-- phone was last reminded, and when its reminder check was last kept fresh (epoch ms).
+CREATE TABLE IF NOT EXISTS reminders (
+  project TEXT PRIMARY KEY,
+  down_since INTEGER,
+  last_sent INTEGER,
+  last_refresh INTEGER
+);
