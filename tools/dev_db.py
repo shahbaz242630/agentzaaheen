@@ -30,7 +30,8 @@ LABEL_KEY = "com.yaqzan.role"
 LABEL_VALUE = "dev-db"
 IMAGE = "pgvector/pgvector:0.8.7-pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d"
 HOST = "127.0.0.1"
-PORT = 55432
+# 55432 is taken by Agent X's load-test database on the shared laptop (22 Oct 2026), so ours sits next to it.
+PORT = 55439
 MEMORY_LIMIT_MB = 512
 MIN_FREE_MB = 1024
 RETRY_SECONDS = 300
