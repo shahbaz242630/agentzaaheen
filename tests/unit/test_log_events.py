@@ -10,8 +10,8 @@ from typing import Any
 
 import pytest
 
-from yaqzan.core.sdk import LOG_EVENTS, LogEvent, explain, get_logger, say
-from yaqzan.core.sdk.events import placeholders
+from yaqzan.core.sdk import KNOWN_CODES, LOG_EVENTS, LogEvent, explain, get_logger, say
+from yaqzan.core.sdk.events import SAID, placeholders
 from yaqzan.core.telemetry.logs import LOG_FIELDS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -77,6 +77,7 @@ def test_each_call_gives_the_fields_its_sentences_name() -> None:
         if None in given:  # a **splat may add more; its keys are checked by the tests of that module
             continue
         needed = placeholders(event.what) | placeholders(event.why) | placeholders(event.next)
+        needed -= {SAID}
         needed |= {f for f in (event.explains, event.vendor) if f is not None}
         if needed - given:
             missing.append(f"{where(path, call)} lacks {sorted(needed - given)}")
@@ -89,7 +90,7 @@ def test_each_call_gives_the_fields_its_sentences_name() -> None:
 @pytest.mark.parametrize("name", sorted(LOG_EVENTS))
 def test_each_event_says_what_and_why_and_what_next_when_it_matters(name: str) -> None:
     event = LOG_EVENTS[name]
-    assert event.what.endswith(".")
+    assert event.what.endswith((".", "{" + SAID + "}"))  # the catalogue's summaries end in a full stop
     assert event.what[0].isupper()
     assert event.why or event.explains, "a why sentence, or a reason code to explain"
     if event.level != "info":
@@ -103,6 +104,8 @@ def test_sentences_name_only_fields_the_log_store_may_receive(name: str) -> None
     event = LOG_EVENTS[name]
     named = placeholders(event.what) | placeholders(event.why) | placeholders(event.next)
     named |= {f for f in (event.explains, event.vendor) if f is not None}
+    if event.explains is not None:
+        named -= {SAID}  # the catalogue's own words for the code
     assert named <= LOG_FIELDS, "free text (paths, tool arguments, errors) must never reach a sentence"
 
 
@@ -147,7 +150,10 @@ def test_the_vendor_names_the_source_in_the_explanation() -> None:
     )
     assert line["why"] == explain("source.auth", vendor="paddle").why
     assert line["next"] == explain("source.auth", vendor="paddle").fix
-    assert line["what"] == "The revenue sync from paddle failed at the fetch step (http 401)."
+    assert (
+        line["what"]
+        == f"The revenue sync stopped while trying to fetch: {explain('source.auth', vendor='paddle').what}"
+    )
 
 
 def test_an_explained_event_without_its_code_still_says_something() -> None:
@@ -192,3 +198,8 @@ def test_own_and_catalogue_sentences_mix_part_by_part(monkeypatch: pytest.Monkey
     first, second = logged("own_why", code="net.timeout"), logged("own_next", code="net.timeout")
     assert (first["why"], first["next"]) == ("Own why.", said.fix)
     assert (second["why"], second["next"]) == (said.why, "Own next.")
+
+
+def test_every_catalogue_summary_is_a_whole_sentence() -> None:
+    for code in sorted(KNOWN_CODES):
+        assert explain(code).what.endswith("."), code

@@ -16,7 +16,8 @@ store is allowed to receive (``telemetry.logs.LOG_FIELDS``), so a sentence can
 never carry text an outsider wrote. When an event carries a reason code
 (``explains``), its ``why`` and ``next`` come from the error catalogue
 (:func:`~yaqzan.core.sdk.explain.explain`), so a failure reads the same in the
-logs, on the dashboard and in alerts.
+logs, on the dashboard and in alerts; ``{said}`` in a sentence is that
+catalogue's own one-line summary ("Paddle refused our API key.").
 
 A test reads every ``say(...)`` call in the code and fails if an event is not
 listed here, a sentence is missing, or a template names an unsafe field.
@@ -34,6 +35,8 @@ from yaqzan.core.sdk.explain import explain
 type Level = Literal["info", "warning", "error"]
 
 UNKNOWN = "unknown"
+# In a sentence of an event that ``explains`` a code: the catalogue's summary of it.
+SAID = "said"
 _NO_CAUSE = "The cause is not known."
 
 
@@ -145,13 +148,13 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
     ),
     "revenue_sync_failed": LogEvent(
         "warning",
-        what="The revenue sync from {source} failed at the {stage} step (http {http_status}).",
+        what="The revenue sync stopped while trying to {stage}: {said}",
         explains="reason_code",
         vendor="source",
     ),
     "revenue_sync_crashed": LogEvent(
         "error",
-        what="The revenue sync from {source} crashed at the {stage} step.",
+        what="The revenue sync from {source} crashed while trying to {stage}.",
         explains="reason_code",
         vendor="source",
     ),
@@ -176,10 +179,13 @@ def say(log: Any, name: str, /, **fields: object) -> None:  # noqa: ANN401  # st
             name, what=f"Something happened that has no description yet ({name}).", why=_NO_CAUSE, next=""
         )
         return
+    said = None
+    if event.explains is not None:
+        said = explain(str(fields.get(event.explains) or UNKNOWN), vendor=_vendor(event, fields))
+        fields = {**fields, SAID: said.what}
     what = _fill(event.what, fields)
     why, after = _fill(event.why, fields), _fill(event.next, fields)
-    if event.explains is not None and (not why or not after):
-        said = explain(str(fields.get(event.explains) or UNKNOWN), vendor=_vendor(event, fields))
+    if said is not None:
         why, after = why or said.why, after or said.fix
     getattr(log, event.level)(name, what=what, why=why or _NO_CAUSE, next=after, **fields)
 

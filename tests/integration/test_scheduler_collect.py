@@ -143,8 +143,11 @@ def test_a_failure_is_logged_in_plain_english_with_the_precise_code(
     assert line["attempt"] == "1/4"
     assert line["http_status"] == 401
     assert line["reason_code"] == "net.auth"
-    assert line["what"] == "Paddle refused our API key."
-    assert line["fix"].startswith("Create a new read-only key in Paddle's settings")
+    assert (
+        line["what"]
+        == "The revenue sync stopped while trying to fetch from paddle: Paddle refused our API key."
+    )
+    assert line["next"].startswith("Create a new read-only key in Paddle's settings")
     assert key not in logged
 
 
