@@ -22,7 +22,7 @@ import httpx
 
 from yaqzan.core.net.client import NetPolicy, check_host, check_path
 from yaqzan.core.net.errors import NetError, NetErrorCode
-from yaqzan.core.sdk import StatusAnswer, span
+from yaqzan.core.sdk import StatusAnswer, get_logger, say, span
 
 USER_AGENT = "Yaqzan-uptime/1"
 DEFAULT_TIMEOUT_S = 10.0
@@ -86,15 +86,24 @@ class StatusProbe:
         attributes = {"server.address": host, "http.request.method": "GET"}
         with span(f"probe {host}", kind="client", attributes=attributes) as current:
             started = self._clock()
+            log = get_logger("yaqzan.net.probe", host=host)
             try:
-                async with asyncio.timeout(self._policy.total_timeout_s):
-                    async with self._http.stream("GET", checked) as response:
-                        status = response.status_code
-            except (TimeoutError, httpx.TimeoutException):
-                raise NetError(NetErrorCode.TIMEOUT, "the address did not answer in time") from None
-            except httpx.TransportError:
-                raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the address") from None
+                status = await self._status(checked)
+            except NetError as exc:
+                say(log, "probe_failed", host=host, code=exc.net_code.value)
+                raise
             elapsed_ms = max(0, round((self._clock() - started) * 1000))
             current.set_attribute("http.response.status_code", status)
             current.set_attribute("yaqzan.elapsed_ms", elapsed_ms)
+            say(log, "probe_answered", host=host, http_status=status, duration_ms=elapsed_ms)
         return StatusAnswer(status=status, elapsed_ms=elapsed_ms)
+
+    async def _status(self, checked: str) -> int:
+        try:
+            async with asyncio.timeout(self._policy.total_timeout_s):
+                async with self._http.stream("GET", checked) as response:
+                    return response.status_code
+        except (TimeoutError, httpx.TimeoutException):
+            raise NetError(NetErrorCode.TIMEOUT, "the address did not answer in time") from None
+        except httpx.TransportError:
+            raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the address") from None

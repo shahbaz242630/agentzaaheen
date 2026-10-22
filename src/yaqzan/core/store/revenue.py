@@ -127,7 +127,7 @@ class RevenueRows:
     ) -> None:
         """Upsert everything in ``batch`` and mark the sync successful, all in one transaction."""
         require_aware(at)
-        async with self._db.transaction() as conn:
+        async with self._db.write("a revenue batch", atomic=True) as conn:
             await self._write(conn, tenant_id, project_id, batch, at)
             await conn.execute(_MARK_SUCCESS, tenant_id, project_id, batch.source, at, batch.fetched_at)
 
@@ -160,7 +160,7 @@ class RevenueRows:
     async def mark_attempt(self, tenant_id: UUID, project_id: UUID, source: str, *, at: datetime) -> None:
         """Record that a sync started."""
         require_aware(at)
-        async with self._db.connection() as conn:
+        async with self._db.write("a revenue sync attempt") as conn:
             await conn.execute(_MARK_ATTEMPT, tenant_id, project_id, source, at)
 
     async def mark_failure(
@@ -168,7 +168,7 @@ class RevenueRows:
     ) -> None:
         """Record that a sync failed and why. The last success (and so freshness) is untouched."""
         require_aware(at)
-        async with self._db.connection() as conn:
+        async with self._db.write("a failed revenue sync") as conn:
             await conn.execute(_MARK_FAILURE, tenant_id, project_id, source, at, error_code)
 
     async def sync_state(self, tenant_id: UUID, project_id: UUID, source: str) -> SyncState | None:

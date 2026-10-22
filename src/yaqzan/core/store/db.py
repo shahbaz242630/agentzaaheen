@@ -3,12 +3,15 @@
 Every query in the store is a fixed SQL string with ``$n`` parameters; values are
 never formatted into SQL. Tables are always schema-qualified (``yaqzan.x``) so a
 changed ``search_path`` cannot redirect a query. Each borrowed connection is
-one client span (no SQL text, no values: ADR-032).
+one client span (no SQL text, no values: ADR-032). Every write goes through
+:meth:`Database.write`, which logs one plain-English line naming the kind of
+record (our own words, never its contents) and whether it was saved (ADR-034).
 """
 
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -17,7 +20,7 @@ import asyncpg
 from asyncpg.pool import PoolConnectionProxy
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from yaqzan.core.sdk import span
+from yaqzan.core.sdk import elapsed_ms, get_logger, say, span
 from yaqzan.core.store.errors import StoreError, StoreErrorCode
 
 type Connection = PoolConnectionProxy[asyncpg.Record]
@@ -126,3 +129,19 @@ class Database:
         with span("db transaction", kind="client", attributes=_DB):
             async with _translated(), self._pool.acquire() as conn, conn.transaction():
                 yield conn
+
+    @asynccontextmanager
+    async def write(self, record: str, *, atomic: bool = False) -> AsyncIterator[Connection]:
+        """Borrow a connection to save ``record``, and log whether it was saved (ADR-034).
+
+        ``record`` is our own words for the kind of row ("a revenue batch"), never its values.
+        ``atomic`` borrows it inside a transaction: all of it commits, or none of it.
+        """
+        log, started = get_logger("yaqzan.store"), time.monotonic()
+        try:
+            async with self.transaction() if atomic else self.connection() as conn:
+                yield conn
+        except StoreError as exc:
+            say(log, "store_write_failed", record=record, code=exc.code.value)
+            raise
+        say(log, "store_saved", record=record, duration_ms=elapsed_ms(started))

@@ -20,6 +20,7 @@ import ipaddress
 import json
 import random
 import re
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from types import TracebackType
@@ -30,7 +31,7 @@ import httpx
 from pydantic import SecretStr
 
 from yaqzan.core.net.errors import NetError, NetErrorCode
-from yaqzan.core.sdk import event, get_logger, note, say, span
+from yaqzan.core.sdk import elapsed_ms, event, get_logger, note, say, span
 
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 _AUTH_STATUSES = frozenset({401, 403})
@@ -179,21 +180,40 @@ class JsonClient:
 
     async def _get(self, path: str, params: Mapping[str, str]) -> bytes:
         """The body of a 200 answer to GET ``path``, retrying where it is safe."""
+        started = time.monotonic()
         with span(f"GET {self._host}", kind="client", attributes=self._span_attributes()) as current:
             try:
-                body = await self._get_retrying(path, params)
+                body, attempts = await self._get_retrying(path, params)
             except NetError as exc:
                 current.set_attribute("yaqzan.attempts", exc.attempt or 0)
                 if exc.status is not None:
                     current.set_attribute("http.response.status_code", exc.status)
+                say(
+                    self._log,
+                    "net_failed",
+                    host=self._host,
+                    attempt=exc.attempt,
+                    duration_ms=elapsed_ms(started),
+                    http_status=exc.status,
+                    code=exc.net_code.value,
+                )
                 raise
             current.set_attribute("http.response.status_code", 200)
+            say(
+                self._log,
+                "net_answered",
+                host=self._host,
+                attempt=attempts,
+                duration_ms=elapsed_ms(started),
+                http_status=200,
+            )
             return body
 
     def _span_attributes(self) -> dict[str, str | int]:
         return {"server.address": self._host, "http.request.method": "GET"}
 
-    async def _get_retrying(self, path: str, params: Mapping[str, str]) -> bytes:
+    async def _get_retrying(self, path: str, params: Mapping[str, str]) -> tuple[bytes, int]:
+        """The body of a 200 answer and the attempt that got it."""
         try:
             url = self._base + check_path(path)
         except NetError as exc:
@@ -218,7 +238,7 @@ class JsonClient:
                     continue
                 if isinstance(outcome, bytes):
                     note("yaqzan.attempts", attempt)
-                    return outcome
+                    return outcome, attempt
                 status, retry_after = outcome
                 if last:
                     code = (
