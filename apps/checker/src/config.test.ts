@@ -12,13 +12,20 @@ describe("settings", () => {
     expect(settings.pingKey).toBe(KEY);
     expect(settings.pingUrl).toBe(PING);
     expect(settings.targets).toEqual([
-      { project: "eva", projectName: "Eva", url: "https://api.example.com/health", expect: "ok", part: null },
+      { project: "eva", projectName: "Eva", url: "https://api.example.com/health", expect: "ok", part: null, status: null },
     ]);
   });
 
   it("reads a part's name when one is given", () => {
     const raw = JSON.stringify({ eva: { name: "Eva", sites: [{ url: "https://a.example.com", expect: "ok", part: "sign-in" }] } });
     expect(readTargets(raw)[0]?.part).toBe("sign-in");
+  });
+
+  it("reads an exact status with its rule, including the lowest and highest codes", () => {
+    for (const code of [100, 405, 499]) {
+      const raw = JSON.stringify({ zaaheen: { name: "Zaaheen", sites: [{ url: "https://api.example.com/v1/x", expect: "status", status: code }] } });
+      expect(readTargets(raw)[0]).toMatchObject({ expect: "status", status: code });
+    }
   });
 
   it.each([
@@ -50,8 +57,16 @@ describe("targets", () => {
     [JSON.stringify({ eva: { name: "Eva<script>", sites: [] } }), "name is not usable"],
     [JSON.stringify({ eva: { name: "Eva", sites: [] } }), "list of sites"],
     [JSON.stringify({ eva: { name: "Eva", sites: "x" } }), "list of sites"],
-    [JSON.stringify({ eva: { name: "Eva", sites: ["x"] } }), "only a url, an expect and a part"],
-    [site({ note: "x" }), "only a url, an expect and a part"],
+    [JSON.stringify({ eva: { name: "Eva", sites: ["x"] } }), "only a url, an expect, a part and a status"],
+    [site({ note: "x" }), "only a url, an expect, a part and a status"],
+    [site({ expect: "exact" }), 'expect must be "ok", "answer" or "status"'],
+    [site({ expect: "status" }), 'give a status with expect "status"'],
+    [site({ status: 405 }), 'give a status with expect "status"'],
+    [site({ expect: "answer", status: 405 }), 'give a status with expect "status"'],
+    [site({ expect: "status", status: 500 }), "whole number from 100 to 499"],
+    [site({ expect: "status", status: 99 }), "whole number from 100 to 499"],
+    [site({ expect: "status", status: 405.5 }), "whole number from 100 to 499"],
+    [site({ expect: "status", status: "405" }), "whole number from 100 to 499"],
     [site({ part: "API" }), "a part is not lowercase"],
     [site({ part: "sign in" }), "a part is not lowercase"],
     [site({ part: "a".repeat(25) }), "a part is not lowercase"],
@@ -62,7 +77,7 @@ describe("targets", () => {
     [site({ url: `https://a.example.com/${"x".repeat(300)}` }), "https address"],
     [site({ url: 42 }), "https address"],
     [site({ url: "https://10.0.0.1/health" }), "not an IP address"],
-    [site({ expect: "maybe" }), 'expect must be "ok" or "answer"'],
+    [site({ expect: "maybe" }), 'expect must be "ok", "answer" or "status"'],
   ])("refuses what it cannot use exactly %#", (raw, message) => {
     expect(() => readTargets(raw)).toThrow(SettingsError);
     expect(() => readTargets(raw)).toThrow(message);

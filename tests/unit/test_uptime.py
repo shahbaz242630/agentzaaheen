@@ -45,6 +45,53 @@ def test_each_rule_judges_a_status(expect: Expect, status: int, up: bool, reason
     assert judge(SiteRule(url=SITE, expect=expect), status) == (up, reason)
 
 
+@pytest.mark.parametrize(
+    ("status", "up", "reason"),
+    [
+        (405, True, "uptime.expected"),
+        (404, False, "uptime.wrong_answer"),  # a website now answering at an API's address
+        (200, False, "uptime.wrong_answer"),
+        (302, False, "uptime.wrong_answer"),
+        (401, False, "uptime.wrong_answer"),
+        (503, False, "uptime.server_error"),
+    ],
+)
+def test_the_status_rule_counts_only_its_exact_code(status: int, up: bool, reason: str) -> None:
+    assert judge(SiteRule(url=API, expect=Expect.STATUS, status=405), status) == (up, reason)
+
+
+def test_an_exact_2xx_is_expected_not_merely_ok() -> None:
+    assert judge(SiteRule(url=API, expect=Expect.STATUS, status=204), 204) == (True, "uptime.expected")
+    assert judge(SiteRule(url=API, expect=Expect.STATUS, status=204), 200) == (False, "uptime.wrong_answer")
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"expect": "status"},
+        {"expect": "ok", "status": 405},
+        {"expect": "answer", "status": 405},
+        {"expect": "status", "status": 500},
+        {"expect": "status", "status": 99},
+        {"status": 405},
+    ],
+)
+def test_a_status_goes_only_with_the_status_rule_and_never_a_server_error(fields: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match=r"give a status|less than|greater than or equal"):
+        SiteRule.model_validate({"url": API, **fields})
+
+
+def test_the_lowest_and_highest_exact_codes_are_allowed() -> None:
+    assert SiteRule(url=API, expect=Expect.STATUS, status=100).status == 100
+    assert SiteRule(url=API, expect=Expect.STATUS, status=499).status == 499
+
+
+def test_a_wrong_answer_check_keeps_its_status() -> None:
+    rule = SiteRule(url=API, expect=Expect.STATUS, status=405, part="api")
+    check = check_site(rule, StatusAnswer(status=404, elapsed_ms=30), NOW)
+    assert (check.up, check.reason, check.status, check.part) == (False, "uptime.wrong_answer", 404, "api")
+
+
 def test_no_answer_is_down() -> None:
     check = check_site(SiteRule(url=SITE), None, NOW)
     assert (check.up, check.reason, check.status, check.latency_ms) == (False, "uptime.no_answer", None, None)

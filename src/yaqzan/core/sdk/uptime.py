@@ -10,6 +10,11 @@ Each address has a rule:
   and health pages.
 - ``answer``: it must answer at all without a server error (anything below
   500). For a bare API address that has no page of its own.
+- ``status``: it must answer with exactly the code given in ``status`` (SDK
+  1.10.0). For a route only the real service answers that way, so another
+  service answering at the address counts as down (``uptime.wrong_answer``).
+  After an API was replaced by a website for 15 hours and still looked "up"
+  under ``answer`` (Zaaheen, 20-21 Oct 2026).
 
 An address may also name its **part** of the product (``site``, ``api``,
 ``sign-in``; SDK 1.9.0), so an alert and the fix guides can say which part is
@@ -26,7 +31,7 @@ from enum import StrEnum
 from typing import Protocol
 from urllib.parse import urlsplit
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 URL = r"^https://[a-z0-9.-]+(/[A-Za-z0-9._~/-]*)?$"
 _REASON = r"^uptime\.[a-z_]+$"
@@ -37,6 +42,7 @@ _SERVER_ERROR = 500
 _REDIRECT = range(300, 400)
 _OK = range(200, 300)
 _NOT_FOUND = 404
+_LOWEST_STATUS = 100
 
 
 class Expect(StrEnum):
@@ -44,6 +50,7 @@ class Expect(StrEnum):
 
     OK = "ok"  # a page or a redirect (2xx, 3xx)
     ANSWER = "answer"  # any answer that is not a server error (< 500)
+    STATUS = "status"  # exactly the code in SiteRule.status
 
 
 class SiteRule(BaseModel):
@@ -54,6 +61,14 @@ class SiteRule(BaseModel):
     url: str = Field(pattern=URL, max_length=300)
     expect: Expect = Expect.OK
     part: str | None = Field(default=None, pattern=PART, max_length=MAX_PART)
+    # Only with expect "status": the one code that counts as up (never a server error).
+    status: int | None = Field(default=None, ge=_LOWEST_STATUS, lt=_SERVER_ERROR)
+
+    @model_validator(mode="after")
+    def _status_goes_with_its_rule(self) -> SiteRule:
+        if (self.expect is Expect.STATUS) != (self.status is not None):
+            raise ValueError('give a status with expect "status", and only then')
+        return self
 
     @field_validator("url")
     @classmethod
@@ -115,6 +130,8 @@ def judge(rule: SiteRule, status: int) -> tuple[bool, str]:
     """Whether ``status`` counts as up under ``rule``, and the reason code."""
     if status >= _SERVER_ERROR:
         return False, "uptime.server_error"
+    if rule.expect is Expect.STATUS:
+        return (True, "uptime.expected") if status == rule.status else (False, "uptime.wrong_answer")
     if status in _OK:
         return True, "uptime.ok"
     if status in _REDIRECT:

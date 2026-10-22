@@ -4,7 +4,14 @@ import type { Target } from "./config";
 import { fakeDeps } from "./fakes.test-support";
 import { checkAll, judge, RECHECK_AFTER_MS, statusOf } from "./probe";
 
-const site = (url: string, expect: "ok" | "answer" = "ok"): Target => ({ project: "eva", projectName: "Eva", url, expect, part: null });
+const site = (url: string, expect: "ok" | "answer" = "ok"): Target => ({
+  project: "eva",
+  projectName: "Eva",
+  url,
+  expect,
+  part: null,
+  status: null,
+});
 
 describe("judge (same rules as core/sdk/uptime.py)", () => {
   it.each([
@@ -22,7 +29,24 @@ describe("judge (same rules as core/sdk/uptime.py)", () => {
     ["ok", null, false, "no_answer"],
     ["answer", null, false, "no_answer"],
   ] as const)("%s %s -> up=%s (%s)", (rule, status, up, reason) => {
-    expect(judge(rule, status)).toEqual({ up, reason });
+    expect(judge({ expect: rule, status: null }, status)).toEqual({ up, reason });
+  });
+
+  it.each([
+    [405, true, "expected"],
+    [404, false, "wrong_answer"], // a website now answering at an API's address
+    [200, false, "wrong_answer"],
+    [302, false, "wrong_answer"],
+    [401, false, "wrong_answer"],
+    [503, false, "server_error"],
+    [null, false, "no_answer"],
+  ] as const)("status 405, answered %s -> up=%s (%s)", (status, up, reason) => {
+    expect(judge({ expect: "status", status: 405 }, status)).toEqual({ up, reason });
+  });
+
+  it("an exact 2xx counts only when it is the very code", () => {
+    expect(judge({ expect: "status", status: 204 }, 204)).toEqual({ up: true, reason: "expected" });
+    expect(judge({ expect: "status", status: 204 }, 200)).toEqual({ up: false, reason: "wrong_answer" });
   });
 });
 

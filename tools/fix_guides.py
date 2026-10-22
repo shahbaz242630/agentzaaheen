@@ -22,7 +22,7 @@ for each reason the checks give::
               - Read the Worker's logs for config_incomplete ...
 
 Reasons are the checks' own codes: ``no_answer``, ``server_error``,
-``not_found``, ``refused``. A reason a part does not cover falls back to
+``not_found``, ``refused``, ``wrong_answer``. A reason a part does not cover falls back to
 :data:`GENERAL` (steps true of any address). Steps are written for a human or a
 read-only agent: checks to make, and fixes for the owner to approve.
 
@@ -52,8 +52,8 @@ MAX_FILE_BYTES = 128 * 1024
 MAX_TEXT = 300
 MAX_STEPS = 12
 
-type Reason = Literal["no_answer", "server_error", "not_found", "refused"]
-REASONS: tuple[Reason, ...] = ("no_answer", "server_error", "not_found", "refused")
+type Reason = Literal["no_answer", "server_error", "not_found", "refused", "wrong_answer"]
+REASONS: tuple[Reason, ...] = ("no_answer", "server_error", "not_found", "refused", "wrong_answer")
 
 # Our own words for each reason (the same as the alerts).
 REASON_WORDS: Mapping[str, str] = {
@@ -61,6 +61,7 @@ REASON_WORDS: Mapping[str, str] = {
     "server_error": "server error",
     "not_found": "page not found",
     "refused": "refused the request",
+    "wrong_answer": "answered as something else",
 }
 
 # True of any address; used when a part's guide does not cover a reason.
@@ -83,6 +84,12 @@ GENERAL: Mapping[str, tuple[str, ...]] = {
     "refused": (
         "A 4xx answer: check the edge's security events (firewall, rate limits, bot rules) for the checker.",
         "Check that the page does not now need a sign-in or a different path.",
+    ),
+    "wrong_answer": (
+        "Something answered, but not the way this service does: check which deployment or Worker "
+        "now owns the address (a different site or service may have replaced it).",
+        "Look for a deploy just before the alert, in this project or one sharing its hosting account.",
+        "Check the checked route still exists and still answers the expected code after the last deploy.",
     ),
 }
 

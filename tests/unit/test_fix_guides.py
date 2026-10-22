@@ -194,6 +194,14 @@ def test_an_unknown_part_or_reason_gets_the_general_steps(tmp_path: Path) -> Non
     assert GENERAL["no_answer"][0] in guide_text(guides, "eva", "api", "teapot")
 
 
+def test_a_wrong_answer_has_general_steps_and_its_own_words(tmp_path: Path) -> None:
+    guides = load_fixes(write(tmp_path, GUIDE), PROJECTS)
+    text = guide_text(guides, "zaaheen", "site", "wrong_answer")
+    assert GENERAL["wrong_answer"][0] in text
+    assert "answered as something else" in text
+    assert GENERAL["refused"][0] not in text
+
+
 # --- the chat tool and the dashboard option -------------------------------------------------------------
 
 

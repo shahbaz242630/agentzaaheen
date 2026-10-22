@@ -26,6 +26,7 @@ REASON_WORDS: Mapping[str, str] = {
     "uptime.server_error": "server error",
     "uptime.not_found": "page not found",
     "uptime.refused": "refused the request",
+    "uptime.wrong_answer": "answered as something else",
 }
 
 
