@@ -76,7 +76,7 @@ class AuditRows:
 
     async def append(self, tenant_id: UUID, build: Callable[[AuditRow | None], AuditRow]) -> AuditRow:
         """Lock the tenant's chain, pass the head to ``build``, insert what it returns."""
-        async with self._db.transaction() as conn:
+        async with self._db.write("an audit log entry", atomic=True) as conn:
             await conn.execute(_LOCK, tenant_id)
             head = _row(await conn.fetchrow(_HEAD, tenant_id))
             row = build(head)

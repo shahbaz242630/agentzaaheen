@@ -20,6 +20,7 @@ own trace.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any, Protocol
@@ -44,7 +45,7 @@ from yaqzan.core.auth import PasskeyError
 from yaqzan.core.llm_gateway import ChatReply
 from yaqzan.core.policy import Verdict
 from yaqzan.core.registry import Kind
-from yaqzan.core.sdk import SourceError, failed, get_logger, say, span, traceparent
+from yaqzan.core.sdk import SourceError, elapsed_ms, failed, get_logger, say, span, traceparent
 from yaqzan.core.store import StoreError
 
 LOCAL_HOSTS: tuple[str, ...] = ("127.0.0.1", "localhost")
@@ -149,6 +150,7 @@ class RegistrySwitches(Protocol):
 
 
 REQUEST_HEADER = "X-Yaqzan-Request"
+_SERVER_ERROR = 500
 
 
 def _connected(models: ModelList, chat: ChatBackend | None) -> ModelList:
@@ -259,20 +261,36 @@ async def _with_headers(request: Request, call_next: Callable[[Request], Awaitab
         response.headers.update(SECURITY_HEADERS)
         return response
     method = request.method
+    started = time.monotonic()
     with span(f"{method} /api", kind="server", attributes={"http.request.method": method}) as current:
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Logged inside the span, so the line joins this request's trace.
+            _said(method, _route_template(request), _SERVER_ERROR, started)
+            raise
         route = _route_template(request)
         current.update_name(f"{method} {route}")
         current.set_attribute("http.route", route)
         current.set_attribute("http.response.status_code", response.status_code)
-        if response.status_code >= 500:  # a server error, not a refusal
+        if response.status_code >= _SERVER_ERROR:  # a server error, not a refusal
             failed(current, str(response.status_code))
+        _said(method, route, response.status_code, started)
         parent = traceparent()
     response.headers.update(SECURITY_HEADERS)
     response.headers["Cache-Control"] = "no-store"
     if parent is not None:
         response.headers["traceparent"] = parent
     return response
+
+
+def _said(method: str, route: str, status: int, started: float) -> None:
+    """The API door's one line per request (ADR-034): the route template, never the filled-in path."""
+    log, duration_ms = get_logger("yaqzan.api"), elapsed_ms(started)
+    if status >= _SERVER_ERROR:
+        say(log, "api_failed", method=method, route=route, http_status=status, duration_ms=duration_ms)
+    else:
+        say(log, "api_answered", method=method, route=route, http_status=status, duration_ms=duration_ms)
 
 
 def _route_template(request: Request) -> str:

@@ -32,6 +32,7 @@ from yaqzan.core.policy.access import Channel, Role
 from yaqzan.core.policy.audit import AuditDraft, AuditOutcome
 from yaqzan.core.policy.ledger import Ledger
 from yaqzan.core.policy.registry_control import RegistryControl, Verdict
+from yaqzan.core.sdk import get_logger, say
 from yaqzan.core.store import Database, PasskeyRow, PasskeyRows
 
 MAX_WRONG_CODES = 5
@@ -135,6 +136,7 @@ class PasskeyApprovals:
     async def _audit(
         self, action: str, reason: str, now: datetime, *, allowed: bool, request_id: UUID | None = None
     ) -> None:
+        say(get_logger("yaqzan.passkey"), "passkey_decided", action=action, verdict=reason)
         await self._ledger.record(
             AuditDraft(
                 at=now,

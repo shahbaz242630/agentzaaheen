@@ -62,7 +62,7 @@ class PasskeyRows:
     async def add_first(self, tenant_id: UUID, row: PasskeyRow) -> bool:
         """Store the first passkey. Returns False if the tenant already has an active one."""
         require_aware(row.created_at)
-        async with self._db.connection() as conn:
+        async with self._db.write("the Chairman's first passkey") as conn:
             added = await conn.fetchval(
                 _ADD,
                 tenant_id,
@@ -78,7 +78,7 @@ class PasskeyRows:
         """Revoke the active passkey and add ``row``, all or nothing. False if the new one was not added."""
         require_aware(row.created_at)
         try:
-            async with self._db.transaction() as conn:
+            async with self._db.write("a replacement passkey", atomic=True) as conn:
                 await conn.fetch(_REVOKE, tenant_id, row.created_at)
                 added = await conn.fetchval(
                     _ADD,
@@ -98,7 +98,7 @@ class PasskeyRows:
     async def record_use(self, tenant_id: UUID, credential_id: bytes, sign_count: int, at: datetime) -> bool:
         """Move the counter forward after a verified use. False if unknown, revoked or going backwards."""
         require_aware(at)
-        async with self._db.connection() as conn:
+        async with self._db.write("a passkey's use counter") as conn:
             return await conn.fetchval(_USED, tenant_id, credential_id, sign_count, at) is not None
 
 

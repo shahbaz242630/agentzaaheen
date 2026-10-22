@@ -109,9 +109,11 @@ class FactChat:
         """The wrapped result to show the model, and a label for ``used`` (``None`` if refused)."""
         tool = self._tools.get(name)
         if tool is None:
+            say(self._log, "chat_tool_refused", reason="unknown_tool")  # never the asked-for name
             allowed = ", ".join(self._tools)
             return wrap_result("refused", f"There is no tool '{name}'. Tools: {allowed}.", trusted=True), None
         if arg not in tool.choices:
+            say(self._log, "chat_tool_refused", tool=name, reason="choice_not_allowed")
             allowed = " | ".join(tool.choices)
             return wrap_result(name, f"'{arg}' is not allowed. Allowed: {allowed}.", trusted=True), None
         try:

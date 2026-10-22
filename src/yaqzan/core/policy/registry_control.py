@@ -35,6 +35,7 @@ from yaqzan.core.registry import (
     may_switch_off,
     state_of,
 )
+from yaqzan.core.sdk import get_logger, say
 from yaqzan.core.store import Database, RegistrySwitchRows, RequestRow, RequestStatus
 
 # Plugin bundles come from outside folders (e.g. Claude's plugin cache): listed, never used (ADR-027).
@@ -254,6 +255,13 @@ class RegistryControl:
         target: str,
         request_id: UUID | None = None,
     ) -> None:
+        say(
+            get_logger("yaqzan.registry"),
+            "registry_decided",
+            action=action,
+            actor=_ACTORS[role],
+            verdict=verdict.value,
+        )
         details: dict[str, str | int | bool | None] = {"verdict": verdict.value}
         if request_id is not None:
             details["request"] = str(request_id)

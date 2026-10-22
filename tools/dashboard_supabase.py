@@ -31,7 +31,15 @@ from yaqzan.core.api.backend import CARD_ID, backend_card, failed_backend_card
 from yaqzan.core.api.overlay import CardMaker, OverlayPortfolio
 from yaqzan.core.api.views import Card
 from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.sdk import PROJECT_REF, BackendHealth, SourceError, SourceErrorCode, explain
+from yaqzan.core.sdk import (
+    PROJECT_REF,
+    BackendHealth,
+    SourceError,
+    SourceErrorCode,
+    explain,
+    get_logger,
+    say,
+)
 from yaqzan.plugins.connectors import supabase
 
 # Read once at start: treated as an hourly source, so it shows "unknown" after two hours.
@@ -158,8 +166,12 @@ def supabase_list(path: Path | None, projects: Collection[str]) -> dict[str, Sup
     """The local list given with ``--supabase`` (empty without one); a broken list is said and raised."""
     if path is None:
         return {}
+    log = get_logger("yaqzan.settings")
     try:
-        return load_supabase(path, projects)
+        found = load_supabase(path, projects)
     except SupabaseListError as exc:
-        print(f"dashboard: {exc}.")
+        print(f"dashboard: {exc}.")  # the exact rule, on the console only: it can quote the file
+        say(log, "settings_refused", setting="Supabase")
         raise ListNotUsableError from None
+    say(log, "settings_loaded", setting="Supabase", entries=len(found))
+    return found

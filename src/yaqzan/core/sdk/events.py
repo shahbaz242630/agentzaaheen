@@ -26,6 +26,7 @@ listed here, a sentence is missing, or a template names an unsafe field.
 from __future__ import annotations
 
 import string
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -73,6 +74,15 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="The chat read {tool} to answer a question ({chars} characters).",
         why="The model asked for it, and the tool is switched on.",
     ),
+    "chat_tool_refused": LogEvent(
+        "warning",
+        what="The chat's model asked for a tool or a choice that is not on, so it was refused ({reason}).",
+        why="Only switched-on tools, with their listed choices, may run.",
+        next=(
+            "Nothing to do unless it keeps happening; then the model may be confused,"
+            " or a question may be misusing tools."
+        ),
+    ),
     "chat_tool_failed": LogEvent(
         "warning",
         what="The chat tried to read {tool}, but the read failed.",
@@ -84,7 +94,49 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         why="The switches that say which tools are on could not be read ({code}), so everything stays off.",
         next="Check the laptop database is running (uv run python -m tools.laptop_db status).",
     ),
+    # ---- the dashboard's API (one line per request: the route template, never the filled-in path)
+    "api_answered": LogEvent(
+        "info",
+        what="The dashboard asked for {method} {route} and got http {http_status} in {duration_ms} ms.",
+        why="The dashboard page on this laptop asked for it.",
+    ),
+    "api_failed": LogEvent(
+        "error",
+        what="The dashboard's request {method} {route} failed (http {http_status}) after {duration_ms} ms.",
+        why="Something inside Yaqzan broke while answering it.",
+        next="Open this request's trace (the trace_id on this line) to see which step failed.",
+    ),
     # ---- outbound calls
+    "net_answered": LogEvent(
+        "info",
+        what="A call to {host} was answered after {attempt} attempt(s) in {duration_ms} ms.",
+        why="A connector read data it is allowed to read.",
+    ),
+    "net_failed": LogEvent(
+        "warning",
+        what="A call to {host} failed after {attempt} attempt(s) and {duration_ms} ms (http {http_status}).",
+        explains="code",
+    ),
+    "probe_answered": LogEvent(
+        "info",
+        what="The uptime check of {host} got http {http_status} in {duration_ms} ms.",
+        why="The uptime check asks each listed address whether it is up; the page itself is never read.",
+    ),
+    "probe_failed": LogEvent(
+        "warning",
+        what="The uptime check of {host} got no usable answer.",
+        explains="code",
+    ),
+    "model_answered": LogEvent(
+        "info",
+        what="The local model answered in {duration_ms} ms.",
+        why="The dashboard chat asked it a question.",
+    ),
+    "push_failed": LogEvent(
+        "warning",
+        what="A phone alert could not be sent (http {http_status}).",
+        explains="code",
+    ),
     "net_download": LogEvent(
         "info",
         what="Downloaded {bytes} bytes from {download_host}.",
@@ -134,6 +186,40 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         why="A stored kill switch makes no sense ({reason_code}); Yaqzan stops everything rather than guess.",
         next="Report it to Claude: the stored switch row needs to be checked and fixed.",
     ),
+    # ---- the Customize page's switches and approvals (each also in the audit log)
+    "registry_decided": LogEvent(
+        "info",
+        what="A Customize page change ({action}) by {actor} ended as {verdict}.",
+        why="Someone used the Customize page; the same decision is kept in the audit log.",
+    ),
+    "passkey_decided": LogEvent(
+        "info",
+        what="A passkey step ({action}) ended as {verdict}.",
+        why="The Chairman used Windows Hello on the Customize page; the audit log keeps the same decision.",
+    ),
+    # ---- the database (one line per write: what kind of record, never its contents)
+    "store_saved": LogEvent(
+        "info",
+        what="Wrote {record} to the database in {duration_ms} ms.",
+        why="Yaqzan keeps it so it is not forgotten.",
+    ),
+    "store_write_failed": LogEvent(
+        "warning",
+        what="Could not save {record} to the database.",
+        explains="code",
+    ),
+    # ---- local settings files read at start
+    "settings_loaded": LogEvent(
+        "info",
+        what="The {setting} list was loaded ({entries} projects).",
+        why="The dashboard was started with it.",
+    ),
+    "settings_refused": LogEvent(
+        "error",
+        what="The {setting} list was not used, so the dashboard did not start.",
+        why="The file breaks one of its rules; the exact rule is printed on the dashboard's console.",
+        next="Fix the file in projects/ and start the dashboard again.",
+    ),
     "registry_item_refused": LogEvent(
         "warning",
         what="A {kind} was not loaded into the registry.",
@@ -159,6 +245,11 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         vendor="source",
     ),
     # ---- uptime
+    "uptime_round_done": LogEvent(
+        "info",
+        what="An uptime round checked {checked} addresses: {failing} not up, {changes} changes to report.",
+        why="The uptime check runs every 5 minutes.",
+    ),
     "uptime_round_failed": LogEvent(
         "warning",
         what="One round of uptime re-checks could not run.",
@@ -188,6 +279,11 @@ def say(log: Any, name: str, /, **fields: object) -> None:  # noqa: ANN401  # st
     if said is not None:
         why, after = why or said.why, after or said.fix
     getattr(log, event.level)(name, what=what, why=why or _NO_CAUSE, next=after, **fields)
+
+
+def elapsed_ms(started: float) -> int:
+    """Whole milliseconds since ``started`` (a ``time.monotonic()`` reading), for a line's ``duration_ms``."""
+    return max(0, round((time.monotonic() - started) * 1000))
 
 
 def placeholders(template: str) -> set[str]:
