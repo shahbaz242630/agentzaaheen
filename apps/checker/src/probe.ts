@@ -1,18 +1,29 @@
 // One status-only check of one address, judged by the same rules as the laptop probe
 // (core/sdk/uptime.py): the page is never read, redirects are never followed.
 
-import type { Expect, Target } from "./config";
+import type { Target } from "./config";
 
-export type Reason = "ok" | "redirect" | "answered" | "server_error" | "not_found" | "refused" | "no_answer";
+export type Reason =
+  | "ok"
+  | "redirect"
+  | "answered"
+  | "expected"
+  | "server_error"
+  | "not_found"
+  | "refused"
+  | "wrong_answer"
+  | "no_answer";
 
 // Our own words for each failure, the same as core/notify (never text a website wrote).
 export const REASON_WORDS: Readonly<Record<Reason, string>> = {
   ok: "up",
   redirect: "up",
   answered: "up",
+  expected: "up",
   server_error: "server error",
   not_found: "page not found",
   refused: "refused the request",
+  wrong_answer: "answered as something else",
   no_answer: "did not answer",
 };
 
@@ -34,12 +45,13 @@ export interface Deps {
   readonly now: () => number;
 }
 
-export function judge(expect: Expect, status: number | null): Judged {
+export function judge(rule: Pick<Target, "expect" | "status">, status: number | null): Judged {
   if (status === null) return { up: false, reason: "no_answer" };
   if (status >= 500) return { up: false, reason: "server_error" };
+  if (rule.expect === "status") return status === rule.status ? { up: true, reason: "expected" } : { up: false, reason: "wrong_answer" };
   if (status >= 200 && status < 300) return { up: true, reason: "ok" };
   if (status >= 300 && status < 400) return { up: true, reason: "redirect" };
-  if (expect === "answer") return { up: true, reason: "answered" };
+  if (rule.expect === "answer") return { up: true, reason: "answered" };
   return { up: false, reason: status === 404 ? "not_found" : "refused" };
 }
 
@@ -69,5 +81,5 @@ export async function checkAll(targets: readonly Target[], deps: Deps): Promise<
 }
 
 async function check(target: Target, deps: Deps): Promise<Checked> {
-  return { target, ...judge(target.expect, await statusOf(target.url, deps)) };
+  return { target, ...judge(target, await statusOf(target.url, deps)) };
 }

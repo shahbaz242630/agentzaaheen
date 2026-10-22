@@ -11,7 +11,7 @@ function seen(
   part: string | null = null,
 ): Seen {
   const projectName = project === "eva" ? "Eva" : "Sandoq Kin";
-  return { id, up, reason, target: { project, projectName, url: `https://${id}.example.com`, expect: "ok", part } };
+  return { id, up, reason, target: { project, projectName, url: `https://${id}.example.com`, expect: "ok", part, status: null } };
 }
 
 const NO_HOURLY = false;
@@ -115,6 +115,14 @@ describe("reports", () => {
     expect(reports(later, changes(later, before), before, NO_HOURLY)).toEqual([
       { project: "eva", down: true, message: "api answering again; 2 of 3 up now." },
     ]);
+  });
+
+  it("says a wrong answer in its own words (another service answering at the address)", () => {
+    const stored = new Map([["a", true]]);
+    const now = [seen("a", "eva", false, "wrong_answer", "api")];
+    expect(reports(now, changes(now, stored), stored, NO_HOURLY)[0]?.message).toBe(
+      "api down (answered as something else); 1 of 1 address down. Details on the dashboard.",
+    );
   });
 
   it("falls back to counts when an address has no part", () => {

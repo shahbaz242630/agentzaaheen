@@ -76,6 +76,15 @@ def test_alerts_carry_only_template_words_never_an_address() -> None:
     assert "did not answer, refused the request" in text
 
 
+def test_a_wrong_answer_has_its_own_words() -> None:
+    rule = SiteRule(url=A, expect="status", status=405, part="api")
+    check = check_site(rule, StatusAnswer(status=404, elapsed_ms=50), NOW)
+    wrong = UptimeReport(sites=(check,), fetched_at=NOW)
+    (alert,) = UptimeWatch(NAMES).observe({"zaaheen": wrong})
+    assert "answered as something else" in alert.message
+    assert "not as expected" not in alert.message
+
+
 def test_an_unknown_project_uses_its_id_and_the_threshold_is_checked() -> None:
     (alert,) = UptimeWatch({}).observe({"nearby": report(a=500)})
     assert alert.title == "Yaqzan: nearby is down"

@@ -7,6 +7,7 @@ Rulebook §7b). Each project maps to its addresses, each with a rule::
     zaaheen:
       - {url: "https://example.com", expect: ok}       # a page or a redirect
       - {url: "https://api.example.com", expect: answer}  # anything but a server error
+      - {url: "https://api.example.com/v1/x", expect: status, status: 405}  # exactly this code
 
 Every check is a status-only GET through the core's ``StatusProbe``: the page
 is never read, redirects are not followed, and only the listed hosts may be

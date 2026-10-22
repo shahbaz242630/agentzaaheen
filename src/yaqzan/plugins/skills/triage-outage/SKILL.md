@@ -18,7 +18,7 @@ anyone.
 
 - The alert: which project, which **parts** (``api``, ``sign-in``, ``site``) or
   objective, since when, and the reason (did not answer, server error, page
-  not found, refused the request).
+  not found, refused the request, answered as something else).
 - The Uptime card (external checks) and the Code card (builds, ADR-025).
 - When connected: the `fix_guide` tool (one part's guide: what serves it, what
   it depends on, its logs, how it is deployed and rolled back, and the steps

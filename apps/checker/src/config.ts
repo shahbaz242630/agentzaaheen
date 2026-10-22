@@ -2,7 +2,8 @@
 // Everything is checked strictly: a setting that is not exactly right stops the run,
 // which makes Healthchecks.io alert (the checker is the thing that broke).
 
-export type Expect = "ok" | "answer";
+// "status": up only on exactly the code in `status` (a route only the real service answers that way).
+export type Expect = "ok" | "answer" | "status";
 
 export interface Target {
   readonly project: string;
@@ -11,6 +12,8 @@ export interface Target {
   readonly expect: Expect;
   // Our own short name for this part of the product ("api", "sign-in"), never an address.
   readonly part: string | null;
+  // Only with expect "status": the one code that counts as up (100 to 499).
+  readonly status: number | null;
 }
 
 export interface Settings {
@@ -53,7 +56,7 @@ export function readSettings(env: RawEnv): Settings {
 }
 
 // TARGETS: {"zaaheen": {"name": "Zaaheen", "sites": [{"url": "https://...", "expect": "ok", "part": "site"}]}}
-// ("part" is optional.)
+// ("part" is optional; "status" goes only with expect "status", e.g. {"expect": "status", "status": 405}.)
 export function readTargets(raw: string | undefined): Target[] {
   let data: unknown;
   try {
@@ -87,19 +90,27 @@ export function readTargets(raw: string | undefined): Target[] {
 }
 
 function readSite(project: string, projectName: string, site: unknown): Target {
-  if (!isRecord(site) || !onlyKeys(site, ["url", "expect", "part"])) {
-    throw new SettingsError(`${project}: each site has only a url, an expect and a part`);
+  if (!isRecord(site) || !onlyKeys(site, ["url", "expect", "part", "status"])) {
+    throw new SettingsError(`${project}: each site has only a url, an expect, a part and a status`);
   }
-  const { url, expect, part } = site;
+  const { url, expect, part, status } = site;
   if (typeof url !== "string" || url.length > 300 || !URL_RE.test(url)) {
     throw new SettingsError(`${project}: an address is not an https address by name`);
   }
   if (IPV4_RE.test(new URL(url).hostname)) throw new SettingsError(`${project}: use the address's name, not an IP address`);
-  if (expect !== "ok" && expect !== "answer") throw new SettingsError(`${project}: expect must be "ok" or "answer"`);
+  if (expect !== "ok" && expect !== "answer" && expect !== "status") {
+    throw new SettingsError(`${project}: expect must be "ok", "answer" or "status"`);
+  }
+  if ((expect === "status") !== (status !== undefined)) {
+    throw new SettingsError(`${project}: give a status with expect "status", and only then`);
+  }
+  if (status !== undefined && (typeof status !== "number" || !Number.isInteger(status) || status < 100 || status > 499)) {
+    throw new SettingsError(`${project}: a status is a whole number from 100 to 499`);
+  }
   if (part !== undefined && (typeof part !== "string" || part.length > MAX_PART || !PART_RE.test(part))) {
     throw new SettingsError(`${project}: a part is not lowercase words joined by hyphens`);
   }
-  return { project, projectName, url, expect, part: part ?? null };
+  return { project, projectName, url, expect, part: part ?? null, status: status ?? null };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
