@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { FakeD1, fakeDeps } from "./fakes.test-support";
 import worker, { run, SECOND_ROUND_MS, type Env } from "./index";
-import { RECHECK_AFTER_MS } from "./probe";
+import { RECHECK_AFTER_MS, type Deps } from "./probe";
 import { addressId, KEEP_HOURS } from "./store";
 
 const KEY = "abcdefghijklmnopqrstuv";
@@ -131,6 +131,66 @@ describe("one run", () => {
     await run(env(db), deps);
     expect(calls.filter((u) => u === `${EVA}/fail`)).toHaveLength(2);
     expect(db.state.get(await addressId(A))?.up).toBe(0);
+  });
+
+  describe("Worker guards (hourly)", () => {
+    const ACCOUNT = "0123456789abcdef0123456789abcdef";
+    const CF = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/scripts/api-worker`;
+    const GUARDED = `https://hc-ping.com/${KEY}/eva-workers`;
+    const guarded = (db: FakeD1): Env => ({
+      ...env(db),
+      CLOUDFLARE_ACCOUNT_ID: ACCOUNT,
+      CLOUDFLARE_READ_TOKEN: "t".repeat(40),
+      WORKER_GUARDS: JSON.stringify({ "eva-workers": { name: "Eva", guards: [{ worker: "api-worker", part: "api", secrets: ["A_KEY"], not_from: [] }] } }),
+    });
+    // The pretend internet, plus a pretend Cloudflare API that answers with JSON.
+    const withCloudflare = (at: number, answers: Record<string, unknown>) => {
+      const fake = fakeDeps({ [A]: [200], [B]: [200] }, at);
+      const deps: Deps = {
+        ...fake.deps,
+        fetch: (url, init) => {
+          if (!url.startsWith(CF)) return fake.deps.fetch(url, init);
+          fake.calls.push(url);
+          const body = answers[url];
+          return body === undefined ? Promise.reject(new TypeError("network error")) : Promise.resolve(new Response(JSON.stringify(body)));
+        },
+      };
+      return { ...fake, deps };
+    };
+    const HOUR = Date.UTC(2026, 9, 20, 23, 0, 1);
+
+    it("the run at minute 0 reports each guarded project to its own check, then the heartbeat", async () => {
+      const { deps, sent } = withCloudflare(HOUR, {
+        [`${CF}/settings`]: { success: true, result: { bindings: [] } },
+      });
+      await run(guarded(new FakeD1()), deps);
+      expect(sent.map((s) => s.url)).toEqual([EVA, `${GUARDED}/fail`, PING]);
+      expect(sent[1]?.init.body).toBe(
+        "Eva api is missing 1 of its 1 settings (A_KEY), so whatever uses them will fail. Most likely a deploy replaced the Worker or a setting was deleted: check its deploy history, then re-enter the missing settings.",
+      );
+    });
+
+    it("all fine: a plain report keeps the guard's check fresh", async () => {
+      const { deps, sent } = withCloudflare(HOUR, {
+        [`${CF}/settings`]: { success: true, result: { bindings: [{ type: "secret_text", name: "A_KEY" }] } },
+        [`${CF}/deployments`]: { success: true, result: { deployments: [{ created_on: "2026-10-20T22:00:00Z" }] } },
+      });
+      await run(guarded(new FakeD1()), deps);
+      expect(sent.map((s) => s.url)).toEqual([EVA, GUARDED, PING]);
+    });
+
+    it("other minutes never read Cloudflare", async () => {
+      const { deps, calls } = withCloudflare(Date.UTC(2026, 9, 20, 23, 7, 1), {});
+      await run(guarded(new FakeD1()), deps);
+      expect(calls.some((u) => u.startsWith(CF))).toBe(false);
+    });
+
+    it("Cloudflare not answering is reported as unknown, and the heartbeat still goes", async () => {
+      const { deps, sent } = withCloudflare(HOUR, {});
+      await run(guarded(new FakeD1()), deps);
+      expect(sent.map((s) => s.url)).toEqual([EVA, `${GUARDED}/fail`, PING]);
+      expect(sent[1]?.init.body).toContain("could not read its settings from Cloudflare (no answer)");
+    });
   });
 
   it("the Worker's cron entry point runs the checker", async () => {

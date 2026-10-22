@@ -5,12 +5,14 @@
 // Changes are reported to each project's Healthchecks.io check, which alerts the Chairman's
 // phone (ntfy) and email: Healthchecks sends from its own servers, because ntfy.sh refuses
 // Cloudflare's shared addresses (http 429). Hourly counts feed the availability SLO. Each run
-// ends with a heartbeat to Healthchecks, which alerts if the checker itself stops.
+// ends with a heartbeat to Healthchecks, which alerts if the checker itself stops. The run at minute 0
+// also checks each guarded Worker's settings and deploys (guard.ts) and reports to its own check.
 //
 // The Worker has no web address of its own and never reads a page: status codes only.
 
 import { changes, reports, type Report, type Seen } from "./alerts";
 import { PING_URL_RE, readSettings, type RawEnv, type Settings } from "./config";
+import { checkGuard, guardReport, type GuardSettings } from "./guard";
 import { checkAll, type Deps } from "./probe";
 import { addressId, loadState, saveRound } from "./store";
 
@@ -31,6 +33,7 @@ export async function run(env: Env, deps: Deps): Promise<void> {
     await round(env.DB, settings, deps, hourly);
     await deps.wait(Math.max(0, start + SECOND_ROUND_MS - deps.now()));
     await round(env.DB, settings, deps, false);
+    if (hourly && settings.guards !== null) await guardRound(settings.guards, settings.pingKey, deps);
     await send(deps, settings.pingUrl, { method: "POST" });
   } catch (error) {
     // Tell Healthchecks at once that the run failed (it alerts); then let Cloudflare log it.
@@ -56,6 +59,20 @@ async function round(db: D1Database, settings: Settings, deps: Deps, hourly: boo
   const down = seen.filter((s) => !s.up);
   const why = down.map((s) => `${s.target.project}/${s.id}=${s.reason}`).join(" ");
   console.log(`checked ${seen.length} addresses: ${seen.length - down.length} up, ${down.length} down, ${changed.length} changed ${why}`.trim());
+}
+
+// Hourly: every guarded Worker, one plain-English report per project to its own check. A guard
+// never stops the uptime checks: anything unexpected is reported as "could not read".
+async function guardRound(guards: GuardSettings, pingKey: string, deps: Deps): Promise<void> {
+  for (const project of guards.projects) {
+    const results = [];
+    for (const guard of project.guards) results.push(await checkGuard(guard, guards, deps));
+    const report = guardReport(project, results);
+    const url = `https://hc-ping.com/${pingKey}/${report.slug}${report.down ? "/fail" : ""}`;
+    const told = await send(deps, url, { method: "POST", body: report.message, headers: { "content-type": "text/plain" } });
+    const state = report.down ? "a problem was found" : "all guards passed";
+    console.log(`Worker guards for ${project.name}: ${state}; ${told ? "reported" : "report not delivered, retried next hour"}. ${report.message}`);
+  }
 }
 
 // The project's own check: /fail when something is down, plain when all is up; our words as the body.

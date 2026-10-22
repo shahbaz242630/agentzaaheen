@@ -1,6 +1,7 @@
 // Yaqzan's external uptime checker (ADR-032). A Worker of its own, with its own database:
 // it never touches another Worker on the account. No web address (cron only).
-// Secrets (set with `wrangler secret bulk`, never committed): TARGETS, NTFY_TOPIC, HEALTHCHECKS_PING_URL.
+// Secrets (set with `wrangler secret bulk`, never committed): TARGETS, HEALTHCHECKS_PING_KEY, HEALTHCHECKS_PING_URL;
+// optional Worker guards: WORKER_GUARDS, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_READ_TOKEN (metadata read-only).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "yaqzan-checker",
