@@ -119,7 +119,7 @@ class SealedSecrets:
 
     async def put(self, row: SealedRow) -> None:
         """Store or replace the credential in one slot."""
-        async with self._db.connection() as conn:
+        async with self._db.write("a sealed secret") as conn:
             await conn.execute(
                 _UPSERT,
                 *row.slot.params(),
@@ -139,7 +139,7 @@ class SealedSecrets:
 
     async def delete(self, slot: SlotKey) -> bool:
         """Remove one credential. Returns False if the slot was empty."""
-        async with self._db.connection() as conn:
+        async with self._db.write("the removal of a sealed secret") as conn:
             return await conn.fetchval(_DELETE, *slot.params()) is not None
 
     async def not_under_key(self, tenant_id: UUID, master_key_id: str) -> list[SealedRow]:

@@ -119,7 +119,7 @@ class Records:
     async def add_event(self, event: Event) -> bool:
         """Store an event once. Returns False if its idempotency key was already stored."""
         values = _values(event, _EVENT_COLUMNS, frozenset({"payload"}))
-        async with self._db.connection() as conn:
+        async with self._db.write("an event") as conn:
             return await conn.fetchval(_INSERT_EVENT, *values) is not None
 
     async def get_event(self, tenant_id: UUID, event_id: UUID) -> Event | None:
@@ -138,7 +138,7 @@ class Records:
         """Store one run record."""
         require_aware(run.started_at)
         values = _values(run, _RUN_COLUMNS, frozenset({"model"}))
-        async with self._db.connection() as conn:
+        async with self._db.write("an agent run") as conn:
             await conn.execute(_INSERT_RUN, *values)
 
     async def get_run(self, tenant_id: UUID, run_id: UUID) -> RunRecord | None:
@@ -149,7 +149,7 @@ class Records:
     async def add_finding(self, finding: Finding) -> None:
         """Store one finding."""
         values = _values(finding, _FINDING_COLUMNS, frozenset({"evidence", "metric_refs"}))
-        async with self._db.connection() as conn:
+        async with self._db.write("a finding") as conn:
             await conn.execute(_INSERT_FINDING, *values)
 
     async def get_finding(self, tenant_id: UUID, finding_id: UUID) -> Finding | None:
@@ -160,7 +160,7 @@ class Records:
     async def add_action(self, action: Action) -> bool:
         """Store a proposed action once. Returns False if its idempotency key was already stored."""
         values = _values(action, _ACTION_COLUMNS, frozenset({"payload"}))
-        async with self._db.connection() as conn:
+        async with self._db.write("a proposed action") as conn:
             return await conn.fetchval(_INSERT_ACTION, *values) is not None
 
     async def get_action(self, tenant_id: UUID, action_id: UUID) -> Action | None:

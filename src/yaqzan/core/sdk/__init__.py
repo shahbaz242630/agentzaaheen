@@ -34,7 +34,7 @@ from yaqzan.core.sdk.backend import (
     ServiceHealth,
 )
 from yaqzan.core.sdk.code import REPO_PATTERN, BuildState, RepoHealth, RepoSource
-from yaqzan.core.sdk.events import LOG_EVENTS, LogEvent, say
+from yaqzan.core.sdk.events import LOG_EVENTS, LogEvent, elapsed_ms, say
 from yaqzan.core.sdk.explain import KNOWN_CODES, Explanation, explain
 from yaqzan.core.sdk.log import (
     REDACTED,
@@ -179,6 +179,7 @@ __all__ = [
     "clean_log",
     "combine_trust",
     "contains_sensitive",
+    "elapsed_ms",
     "error_type",
     "event",
     "explain",

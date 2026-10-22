@@ -52,7 +52,7 @@ class KillSwitchRows:
     ) -> None:
         """Turn one switch on or off."""
         require_aware(changed_at)
-        async with self._db.connection() as conn:
+        async with self._db.write("a kill switch") as conn:
             await conn.execute(_SET, tenant_id, scope.value, ref, engaged, changed_by, changed_at)
 
     async def engaged(self, tenant_id: UUID) -> list[EngagedSwitch]:

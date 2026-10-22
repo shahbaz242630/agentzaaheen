@@ -46,6 +46,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, Validation
 from tools.dashboard_sources import ListNotUsableError
 from yaqzan.core.api import SamplePortfolio
 from yaqzan.core.llm_gateway import Tool
+from yaqzan.core.sdk import get_logger, say
 from yaqzan.core.sdk.uptime import MAX_PART, PART
 
 MAX_FILE_BYTES = 128 * 1024
@@ -157,11 +158,15 @@ def fixes_list(path: Path | None, projects: Collection[str]) -> dict[str, Projec
     """The guides given with ``--fixes`` (empty without one); a broken file is said and raised."""
     if path is None:
         return {}
+    log = get_logger("yaqzan.settings")
     try:
-        return load_fixes(path, projects)
+        found = load_fixes(path, projects)
     except FixGuideError as exc:
-        print(f"dashboard: {exc}.")
+        print(f"dashboard: {exc}.")  # the exact rule, on the console only: it can quote the file
+        say(log, "settings_refused", setting="fix guide")
         raise ListNotUsableError from None
+    say(log, "settings_loaded", setting="fix guide", entries=len(found))
+    return found
 
 
 def guide_text(guides: Mapping[str, Project], project: str, part: str, reason: str | None = None) -> str:

@@ -80,11 +80,14 @@ class PushClient:
             try:
                 response = await self._http.post(url, content=body, headers=headers)
             except httpx.TimeoutException:
+                say(self._log, "push_failed", http_status=None, code=NetErrorCode.TIMEOUT.value)
                 raise NetError(NetErrorCode.TIMEOUT, "the push service did not answer in time") from None
             except httpx.TransportError:
+                say(self._log, "push_failed", http_status=None, code=NetErrorCode.UNAVAILABLE.value)
                 raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the push service") from None
             status = response.status_code
             current.set_attribute("http.response.status_code", status)
             if status not in _OK:
+                say(self._log, "push_failed", http_status=status, code=NetErrorCode.CLIENT_ERROR.value)
                 raise NetError(NetErrorCode.CLIENT_ERROR, "the push service refused it", status=status)
         say(self._log, "push_sent", bytes=len(body), priority=priority)

@@ -61,6 +61,19 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "payments",
         "refunds",
         "subscriptions",
+        # ADR-034 slice 2: the doors (our own route templates, record kinds, roles and counts)
+        "method",
+        "route",
+        "duration_ms",
+        "record",
+        "action",
+        "verdict",
+        "actor",
+        "setting",
+        "entries",
+        "checked",
+        "failing",
+        "changes",
     }
 )
 

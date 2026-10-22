@@ -128,6 +128,9 @@ class UptimeLive:
             if alerts and self._topic is not None:
                 async with PushClient(self._topic, transport=self._transport) as pusher:
                     await deliver(alerts, pusher)
+            sites = [site for report in reports.values() for site in report.sites]
+            failing = sum(1 for site in sites if not site.up)
+            say(self._log, "uptime_round_done", checked=len(sites), failing=failing, changes=len(alerts))
         for alert in alerts:
             print(f"dashboard: {alert.title}: {alert.message}")
         return alerts
@@ -199,8 +202,12 @@ def uptime_list(path: Path | None, projects: Collection[str]) -> dict[str, tuple
     """The local uptime list given with ``--uptime`` (empty without one); a broken list is said and raised."""
     if path is None:
         return {}
+    log = get_logger("yaqzan.settings")
     try:
-        return load_uptime(path, projects)
+        found = load_uptime(path, projects)
     except UptimeListError as exc:
-        print(f"dashboard: {exc}.")
+        print(f"dashboard: {exc}.")  # the exact rule, on the console only: it can quote the file
+        say(log, "settings_refused", setting="uptime")
         raise ListNotUsableError from None
+    say(log, "settings_loaded", setting="uptime", entries=len(found))
+    return found

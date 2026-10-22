@@ -16,6 +16,7 @@ simply ask again.
 from __future__ import annotations
 
 import ipaddress
+import time
 from collections.abc import Mapping, Sequence
 from types import TracebackType
 from typing import Self
@@ -24,9 +25,15 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import SecretStr
 
-from yaqzan.core.net.client import NetPolicy, check_host, decode_object, read_capped, refuse_status
+from yaqzan.core.net.client import (
+    NetPolicy,
+    check_host,
+    decode_object,
+    read_capped,
+    refuse_status,
+)
 from yaqzan.core.net.errors import NetError, NetErrorCode
-from yaqzan.core.sdk import get_logger, say, span
+from yaqzan.core.sdk import elapsed_ms, get_logger, say, span
 
 LOOPBACK = "127.0.0.1"
 CHAT_PATH = "/v1/chat/completions"
@@ -117,9 +124,12 @@ class ModelClient:
             "stream": False,
         }
         host = urlsplit(self._base).hostname or ""
+        started = time.monotonic()
         try:
             with span(f"POST {host}", kind="client", attributes={"server.address": host}):
-                return await self._ask(body)
+                answer = await self._ask(body)
+                say(self._log, "model_answered", duration_ms=elapsed_ms(started))
+                return answer
         except NetError as exc:
             say(self._log, "model_call_failed", code=exc.net_code.value, status=exc.status)
             raise exc.at(_OPERATION, 1, 1) from None
