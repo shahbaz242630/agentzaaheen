@@ -172,6 +172,27 @@ def test_card_needs_luhn_so_ordinary_numbers_survive() -> None:
     assert redact_text("order 4111111111111112 total") == "order 4111111111111112 total"
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "49570537-1026-47dc-90d5-b8659d63d50c",  # a real project id from CI whose first 14 digits pass Luhn
+        "project_id=49570537-1026-47dc-90d5-b8659d63d50c",
+        "id 4111111111111111abc",
+        "abc4111111111111111",
+        "trace 4111-1111-1111-1111-a",
+    ],
+)
+def test_digits_inside_an_id_are_not_a_card(text: str) -> None:
+    assert redact_text(text) == text
+
+
+@pytest.mark.parametrize(
+    "text", ["4111111111111111", "card: 4111-1111-1111-1111.", "(4111 1111 1111 1111)", "x=4111111111111111"]
+)
+def test_a_card_number_on_its_own_is_still_masked(text: str) -> None:
+    assert "[CARD]" in redact_text(text)
+
+
 def test_bearer_header_is_cut() -> None:
     header = "Authorization: " + "Bear" + "er " + _fake("", "z", 24)
     assert redact_text(header) == "Authorization: Bearer " + REDACTED
