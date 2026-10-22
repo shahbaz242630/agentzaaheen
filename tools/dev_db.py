@@ -123,7 +123,7 @@ def enough_memory(run: Runner) -> bool:
     """Whether Docker has ``MIN_FREE_MB`` free (saying why not). Unknown counts as not enough."""
     free = free_mb(run)
     if free is None:
-        print("dev-db: could not read Docker memory; not starting (could not check ≠ safe).")
+        print("dev-db: could not read Docker memory (is Docker running?); not starting: unknown is unsafe.")
         return False
     if free < MIN_FREE_MB:
         print(
