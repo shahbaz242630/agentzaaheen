@@ -2,6 +2,7 @@ import { FlaskConical } from "lucide-react";
 import { useId } from "react";
 
 import type { Card, ProjectDetail, RegistryPage, Tone, Use } from "../api";
+import { AgentsPanel } from "./AgentsPanel";
 import { CardView } from "./CardView";
 import { HealthPill } from "./health";
 
@@ -62,7 +63,7 @@ export function WorkspaceView({ detail, registry, tab, onTab }: Props) {
 
       <div role="tabpanel" id={`${ids}-panel`} aria-labelledby={`${ids}-${tab}`}>
         {tab === "overview" && <Overview detail={detail} />}
-        {tab === "agents" && <Agents name={project.name} />}
+        {tab === "agents" && <AgentsPanel slug={project.id} name={project.name} />}
         {tab === "alerts" && <Alerts cards={detail.cards} />}
         {tab === "sources" && <Sources slug={project.id} registry={registry} />}
       </div>
@@ -90,18 +91,6 @@ function Overview({ detail }: { detail: ProjectDetail }) {
           <CardView key={card.id} card={card} />
         ))}
       </div>
-    </div>
-  );
-}
-
-function Agents({ name }: { name: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-line bg-panel p-5">
-      <h2 className="font-semibold text-ink">No agents yet</h2>
-      <p className="mt-1 text-sm text-muted">
-        Agents will be assigned to {name} one by one, each with its own switch and spending cap. Nothing runs until you
-        tick it.
-      </p>
     </div>
   );
 }

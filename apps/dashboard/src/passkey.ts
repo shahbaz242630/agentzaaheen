@@ -1,7 +1,7 @@
 // Windows Hello through the browser's own WebAuthn (ADR-SEC-007). The server
 // makes the options and checks the answers; this file only hands them over.
 // It uses the browser's JSON helpers (Chrome and Edge 129+), so no library.
-import { api, type RegistryPage } from "./api";
+import { ApiError, api, type RegistryPage } from "./api";
 
 export class PasskeyProblem extends Error {
   constructor(readonly reason: "unsupported" | "wrong_address" | "cancelled") {
@@ -62,4 +62,24 @@ export async function approveWithPasskey(requestId: string): Promise<RegistryPag
   );
   const credential = await windowsHello(() => navigator.credentials.get({ publicKey }));
   return api.approve(requestId, asJson(credential));
+}
+
+// A change that may need the Chairman's passkey: try it; if the server says it is riskier
+// ("agents.needs_passkey"), have Windows Hello sign a challenge made for exactly this change, then send it again.
+export async function withPasskeyIfNeeded<T>(
+  attempt: () => Promise<T>,
+  options: () => Promise<Record<string, unknown>>,
+  signed: (credential: unknown) => Promise<T>,
+): Promise<T> {
+  try {
+    return await attempt();
+  } catch (failure) {
+    if (!(failure instanceof ApiError) || failure.code !== "agents.needs_passkey") throw failure;
+  }
+  ready();
+  const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(
+    (await options()) as unknown as PublicKeyCredentialRequestOptionsJSON,
+  );
+  const credential = await windowsHello(() => navigator.credentials.get({ publicKey }));
+  return signed(asJson(credential));
 }

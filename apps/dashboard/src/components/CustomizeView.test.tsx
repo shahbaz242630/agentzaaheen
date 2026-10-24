@@ -28,7 +28,12 @@ function serve(registry: Response | null) {
         "/api/workspaces": sample.projects,
         "/api/models": sample.models,
         "/api/registry": sample.registry,
+        "/api/roles": [],
       };
+      if (path.endsWith("/agents")) {
+        const none = { enabled: false, cap_minor: null, spent_minor: 0, agents: [], switches: false };
+        return Promise.resolve(new Response(JSON.stringify(none), { status: 200 }));
+      }
       const id = decodeURIComponent(path.replace("/api/workspaces/", ""));
       const body = answers[path] ?? (sample.details as Record<string, unknown>)[id];
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));

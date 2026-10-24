@@ -1,5 +1,18 @@
-import type { ProjectSummary, RegistryPage } from "../api";
+import { useEffect, useState } from "react";
+
+import { api, type ProjectSummary, type RegistryPage, type WorkspaceAgents } from "../api";
+import { capWords, money } from "./AgentsPanel";
 import { HealthPill } from "./health";
+
+// One line about a workspace's agents: honest when there are none, or when they can't be read.
+export function agentLine(found: WorkspaceAgents | "failed" | undefined): string {
+  if (found === undefined) return "Agents: …";
+  if (found === "failed") return "Agents: could not be read";
+  if (found.agents.length === 0) return "Agents: none yet";
+  const on = found.agents.filter((a) => a.enabled).length;
+  const counts = `${String(found.agents.length)} (${String(on)} on)`;
+  return `Agents: ${counts} · spent ${money(found.spent_minor)} · cap ${capWords(found.cap_minor)}`;
+}
 
 interface Props {
   workspaces: readonly ProjectSummary[];
@@ -13,6 +26,23 @@ const KIND_WORDS = { connector: "connector", skill: "skill", plugin: "plugin bun
 
 // The Board (ADR-039): every workspace's summary line and what needs the Chairman, never a workspace's raw data.
 export function BoardView({ workspaces, registry, onOpen, onCustomize }: Props) {
+  const [agents, setAgents] = useState<Record<string, WorkspaceAgents | "failed">>({});
+  useEffect(() => {
+    let live = true;
+    for (const w of workspaces) {
+      api.agents(w.id).then(
+        (data) => {
+          if (live) setAgents((seen) => ({ ...seen, [w.id]: data }));
+        },
+        () => {
+          if (live) setAgents((seen) => ({ ...seen, [w.id]: "failed" }));
+        },
+      );
+    }
+    return () => {
+      live = false;
+    };
+  }, [workspaces]);
   const waiting = workspaces.filter((w) => w.escalations > 0);
   const requests = registry?.requests ?? [];
   const nothing = waiting.length === 0 && requests.length === 0;
@@ -93,7 +123,7 @@ export function BoardView({ workspaces, registry, onOpen, onCustomize }: Props) 
                     <HealthPill health={w.health} />
                   </span>
                   <span className="text-sm text-muted">{w.summary}</span>
-                  <span className="text-sm text-muted">Agents: none yet</span>
+                  <span className="text-sm text-muted">{agentLine(agents[w.id])}</span>
                   <span className="text-sm text-muted">Daily summary: not set up yet</span>
                   <span className="border-t border-line pt-3 text-sm text-muted">
                     {w.escalations === 0 ? "Nothing waiting for you" : `${w.escalations} waiting for you`}

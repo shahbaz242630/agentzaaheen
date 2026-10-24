@@ -6,10 +6,14 @@ import { App } from "./App";
 import { failureReply, notConnectedReply, SAMPLE_NOTE } from "./components/ChatPanel";
 import sample from "./contract/sample.json";
 
+const NO_AGENTS = { enabled: false, cap_minor: null, spent_minor: 0, agents: [], switches: false };
+
 function answer(path: string): unknown {
   if (path === "/api/workspaces") return sample.projects;
   if (path === "/api/models") return sample.models;
   if (path === "/api/registry") return sample.registry;
+  if (path === "/api/roles") return [];
+  if (path.endsWith("/agents")) return NO_AGENTS;
   const id = decodeURIComponent(path.replace("/api/workspaces/", ""));
   return (sample.details as Record<string, unknown>)[id];
 }
@@ -357,7 +361,7 @@ describe("the Board and the workspace pages (ADR-039)", () => {
   it("says plainly what is not set up yet, never made-up agents or summaries", async () => {
     render(<App />);
     const cards = await screen.findByRole("region", { name: "Workspaces" });
-    expect(within(cards).getAllByText("Agents: none yet")).toHaveLength(sample.projects.length);
+    expect(await within(cards).findAllByText("Agents: none yet")).toHaveLength(sample.projects.length);
     expect(within(cards).getAllByText("Daily summary: not set up yet")).toHaveLength(sample.projects.length);
   });
 
