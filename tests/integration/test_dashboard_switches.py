@@ -9,6 +9,7 @@ not read at the next start.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -21,9 +22,10 @@ from pydantic import SecretStr
 
 from tests.fixtures.soft_authenticator import SoftAuthenticator
 from tests.integration.conftest import Server, run
-from tools import dashboard, laptop_db
+from tools import dashboard, dashboard_switches, laptop_db
 from yaqzan.core.api.app import REQUEST_HEADER
-from yaqzan.core.store import StoreError, StoreErrorCode
+from yaqzan.core.auth import Site
+from yaqzan.core.store import AuditRow, AuditRows, Database, DatabaseSettings, StoreError, StoreErrorCode
 
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}
 SKILL = {"kind": "skill", "id": "triage-failing-build"}
@@ -249,3 +251,52 @@ def test_supabase_switched_off_reads_nothing_at_the_next_start(
         transport=httpx.MockTransport(refuse),
     )
     assert "supabase is switched off on the Customize page, so it was not read." in capsys.readouterr().out
+
+
+NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
+
+
+# ---------------------------------------------------------------- Board inspection (ADR-039, amended 24 Oct)
+
+
+def _switches(url: SecretStr) -> dashboard_switches.LaptopSwitches:
+    return dashboard_switches.LaptopSwitches(
+        url,
+        dashboard.load_plugins([]),
+        {},
+        lambda: NOW,
+        site=Site(origin="http://localhost:8765"),
+    )
+
+
+def test_a_board_inspection_is_written_to_the_audit_log(laptop_url: SecretStr) -> None:
+    eva = next(w for w in laptop_db.LAPTOP_WORKSPACES if w.slug == "eva")
+
+    async def body() -> list[AuditRow]:
+        switches = _switches(laptop_url)
+        try:
+            await switches.recorder(laptop_db.LAPTOP_WORKSPACES)("eva", "failed_build_log", "eva")
+        finally:
+            await switches.close()
+        db = await Database.open(DatabaseSettings(dsn=laptop_url))
+        try:
+            return await AuditRows(db.scoped(laptop_db.LAPTOP_TENANT)).all_rows()
+        finally:
+            await db.close()
+
+    looks = [e for e in run(body()) if e.action == "board.inspection"]
+    assert len(looks) == 1
+    assert (looks[0].project_id, looks[0].target_ref) == (eva.workspace_id, "failed_build_log:eva")
+    assert looks[0].details == {"workspace": "eva", "tool": "failed_build_log"}
+
+
+def test_a_look_at_an_unknown_workspace_raises_and_writes_nothing(laptop_url: SecretStr) -> None:
+    async def body() -> None:
+        switches = _switches(laptop_url)
+        try:
+            await switches.recorder(laptop_db.LAPTOP_WORKSPACES)("nope", "failed_build_log", "nope")
+        finally:
+            await switches.close()
+
+    with pytest.raises(KeyError):
+        run(body())

@@ -88,6 +88,18 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="The chat tried to read {tool}, but the read failed.",
         explains="code",
     ),
+    "board_inspection": LogEvent(
+        "info",
+        what="The Board's chat looked inside the {workspace} workspace with {tool}.",
+        why="The Chairman asked the Board a question that needed that workspace's own data "
+        "(Board inspection).",
+    ),
+    "board_inspection_refused": LogEvent(
+        "warning",
+        what="The Board's chat did not look inside the {workspace} workspace with {tool}.",
+        why="The look could not be written to the audit log first, so it was not made.",
+        next="Check the laptop database is running (uv run python -m tools.laptop_db status).",
+    ),
     "chat_switches_unreadable": LogEvent(
         "warning",
         what="The chat answered without any tools or skills.",

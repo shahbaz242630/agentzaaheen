@@ -32,7 +32,7 @@ from pydantic import SecretStr
 
 from tools.fix_guides import Project, fix_guide_tool
 from yaqzan.core.api import ChatBackend
-from yaqzan.core.llm_gateway import ChatModel, ChatReply, FactChat, Tool, catalogue
+from yaqzan.core.llm_gateway import ChatModel, ChatReply, FactChat, Inspect, Tool, catalogue
 from yaqzan.core.net import DownloadPolicy, JsonClient, ModelClient, NetError, NetPolicy
 from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Invocation, ItemError, Kind, Registry, load_registry, skill_instructions
@@ -65,10 +65,11 @@ class Switched:
 class SwitchedChat:
     """The chat, given fresh tools for every question: only what is switched on now."""
 
-    def __init__(self, model: ChatModel, switched: Switched) -> None:
+    def __init__(self, model: ChatModel, switched: Switched, inspect: Inspect | None = None) -> None:
         self.model_id = LOCAL_MODEL_ID
         self._model = model
         self._switched = switched
+        self._inspect = inspect
         self._log = get_logger("yaqzan.chat", model=LOCAL_MODEL_ID)
 
     async def ask(self, question: str, facts: str, workspace: str | None = None) -> ChatReply:
@@ -78,21 +79,24 @@ class SwitchedChat:
         except StoreError as exc:
             say(self._log, "chat_switches_unreadable", code=exc.code.value, effect="no_tools")
             tools, skills = [], ""
-        chat = FactChat(self._model, self.model_id, tools=tools, skills=skills)
+        chat = FactChat(self._model, self.model_id, tools=tools, skills=skills, inspect=self._inspect)
         return await chat.ask(question, facts, workspace)
 
 
-def model_chat(
+def model_chat(  # noqa: PLR0913  # the server, then each optional part of the chat
     model_url: str,
     transport: httpx.AsyncBaseTransport | None = None,
     tools: Sequence[Tool] = (),
     skills: str = "",
     *,
     switched: Switched | None = None,
+    inspect: Inspect | None = None,
 ) -> ChatBackend | None:
     """The chat backed by the model server at ``model_url``, or ``None`` (after saying why) if refused.
 
     With ``switched`` its tools follow the registry switches; otherwise it keeps ``tools`` and ``skills``.
+    ``inspect`` lets the Board's chat look inside a workspace, each look recorded first (ADR-039);
+    without it the Board's chat reads summaries only.
     """
     try:
         client = ModelClient(model_url, transport=transport)
@@ -101,7 +105,7 @@ def model_chat(
         print("  Use the local model server, e.g. http://127.0.0.1:8766")
         return None
     if switched is not None:
-        return SwitchedChat(client, switched)
+        return SwitchedChat(client, switched, inspect)
     return FactChat(client, LOCAL_MODEL_ID, tools=tools, skills=skills)
 
 
