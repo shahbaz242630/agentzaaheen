@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from yaqzan.core.api import SamplePortfolio, create_app
 from yaqzan.core.api.app import REQUEST_HEADER
 from yaqzan.core.api.removal import purpose
+from yaqzan.core.auth import PasskeyError
 from yaqzan.core.policy import LifecycleVerdict, Removal
 from yaqzan.core.store import Archived, StoreError, StoreErrorCode, WorkspaceRow
 
@@ -159,3 +160,24 @@ def test_a_database_that_does_not_answer_is_said_plainly() -> None:
     c = client(fake)
     assert c.get("/api/archived").json() == {"detail": "workspaces.store_unavailable"}
     assert post(c, "/api/archived/eva/restore").json() == {"detail": "workspaces.store_unavailable"}
+
+
+def test_bringing_back_is_signed_for_the_one_named_in_the_address() -> None:
+    fake = FakeRemoval()
+    c = client(fake)
+    post(c, "/api/workspaces/zaaheen/archive", {"credential": SIGNED})
+    post(c, "/api/workspaces/eva/archive", {"credential": SIGNED})  # second in the archived list
+    assert post(c, "/api/archived/eva/restore/options").json() == {"options": {"challenge": "c"}}
+    assert fake.calls[-1] == ("options", purpose("restore", eva(fake)))
+
+
+def test_without_a_passkey_set_up_no_signature_is_offered() -> None:
+    fake = FakeRemoval()
+
+    async def none_set_up(_step: str) -> dict[str, Any]:
+        raise PasskeyError("registry.no_passkey")
+
+    fake.options = none_set_up  # type: ignore[method-assign,assignment]
+    c = client(fake)
+    refused = post(c, "/api/workspaces/eva/archive/options")
+    assert (refused.status_code, refused.json()) == (409, {"detail": "registry.no_passkey"})

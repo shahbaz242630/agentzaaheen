@@ -241,6 +241,8 @@ def test_every_move_needs_the_chairman_with_a_fresh_passkey(test_db: ScratchDb) 
                 ).verdict,
                 await rules.erase(EVA, **ME, step_up_at=None),
                 await rules.restore(EVA, **ME, step_up_at=None),
+                await rules.erase(EVA, **ME, step_up_at=NOW - timedelta(hours=1)),
+                await rules.restore(EVA, **ME, step_up_at=NOW - timedelta(hours=1)),
             ]
 
     assert run(body()) == [
@@ -250,6 +252,8 @@ def test_every_move_needs_the_chairman_with_a_fresh_passkey(test_db: ScratchDb) 
         LifecycleVerdict.NOT_ALLOWED,
         LifecycleVerdict.NEEDS_PASSKEY,
         LifecycleVerdict.NEEDS_PASSKEY,
+        LifecycleVerdict.NOT_ALLOWED,
+        LifecycleVerdict.NOT_ALLOWED,
     ]
 
 
