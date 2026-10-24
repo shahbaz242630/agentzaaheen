@@ -171,6 +171,42 @@ export const RegistryPage = z.strictObject({
 });
 export type RegistryPage = z.infer<typeof RegistryPage>;
 
+// The Agents tab (ADR-039, F17 slice 3). Mirrors src/yaqzan/core/api/agents.py. Money is in US cents.
+export const RoleChoice = z.strictObject({
+  id: item,
+  title: z.string(),
+  mission: z.string(),
+  permission: z.enum(["read", "draft", "act"]),
+});
+export type RoleChoice = z.infer<typeof RoleChoice>;
+
+export const AgentOut = z.strictObject({
+  id: z.uuid(),
+  role_id: item,
+  title: z.string(),
+  enabled: z.boolean(),
+  model: z.string(),
+  cap_minor: z.int().nonnegative().nullable(),
+  spent_minor: z.int().nonnegative(),
+  newer_version: z.boolean(),
+});
+export type AgentOut = z.infer<typeof AgentOut>;
+
+export const WorkspaceAgents = z.strictObject({
+  enabled: z.boolean(),
+  cap_minor: z.int().nonnegative().nullable(),
+  spent_minor: z.int().nonnegative(),
+  agents: z.array(AgentOut),
+  switches: z.boolean(),
+});
+export type WorkspaceAgents = z.infer<typeof WorkspaceAgents>;
+
+// What a switch should become. No cap (null) means nothing may be spent.
+export interface SwitchChange {
+  enabled: boolean;
+  cap_minor: number | null;
+}
+
 // The Chairman's passkey (ADR-SEC-007): whether it exists, and whether it may be set up on this run.
 export const PasskeyStatus = z.strictObject({ enrolled: z.boolean(), enrolment_open: z.boolean() });
 export type PasskeyStatus = z.infer<typeof PasskeyStatus>;
@@ -222,6 +258,9 @@ async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
   return parsed.data;
 }
 
+const workspacePath = (slug: string) => `/api/workspaces/${encodeURIComponent(slug)}`;
+const agentPath = (slug: string, agentId: string) => `${workspacePath(slug)}/agents/${encodeURIComponent(agentId)}`;
+
 export const api = {
   projects: () => getJson("/api/workspaces", z.array(ProjectSummary)),
   project: (id: string) => getJson(`/api/workspaces/${encodeURIComponent(id)}`, ProjectDetail),
@@ -241,6 +280,18 @@ export const api = {
   approve: (requestId: string, credential: unknown) =>
     postJson(`/api/registry/requests/${encodeURIComponent(requestId)}/approve`, { credential }, RegistryPage),
   passkey: () => getJson("/api/passkey", PasskeyStatus),
+  roles: () => getJson("/api/roles", z.array(RoleChoice)),
+  agents: (slug: string) => getJson(`${workspacePath(slug)}/agents`, WorkspaceAgents),
+  giveAgent: (slug: string, roleId: string) =>
+    postJson(`${workspacePath(slug)}/agents`, { role_id: roleId }, WorkspaceAgents),
+  setAgent: (slug: string, agentId: string, change: SwitchChange, credential?: unknown) =>
+    postJson(agentPath(slug, agentId), { ...change, credential }, WorkspaceAgents),
+  agentOptions: async (slug: string, agentId: string, change: SwitchChange) =>
+    (await postJson(`${agentPath(slug, agentId)}/options`, change, PasskeyOptions)).options,
+  setWorkspace: (slug: string, change: SwitchChange, credential?: unknown) =>
+    postJson(`${workspacePath(slug)}/settings`, { ...change, credential }, WorkspaceAgents),
+  workspaceOptions: async (slug: string, change: SwitchChange) =>
+    (await postJson(`${workspacePath(slug)}/settings/options`, change, PasskeyOptions)).options,
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),
