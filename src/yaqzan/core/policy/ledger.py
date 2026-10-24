@@ -60,7 +60,7 @@ class Ledger:
     """One tenant's audit chain, stored in Postgres."""
 
     def __init__(self, db: Database, tenant_id: UUID) -> None:
-        self._rows = AuditRows(db)
+        self._rows = AuditRows(db.scoped(tenant_id))
         self._tenant_id = tenant_id
 
     async def record(self, draft: AuditDraft) -> AuditEntry:
@@ -70,12 +70,12 @@ class Ledger:
             previous = None if head is None else entry_from_row(head)
             return row_from_entry(self._tenant_id, append(previous, draft))
 
-        return entry_from_row(await self._rows.append(self._tenant_id, build))
+        return entry_from_row(await self._rows.append(build))
 
     async def verify(self, anchor: ChainAnchor | None = None) -> ChainReport:
         """Reload the whole chain and check every link (and that it still contains ``anchor``)."""
         entries: list[AuditEntry] = []
-        for row in await self._rows.all_rows(self._tenant_id):
+        for row in await self._rows.all_rows():
             try:
                 entries.append(entry_from_row(row))
             except ValidationError:
@@ -105,7 +105,7 @@ async def load_kill_switches(
     """Current kill switches for a tenant. Any failure means stop everything (SP-2)."""
     log = get_logger("policy.ledger", sink=log_sink, tenant_id=str(tenant_id))
     try:
-        engaged = await KillSwitchRows(db).engaged(tenant_id)
+        engaged = await KillSwitchRows(db.scoped(tenant_id)).engaged()
         return _switches_from([(s.scope, s.ref) for s in engaged])
     except StoreError as exc:
         say(log, "kill_switches_unreadable", reason_code=exc.code.value, effect="stop_all")

@@ -20,7 +20,12 @@ _WRITES = {"INSERT", "UPDATE", "DELETE"}
 
 # (door, file, function as Class.method or name, the events it must be able to say)
 DOORS: list[tuple[str, Path, str, set[str]]] = [
-    ("the API: every request", SRC / "core/api/app.py", "_said", {"api_answered", "api_failed"}),
+    (
+        "the API: every request",
+        SRC / "core/api/app.py",
+        "_said",
+        {"api_answered", "api_failed", "workspace_api_answered", "workspace_api_failed"},
+    ),
     (
         "outside calls: connectors",
         SRC / "core/net/client.py",

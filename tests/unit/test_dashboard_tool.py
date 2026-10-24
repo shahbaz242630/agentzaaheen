@@ -92,7 +92,7 @@ def _live(
 
 
 def _paddle_card(app: FastAPI) -> dict[str, object]:
-    detail = TestClient(app, base_url="http://127.0.0.1").get("/api/projects/zaaheen").json()
+    detail = TestClient(app, base_url="http://127.0.0.1").get("/api/workspaces/zaaheen").json()
     return next(card for card in detail["cards"] if card["id"] == "paddle")
 
 
@@ -191,8 +191,8 @@ def test_the_chat_answers_through_the_model_server(ui: Path, capsys: pytest.Capt
     models = client.get("/api/models").json()["models"]
     assert [m["id"] for m in models if m["available"]] == [chat_tools.LOCAL_MODEL_ID]
     response = client.post(
-        "/api/chat",
-        json={"project_id": "zaaheen", "model_id": chat_tools.LOCAL_MODEL_ID, "question": "How is revenue?"},
+        "/api/workspaces/zaaheen/chat",
+        json={"model_id": chat_tools.LOCAL_MODEL_ID, "question": "How is revenue?"},
         headers={"X-Yaqzan-Request": "1"},
     )
     assert response.status_code == 200

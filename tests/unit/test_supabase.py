@@ -330,10 +330,10 @@ def test_the_dashboard_shows_real_backend_cards(
     assert {r.url.host for r in seen} == {"api.supabase.com"}
     assert all(r.method == "GET" and r.headers["Authorization"] == f"Bearer {TOKEN}" for r in seen)
     client = TestClient(apps[0], base_url="http://127.0.0.1")  # type: ignore[arg-type]
-    card = next(c for c in client.get("/api/projects/eva").json()["cards"] if c["id"] == "supabase")
+    card = next(c for c in client.get("/api/workspaces/eva").json()["cards"] if c["id"] == "supabase")
     assert (card["sample"], card["source"]) == (False, "Supabase (live)")
     assert HOSTILE not in str(card)
-    sk = next(c for c in client.get("/api/projects/sandoq-kin").json()["cards"] if c["id"] == "supabase")
+    sk = next(c for c in client.get("/api/workspaces/sandoq-kin").json()["cards"] if c["id"] == "supabase")
     assert sk["freshness"] == "never"
     connector = next(c for c in client.get("/api/registry").json()["connectors"] if c["id"] == "supabase")
     assert {u["project_id"] for u in connector["uses"]} == {"eva", "sandoq-kin"}

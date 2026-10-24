@@ -260,10 +260,10 @@ def test_each_kind_of_span_gets_its_metric() -> None:
     red = RedMetrics(start_ns=5)
     server_attrs = {
         "http.request.method": "GET",
-        "http.route": "/api/projects",
+        "http.route": "/api/workspaces",
         "http.response.status_code": 200,
     }
-    red.on_end(finished("GET /api/projects", 0.02, kind=SpanKind.SERVER, attributes=server_attrs))
+    red.on_end(finished("GET /api/workspaces", 0.02, kind=SpanKind.SERVER, attributes=server_attrs))
     client_attrs = {"server.address": "api.paddle.com", "yaqzan.attempts": 2, "yaqzan.count": 9}
     red.on_end(finished("GET api.paddle.com", 0.3, kind=SpanKind.CLIENT, attributes=client_attrs))
     red.on_end(finished("db transaction", 0.001, attributes={"db.system.name": "postgresql"}))
@@ -273,7 +273,7 @@ def test_each_kind_of_span_gets_its_metric() -> None:
     assert as_dict(server["attributes"]) == {
         "http.request.method": {"stringValue": "GET"},
         "http.response.status_code": {"intValue": "200"},
-        "http.route": {"stringValue": "/api/projects"},
+        "http.route": {"stringValue": "/api/workspaces"},
     }
     assert server["startTimeUnixNano"] == "5"
     assert server["timeUnixNano"] == "99"

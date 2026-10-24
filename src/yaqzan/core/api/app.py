@@ -15,6 +15,13 @@ server span named by its route template (never the filled-in path), and the
 answer carries its ``traceparent``, so any error shown leads to its trace
 (ADR-032). A ``traceparent`` sent to us is ignored: every request starts its
 own trace.
+
+Each project is a workspace (ADR-039) with its own address,
+``/api/workspaces/{slug}``. The workspace is chosen there, once, by the door
+(:class:`WorkspaceDirectory`), from the server's own list; no request body
+names one. The workspace's chat sees only that workspace's facts and tools.
+``/api/chat`` is the Board's chat: every workspace's summary line, and no
+tool that reads one workspace's data.
 """
 
 from __future__ import annotations
@@ -24,7 +31,7 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any, Protocol
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
@@ -40,15 +47,24 @@ from yaqzan.core.api.registry import (
     RegistryPage,
     SignedAnswer,
 )
-from yaqzan.core.api.views import ChatAnswer, ChatQuestion, ModelList, ProjectDetail, ProjectSummary
+from yaqzan.core.api.views import (
+    ChatAnswer,
+    ChatQuestion,
+    Health,
+    ModelList,
+    ProjectDetail,
+    ProjectSummary,
+)
+from yaqzan.core.api.workspaces import SCOPE_KEY, InWorkspace, WorkspaceDirectory
 from yaqzan.core.auth import PasskeyError
 from yaqzan.core.llm_gateway import ChatReply
 from yaqzan.core.policy import Verdict
 from yaqzan.core.registry import Kind
 from yaqzan.core.sdk import SourceError, elapsed_ms, failed, get_logger, say, span, traceparent
-from yaqzan.core.store import StoreError
+from yaqzan.core.store import StoreError, WorkspaceRow
 
 LOCAL_HOSTS: tuple[str, ...] = ("127.0.0.1", "localhost")
+_SAMPLE_NS = UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8")  # ids for sample workspaces (no database)
 
 CONTENT_SECURITY_POLICY = "; ".join(
     (
@@ -100,8 +116,11 @@ class ChatBackend(Protocol):
         """Which entry of the model menu this is."""
         ...
 
-    async def ask(self, question: str, facts: str) -> ChatReply:
-        """The answer to ``question``, from ``facts`` and read-only tools, and what it used."""
+    async def ask(self, question: str, facts: str, workspace: str | None = None) -> ChatReply:
+        """The answer to ``question``, from ``facts`` and read-only tools, and what it used.
+
+        ``workspace`` is the one workspace asked in (its slug), or ``None`` for the Board.
+        """
         ...
 
 
@@ -275,7 +294,7 @@ async def _with_headers(request: Request, call_next: Callable[[Request], Awaitab
         current.set_attribute("http.response.status_code", response.status_code)
         if response.status_code >= _SERVER_ERROR:  # a server error, not a refusal
             failed(current, str(response.status_code))
-        _said(method, route, response.status_code, started)
+        _said(method, route, response.status_code, started, _workspace(request))
         parent = traceparent()
     response.headers.update(SECURITY_HEADERS)
     response.headers["Cache-Control"] = "no-store"
@@ -284,13 +303,40 @@ async def _with_headers(request: Request, call_next: Callable[[Request], Awaitab
     return response
 
 
-def _said(method: str, route: str, status: int, started: float) -> None:
-    """The API door's one line per request (ADR-034): the route template, never the filled-in path."""
+def _said(method: str, route: str, status: int, started: float, workspace: str | None = None) -> None:
+    """The API door's one line per request (ADR-034): the route template, never the filled-in path.
+
+    Inside a workspace the line names it (its slug, never anything the request carried).
+    """
     log, duration_ms = get_logger("yaqzan.api"), elapsed_ms(started)
-    if status >= _SERVER_ERROR:
-        say(log, "api_failed", method=method, route=route, http_status=status, duration_ms=duration_ms)
+    line = {"method": method, "route": route, "http_status": status, "duration_ms": duration_ms}
+    failed = status >= _SERVER_ERROR
+    if workspace is None and failed:
+        say(log, "api_failed", **line)
+    elif workspace is None:
+        say(log, "api_answered", **line)
+    elif failed:
+        say(log, "workspace_api_failed", workspace=workspace, **line)
     else:
-        say(log, "api_answered", method=method, route=route, http_status=status, duration_ms=duration_ms)
+        say(log, "workspace_api_answered", workspace=workspace, **line)
+
+
+def _workspace(request: Request) -> str | None:
+    """The workspace the door let this request into, or ``None`` (not a workspace route, or refused)."""
+    found = request.scope.get(SCOPE_KEY)
+    return found if isinstance(found, str) else None
+
+
+def _no_data(workspace: WorkspaceRow) -> ProjectSummary:
+    """A workspace with nothing to show yet: unknown, never "all fine"."""
+    return ProjectSummary(
+        id=workspace.slug,
+        name=workspace.name,
+        summary="No data yet",
+        health=Health.UNKNOWN,
+        escalations=0,
+        sample=False,
+    )
 
 
 def _route_template(request: Request) -> str:
@@ -307,8 +353,12 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     chat: ChatBackend | None = None,
     registry: RegistryPage | None = None,
     switches: RegistrySwitches | None = None,
+    workspaces: WorkspaceDirectory | None = None,
 ) -> FastAPI:
     """Build the app. ``static_dir`` is the built web UI; without it only the API is served.
+
+    ``workspaces`` is the server's list of workspaces (from the database). Without
+    it, each project of the portfolio is a workspace (sample data, no database).
 
     Without ``chat`` the chat route answers ``chat.not_connected``. ``registry`` is
     what the Customize page shows (read once at start); without it the page is empty.
@@ -323,16 +373,29 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
 
     app.middleware("http")(_with_headers)
 
-    @app.get("/api/projects")
-    def list_projects() -> tuple[ProjectSummary, ...]:
-        return portfolio.projects()
+    directory = workspaces or WorkspaceDirectory(
+        [
+            WorkspaceRow(workspace_id=uuid5(_SAMPLE_NS, p.id), slug=p.id, name=p.name)
+            for p in portfolio.projects()
+        ]
+    )
 
-    @app.get("/api/projects/{project_id}")
-    def get_project(project_id: str) -> ProjectDetail:
-        detail = portfolio.project(project_id)
+    app.state.workspaces = directory
+
+    def detail_of(workspace: WorkspaceRow) -> ProjectDetail:
+        detail = portfolio.project(workspace.slug)
         if detail is None:
-            raise HTTPException(status_code=404, detail="project.not_found")
+            raise HTTPException(status_code=404, detail="workspace.no_data")
         return detail
+
+    @app.get("/api/workspaces")
+    def list_workspaces() -> tuple[ProjectSummary, ...]:
+        listed = {p.id: p for p in portfolio.projects()}
+        return tuple(listed.get(w.slug) or _no_data(w) for w in directory.all())
+
+    @app.get("/api/workspaces/{slug}")
+    def get_workspace(workspace: InWorkspace) -> ProjectDetail:
+        return detail_of(workspace)
 
     @app.get("/api/models")
     def list_models() -> ModelList:
@@ -341,29 +404,30 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     _registry_routes(app, page, switches)
     _passkey_routes(app, switches)
 
-    @app.post("/api/chat", dependencies=[Depends(_refuse_foreign)])
-    async def ask(question: ChatQuestion) -> ChatAnswer:
+    async def answer(question: ChatQuestion, facts: str, sample: bool, workspace: str | None) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:
             raise HTTPException(status_code=503, detail="chat.not_connected")
-        if question.project_id is None:
-            projects = portfolio.projects()
-            facts, sample = portfolio_facts(projects), any(p.sample for p in projects)
-        else:
-            detail = portfolio.project(question.project_id)
-            if detail is None:
-                raise HTTPException(status_code=404, detail="project.not_found")
-            facts, sample = project_facts(detail), uses_sample(detail)
         if busy.locked():  # one question at a time: a laptop CPU runs one model answer at once
             raise HTTPException(status_code=429, detail="chat.busy")
         async with busy:
             try:
-                reply = await chat.ask(question.question, facts)
+                reply = await chat.ask(question.question, facts, workspace)
             except SourceError as exc:
                 say(log, "chat_failed", code=exc.reason_code, status=exc.status)
                 raise HTTPException(status_code=502, detail=exc.reason_code) from None
         return ChatAnswer(
             model_id=chat.model_id, answer=reply.answer, from_sample=sample, used=reply.used[:8]
         )
+
+    @app.post("/api/chat", dependencies=[Depends(_refuse_foreign)])
+    async def ask_the_board(question: ChatQuestion) -> ChatAnswer:
+        projects = tuple(listed for listed in portfolio.projects() if directory.find(listed.id) is not None)
+        return await answer(question, portfolio_facts(projects), any(p.sample for p in projects), None)
+
+    @app.post("/api/workspaces/{slug}/chat", dependencies=[Depends(_refuse_foreign)])
+    async def ask_a_workspace(question: ChatQuestion, workspace: InWorkspace) -> ChatAnswer:
+        detail = detail_of(workspace)
+        return await answer(question, project_facts(detail), uses_sample(detail), workspace.slug)
 
     if static_dir is not None:
         if not (static_dir / "index.html").is_file():

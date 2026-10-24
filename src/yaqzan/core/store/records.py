@@ -17,7 +17,7 @@ import asyncpg
 from pydantic import BaseModel
 
 from yaqzan.core.sdk import Action, Event, Finding, RunRecord
-from yaqzan.core.store.db import Database, require_aware
+from yaqzan.core.store.db import Scoped, require_aware
 
 MAX_PAGE = 500
 
@@ -112,59 +112,64 @@ def _load[M: BaseModel](model: type[M], row: asyncpg.Record | None) -> M | None:
 
 
 class Records:
-    """Repository for the four SDK record types."""
+    """Repository for the four SDK record types, in the one workspace of its handle.
 
-    def __init__(self, db: Database) -> None:
-        self._db = db
+    A record that names another workspace or tenant is refused by the database
+    wall when it is saved; ids looked up elsewhere are simply not found.
+    """
+
+    def __init__(self, scope: Scoped) -> None:
+        self._scope = scope
+        self._key = (scope.tenant_id, scope.require_workspace())
 
     async def add_event(self, event: Event) -> bool:
         """Store an event once. Returns False if its idempotency key was already stored."""
         values = _values(event, _EVENT_COLUMNS, frozenset({"payload"}))
-        async with self._db.scoped(event.tenant_id, event.project_id).write("an event") as conn:
+        async with self._scope.write("an event") as conn:
             return await conn.fetchval(_INSERT_EVENT, *values) is not None
 
-    async def get_event(self, tenant_id: UUID, project_id: UUID, event_id: UUID) -> Event | None:
+    async def get_event(self, event_id: UUID) -> Event | None:
         """One event, or None if it does not exist in this workspace."""
-        async with self._db.scoped(tenant_id, project_id).connection() as conn:
-            return _load(Event, await conn.fetchrow(_SELECT_EVENT, tenant_id, project_id, event_id))
+        async with self._scope.connection() as conn:
+            return _load(Event, await conn.fetchrow(_SELECT_EVENT, *self._key, event_id))
 
-    async def recent_events(self, tenant_id: UUID, project_id: UUID, limit: int = 50) -> list[Event]:
-        """Newest events for one project, at most ``MAX_PAGE``."""
+    async def recent_events(self, limit: int = 50) -> list[Event]:
+        """Newest events in this workspace, at most ``MAX_PAGE``."""
         bounded = max(1, min(limit, MAX_PAGE))
-        async with self._db.scoped(tenant_id, project_id).connection() as conn:
-            rows = await conn.fetch(_RECENT_EVENTS, tenant_id, project_id, bounded)
+        async with self._scope.connection() as conn:
+            rows = await conn.fetch(_RECENT_EVENTS, *self._key, bounded)
         return [Event.model_validate(dict(row)) for row in rows]
 
     async def add_run(self, run: RunRecord) -> None:
         """Store one run record."""
         require_aware(run.started_at)
         values = _values(run, _RUN_COLUMNS, frozenset({"model"}))
-        async with self._db.scoped(run.tenant_id, run.project_id).write("an agent run") as conn:
+        async with self._scope.write("an agent run") as conn:
             await conn.execute(_INSERT_RUN, *values)
 
-    async def get_run(self, tenant_id: UUID, project_id: UUID, run_id: UUID) -> RunRecord | None:
+    async def get_run(self, run_id: UUID) -> RunRecord | None:
         """One run record, or None."""
-        async with self._db.scoped(tenant_id, project_id).connection() as conn:
-            return _load(RunRecord, await conn.fetchrow(_SELECT_RUN, tenant_id, project_id, run_id))
+        async with self._scope.connection() as conn:
+            return _load(RunRecord, await conn.fetchrow(_SELECT_RUN, *self._key, run_id))
 
     async def add_finding(self, finding: Finding) -> None:
         """Store one finding."""
         values = _values(finding, _FINDING_COLUMNS, frozenset({"evidence", "metric_refs"}))
-        async with self._db.scoped(finding.tenant_id, finding.project_id).write("a finding") as conn:
+        async with self._scope.write("a finding") as conn:
             await conn.execute(_INSERT_FINDING, *values)
 
-    async def get_finding(self, tenant_id: UUID, project_id: UUID, finding_id: UUID) -> Finding | None:
+    async def get_finding(self, finding_id: UUID) -> Finding | None:
         """One finding, or None."""
-        async with self._db.scoped(tenant_id, project_id).connection() as conn:
-            return _load(Finding, await conn.fetchrow(_SELECT_FINDING, tenant_id, project_id, finding_id))
+        async with self._scope.connection() as conn:
+            return _load(Finding, await conn.fetchrow(_SELECT_FINDING, *self._key, finding_id))
 
     async def add_action(self, action: Action) -> bool:
         """Store a proposed action once. Returns False if its idempotency key was already stored."""
         values = _values(action, _ACTION_COLUMNS, frozenset({"payload"}))
-        async with self._db.scoped(action.tenant_id, action.project_id).write("a proposed action") as conn:
+        async with self._scope.write("a proposed action") as conn:
             return await conn.fetchval(_INSERT_ACTION, *values) is not None
 
-    async def get_action(self, tenant_id: UUID, project_id: UUID, action_id: UUID) -> Action | None:
+    async def get_action(self, action_id: UUID) -> Action | None:
         """One action, or None."""
-        async with self._db.scoped(tenant_id, project_id).connection() as conn:
-            return _load(Action, await conn.fetchrow(_SELECT_ACTION, tenant_id, project_id, action_id))
+        async with self._scope.connection() as conn:
+            return _load(Action, await conn.fetchrow(_SELECT_ACTION, *self._key, action_id))

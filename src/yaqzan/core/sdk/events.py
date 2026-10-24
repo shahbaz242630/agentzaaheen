@@ -100,6 +100,19 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="The dashboard asked for {method} {route} and got http {http_status} in {duration_ms} ms.",
         why="The dashboard page on this laptop asked for it.",
     ),
+    "workspace_api_answered": LogEvent(
+        "info",
+        what="The dashboard asked for {method} {route} in the {workspace} workspace "
+        "and got http {http_status} in {duration_ms} ms.",
+        why="The dashboard page on this laptop asked for it; the address chose the workspace.",
+    ),
+    "workspace_api_failed": LogEvent(
+        "error",
+        what="The dashboard's request {method} {route} in the {workspace} workspace "
+        "failed (http {http_status}) after {duration_ms} ms.",
+        why="Something inside Yaqzan broke while answering it.",
+        next="Open this request's trace (the trace_id on this line) to see which step failed.",
+    ),
     "api_failed": LogEvent(
         "error",
         what="The dashboard's request {method} {route} failed (http {http_status}) after {duration_ms} ms.",

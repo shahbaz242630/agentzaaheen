@@ -208,9 +208,10 @@ async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): P
   return parsed.data;
 }
 
-// A question for the chat.
-function askChat(projectId: string | null, modelId: string, question: string): Promise<ChatAnswer> {
-  return postJson("/api/chat", { project_id: projectId, model_id: modelId, question }, ChatAnswer);
+// A question for the chat. The address chooses the workspace (ADR-039); with none, it is the Board's chat.
+function askChat(workspace: string | null, modelId: string, question: string): Promise<ChatAnswer> {
+  const path = workspace === null ? "/api/chat" : `/api/workspaces/${encodeURIComponent(workspace)}/chat`;
+  return postJson(path, { model_id: modelId, question }, ChatAnswer);
 }
 
 async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
@@ -222,8 +223,8 @@ async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
 }
 
 export const api = {
-  projects: () => getJson("/api/projects", z.array(ProjectSummary)),
-  project: (id: string) => getJson(`/api/projects/${encodeURIComponent(id)}`, ProjectDetail),
+  projects: () => getJson("/api/workspaces", z.array(ProjectSummary)),
+  project: (id: string) => getJson(`/api/workspaces/${encodeURIComponent(id)}`, ProjectDetail),
   models: async () => (await getJson("/api/models", ModelList)).models,
   registry: () => getJson("/api/registry", RegistryPage),
   // The registry switches (ADR-030): each answers with the page as it now stands. Nothing here switches on.

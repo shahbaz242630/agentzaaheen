@@ -90,7 +90,7 @@ def test_record_returns_what_was_stored(test_db: ScratchDb) -> None:
     async def body() -> tuple[int, AuditRow | None, str]:
         async with open_db(test_db.app_url) as db:
             entry = await Ledger(db, TENANT).record(draft(0))
-            return entry.seq, await AuditRows(db).head(TENANT), entry.hash
+            return entry.seq, await AuditRows(db.scoped(TENANT)).head(), entry.hash
 
     seq, head, digest = run(body())
     assert seq == 1
@@ -187,10 +187,10 @@ def test_database_refuses_a_row_that_does_not_link(test_db: ScratchDb) -> None:
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
             head = await Ledger(db, TENANT).record(draft(0))
-            stored = await AuditRows(db).head(TENANT)
+            stored = await AuditRows(db.scoped(TENANT)).head()
             assert stored is not None
             forged = _relinked(stored, seq=head.seq + 1, prev_hash="f" * 64)
-            await AuditRows(db).append(TENANT, lambda _head: forged)
+            await AuditRows(db.scoped(TENANT)).append(lambda _head: forged)
 
     with pytest.raises(StoreError) as caught:
         run(body())
@@ -201,10 +201,10 @@ def test_database_refuses_a_row_that_skips_ahead(test_db: ScratchDb) -> None:
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
             await Ledger(db, TENANT).record(draft(0))
-            stored = await AuditRows(db).head(TENANT)
+            stored = await AuditRows(db.scoped(TENANT)).head()
             assert stored is not None
             forged = _relinked(stored, seq=5, prev_hash=stored.hash)
-            await AuditRows(db).append(TENANT, lambda _head: forged)
+            await AuditRows(db.scoped(TENANT)).append(lambda _head: forged)
 
     with pytest.raises(StoreError) as caught:
         run(body())
@@ -217,10 +217,10 @@ def test_database_refuses_a_first_row_without_genesis(test_db: ScratchDb) -> Non
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
             await Ledger(db, TENANT).record(draft(0))
-            stored = await AuditRows(db).head(TENANT)
+            stored = await AuditRows(db.scoped(TENANT)).head()
             assert stored is not None
             forged = _relinked(stored, seq=1, prev_hash="f" * 64, tenant_id=other)
-            await AuditRows(db).append(other, lambda _head: forged)
+            await AuditRows(db.scoped(other)).append(lambda _head: forged)
 
     with pytest.raises(StoreError) as caught:
         run(body())
@@ -231,9 +231,9 @@ def test_row_for_another_tenant_cannot_be_slipped_into_a_locked_chain(test_db: S
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
             await Ledger(db, TENANT).record(draft(0))
-            row = await AuditRows(db).head(TENANT)
+            row = await AuditRows(db.scoped(TENANT)).head()
             assert row is not None
-            await AuditRows(db).append(uuid4(), lambda _head: row)
+            await AuditRows(db.scoped(uuid4())).append(lambda _head: row)
 
     with pytest.raises(ValueError, match="tenant"):
         run(body())
@@ -252,16 +252,14 @@ def test_kill_switches_load_what_was_set(test_db: ScratchDb) -> None:
 
     async def body() -> tuple[KillSwitches, KillSwitches]:
         async with open_db(test_db.app_url) as db:
-            rows = KillSwitchRows(db)
+            rows = KillSwitchRows(db.scoped(TENANT))
             by = "user:chairman"
-            await rows.set(
-                TENANT, SwitchScope.PROJECT, str(project), engaged=True, changed_by=by, changed_at=NOW
-            )
-            await rows.set(TENANT, SwitchScope.AGENT, "support", engaged=True, changed_by=by, changed_at=NOW)
-            await rows.set(TENANT, SwitchScope.AGENT, "growth", engaged=False, changed_by=by, changed_at=NOW)
+            await rows.set(SwitchScope.PROJECT, str(project), engaged=True, changed_by=by, changed_at=NOW)
+            await rows.set(SwitchScope.AGENT, "support", engaged=True, changed_by=by, changed_at=NOW)
+            await rows.set(SwitchScope.AGENT, "growth", engaged=False, changed_by=by, changed_at=NOW)
             first = await load_kill_switches(db, TENANT)
-            await rows.set(TENANT, SwitchScope.ALL, "", engaged=True, changed_by=by, changed_at=NOW)
-            await rows.set(TENANT, SwitchScope.AGENT, "support", engaged=False, changed_by=by, changed_at=NOW)
+            await rows.set(SwitchScope.ALL, "", engaged=True, changed_by=by, changed_at=NOW)
+            await rows.set(SwitchScope.AGENT, "support", engaged=False, changed_by=by, changed_at=NOW)
             return first, await load_kill_switches(db, TENANT)
 
     first, second = run(body())
@@ -287,8 +285,7 @@ def test_unreadable_kill_switches_mean_stop_everything(test_db: ScratchDb) -> No
 def test_nonsense_kill_switch_row_means_stop_everything(test_db: ScratchDb) -> None:
     async def body() -> KillSwitches:
         async with open_db(test_db.app_url) as db:
-            await KillSwitchRows(db).set(
-                TENANT,
+            await KillSwitchRows(db.scoped(TENANT)).set(
                 SwitchScope.PROJECT,
                 "not-a-uuid",
                 engaged=True,
@@ -303,7 +300,7 @@ def test_nonsense_kill_switch_row_means_stop_everything(test_db: ScratchDb) -> N
 def test_switch_row_with_unknown_scope_means_stop_everything(
     test_db: ScratchDb, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    async def unknown_scope(_self: KillSwitchRows, _tenant: UUID) -> list[object]:
+    async def unknown_scope(_self: KillSwitchRows) -> list[object]:
         return [SwitchScope("everything")]  # raises ValueError, as a row with a dropped CHECK would
 
     monkeypatch.setattr(KillSwitchRows, "engaged", unknown_scope)
@@ -318,8 +315,7 @@ def test_switch_row_with_unknown_scope_means_stop_everything(
 def test_naive_switch_time_is_refused(test_db: ScratchDb) -> None:
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            await KillSwitchRows(db).set(
-                TENANT,
+            await KillSwitchRows(db.scoped(TENANT)).set(
                 SwitchScope.ALL,
                 "",
                 engaged=True,

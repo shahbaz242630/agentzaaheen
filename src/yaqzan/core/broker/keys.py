@@ -1,6 +1,7 @@
 """Save and open credentials: the vault's encryption joined to the store's rows.
 
-Saving seals the key and stores only ciphertext, plus two plain facts: when
+Both work in the one workspace of the caller's handle; a slot of another
+workspace is refused (ADR-039). Saving seals the key and stores only ciphertext, plus two plain facts: when
 it expires and its access level. Opening returns a ``SecretStr`` for one use;
 the caller hands it to a client's secret headers and keeps no copy.
 """
@@ -12,7 +13,7 @@ from enum import StrEnum
 
 from pydantic import SecretStr
 
-from yaqzan.core.store import Access, Database, SealedRow, SealedSecrets, SlotKey
+from yaqzan.core.store import Access, Scoped, SealedRow, SealedSecrets, SlotKey
 from yaqzan.core.vault import CredentialSlot, Keyring, SealedSecret, open_secret, seal
 
 
@@ -35,7 +36,7 @@ def _key(slot: CredentialSlot) -> SlotKey:
 
 
 async def save_credential(  # noqa: PLR0913  # where, what, and the two plain facts
-    db: Database,
+    scope: Scoped,
     keyring: Keyring,
     slot: CredentialSlot,
     secret: SecretStr,
@@ -47,7 +48,7 @@ async def save_credential(  # noqa: PLR0913  # where, what, and the two plain fa
     if expires_at is not None and expires_at.tzinfo is None:
         raise ValueError("expires_at must be timezone-aware")
     sealed = seal(secret, slot, keyring)
-    await SealedSecrets(db).put(
+    await SealedSecrets(scope).put(
         SealedRow(
             slot=_key(slot),
             format_version=sealed.format_version,
@@ -60,9 +61,9 @@ async def save_credential(  # noqa: PLR0913  # where, what, and the two plain fa
     )
 
 
-async def open_credential(db: Database, keyring: Keyring, slot: CredentialSlot) -> SecretStr:
+async def open_credential(scope: Scoped, keyring: Keyring, slot: CredentialSlot) -> SecretStr:
     """The key in ``slot`` for one use. Fails closed: missing, tampered or wrong-slot keys never open."""
-    row = await SealedSecrets(db).get(_key(slot))
+    row = await SealedSecrets(scope).get(_key(slot))
     if row is None:
         raise BrokerError(BrokerErrorCode.MISSING, f"no {slot.connector} credential is saved")
     sealed = SealedSecret(  # format 1 is the only one; a database CHECK refuses any other

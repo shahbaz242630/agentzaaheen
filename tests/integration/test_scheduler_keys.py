@@ -24,6 +24,7 @@ SECRET = "-".join(["fake", "key", "for", "expiry", "tests"])  # built at runtime
 
 
 async def save(db: Database, project: UUID, expires_at: datetime | None) -> None:
+    where = db.scoped(TENANT, project)
     slot = CredentialSlot.model_validate(
         {
             "tenant_id": TENANT,
@@ -33,7 +34,7 @@ async def save(db: Database, project: UUID, expires_at: datetime | None) -> None
             "environment": "production",
         }
     )
-    await save_credential(db, RING, slot, SecretStr(SECRET), expires_at=expires_at, access="read_only")
+    await save_credential(where, RING, slot, SecretStr(SECRET), expires_at=expires_at, access="read_only")
 
 
 def summary(alert: KeyAlert) -> tuple[KeyHealth, Severity, int | None]:
@@ -53,8 +54,10 @@ def test_each_key_gets_the_right_alert_and_a_plain_english_line(
             await save(db, gone, NOW - timedelta(hours=1))
             await save(db, refused, NOW + timedelta(days=60))
             await save(db, undated, None)
-            await RevenueRows(db).mark_failure(TENANT, refused, "paddle", at=NOW, error_code="net.auth")
-            return await check_keys(db, TENANT, now=NOW)
+            await RevenueRows(db.scoped(TENANT, refused)).mark_failure(
+                "paddle", at=NOW, error_code="net.auth"
+            )
+            return await check_keys(db.scoped(TENANT), now=NOW)
 
     alerts = {a.project_id: a for a in run(body())}
     assert fine not in alerts
@@ -79,6 +82,6 @@ def test_each_key_gets_the_right_alert_and_a_plain_english_line(
 def test_a_tenant_with_no_keys_has_nothing_to_say(test_db: ScratchDb) -> None:
     async def body() -> list[KeyAlert]:
         async with open_db(test_db.app_url) as db:
-            return await check_keys(db, uuid4(), now=NOW)
+            return await check_keys(db.scoped(uuid4()), now=NOW)
 
     assert run(body()) == []

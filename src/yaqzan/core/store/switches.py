@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from uuid import UUID
 
-from yaqzan.core.store.db import Database, require_aware
+from yaqzan.core.store.db import Scoped, require_aware
 
 _SET = """
 INSERT INTO yaqzan.kill_switches (tenant_id, scope, ref, engaged, changed_by, changed_at)
@@ -37,12 +36,12 @@ class EngagedSwitch:
 class KillSwitchRows:
     """Repository for kill-switch state."""
 
-    def __init__(self, db: Database) -> None:
-        self._db = db
+    def __init__(self, scope: Scoped) -> None:
+        self._scope = scope
+        self._tenant = scope.tenant_id
 
-    async def set(  # noqa: PLR0913  # each argument is a separate column
+    async def set(  # each argument is a separate column
         self,
-        tenant_id: UUID,
         scope: SwitchScope,
         ref: str,
         *,
@@ -52,11 +51,11 @@ class KillSwitchRows:
     ) -> None:
         """Turn one switch on or off."""
         require_aware(changed_at)
-        async with self._db.scoped(tenant_id).write("a kill switch") as conn:
-            await conn.execute(_SET, tenant_id, scope.value, ref, engaged, changed_by, changed_at)
+        async with self._scope.write("a kill switch") as conn:
+            await conn.execute(_SET, self._tenant, scope.value, ref, engaged, changed_by, changed_at)
 
-    async def engaged(self, tenant_id: UUID) -> list[EngagedSwitch]:
+    async def engaged(self) -> list[EngagedSwitch]:
         """Every switch that is on for this tenant."""
-        async with self._db.scoped(tenant_id).connection() as conn:
-            records = await conn.fetch(_ENGAGED, tenant_id)
+        async with self._scope.connection() as conn:
+            records = await conn.fetch(_ENGAGED, self._tenant)
         return [EngagedSwitch(scope=SwitchScope(r["scope"]), ref=r["ref"]) for r in records]

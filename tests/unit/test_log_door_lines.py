@@ -51,21 +51,38 @@ def lines(capsys: pytest.CaptureFixture[str], event: str) -> list[dict[str, Any]
 def test_every_api_request_is_one_line_with_its_route_template(capsys: pytest.CaptureFixture[str]) -> None:
     client = TestClient(create_app(SamplePortfolio(NOW)), base_url="http://127.0.0.1")
     capsys.readouterr()
-    assert client.get("/api/projects/zaaheen").status_code == 200
+    assert client.get("/api/workspaces").status_code == 200
     [line] = lines(capsys, "api_answered")
-    assert (line["method"], line["route"], line["http_status"]) == ("GET", "/api/projects/{project_id}", 200)
-    assert "zaaheen" not in line["what"]  # the template, never the filled-in path
-    assert line["what"].startswith(
-        "The dashboard asked for GET /api/projects/{project_id} and got http 200 in "
-    )
+    assert (line["method"], line["route"], line["http_status"]) == ("GET", "/api/workspaces", 200)
+    assert line["what"].startswith("The dashboard asked for GET /api/workspaces and got http 200 in ")
     assert line["level"] == "info"
+
+
+def test_a_request_inside_a_workspace_names_the_workspace_the_door_chose(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    client = TestClient(create_app(SamplePortfolio(NOW)), base_url="http://127.0.0.1")
+    capsys.readouterr()
+    assert client.get("/api/workspaces/zaaheen").status_code == 200
+    [line] = lines(capsys, "workspace_api_answered")
+    assert (line["route"], line["workspace"], line["http_status"]) == (
+        "/api/workspaces/{slug}",
+        "zaaheen",
+        200,
+    )
+    assert line["what"].startswith(
+        "The dashboard asked for GET /api/workspaces/{slug} in the zaaheen workspace and got http 200 in "
+    )
 
 
 def test_a_refusal_is_answered_not_failed(capsys: pytest.CaptureFixture[str]) -> None:
     client = TestClient(create_app(SamplePortfolio(NOW)), base_url="http://127.0.0.1")
     capsys.readouterr()
-    assert client.get("/api/projects/nope").status_code == 404
-    assert [line["http_status"] for line in lines(capsys, "api_answered")] == [404]
+    assert client.get("/api/workspaces/nope").status_code == 404
+    [line] = lines(capsys, "api_answered")
+    assert line["http_status"] == 404
+    assert "workspace" not in line  # a refused address is never logged as if it were a workspace
+    assert "nope" not in line["what"]
 
 
 def test_a_crash_inside_a_request_is_an_error_line(capsys: pytest.CaptureFixture[str]) -> None:

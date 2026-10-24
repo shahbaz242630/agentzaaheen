@@ -209,3 +209,58 @@ def test_a_failed_read_is_explained_to_the_model_not_raised() -> None:
     reply = ask(script, tool("failed_build_log", ("eva",), Ran(error=error), trusted=False))
     assert reply == ChatReply("I could not read the log.")
     assert "The read failed:" in script.sent[1][-1]["content"]
+
+
+# ---------------------------------------------------------------- one workspace's tools only (ADR-039)
+
+
+def per_workspace(run: Ran) -> Tool:
+    """A tool whose choices read different workspaces' data, like the build log or the fix guides."""
+    return Tool(
+        name="failed_build_log",
+        description="Read one project's failed build log.",
+        choices=("zaaheen", "eva", "eva/api"),
+        run=run,
+        trusted=False,
+        label="Build log",
+        workspace_of=lambda choice: choice.split("/", 1)[0],
+    )
+
+
+def ask_in(script: Script, workspace: str | None, *tools: Tool) -> ChatReply:
+    chat = FactChat(script, "local-gemma", tools=tools, skills="- fix-build: Fix a build.")
+    return asyncio.run(chat.ask("Why is it red?", "facts", workspace))
+
+
+def test_a_workspace_chat_is_offered_only_its_own_choices() -> None:
+    script = Script("All fine.")
+    ask_in(script, "eva", per_workspace(Ran()))
+    system = script.sent[0][0]["content"]
+    assert "eva/api" in system
+    assert "zaaheen" not in system
+
+
+def test_a_workspace_chat_cannot_read_another_workspace_even_when_the_model_asks() -> None:
+    run = Ran()
+    script = Script(block("failed_build_log", "zaaheen"), "I could not read it.")
+    reply = ask_in(script, "eva", per_workspace(run))
+    assert run.args == []  # never run for the other workspace
+    assert reply.used == ()
+    assert "'zaaheen' is not allowed" in script.sent[1][-1]["content"]
+
+
+def test_the_boards_chat_gets_no_tool_that_reads_one_workspace() -> None:
+    run = Ran()
+    neutral = tool("load_skill", ("fix-build",), Ran("steps"), trusted=True, label="Skill")
+    script = Script(block("failed_build_log", "eva"), "Summaries only.")
+    ask_in(script, None, per_workspace(run), neutral)
+    system = script.sent[0][0]["content"]
+    assert "failed_build_log" not in system
+    assert "load_skill" in system
+    assert run.args == []
+
+
+def test_a_workspace_with_no_choices_of_a_tool_does_not_see_that_tool() -> None:
+    script = Script("Nothing to read.")
+    ask_in(script, "sandoq-kin", per_workspace(Ran()))
+    assert "failed_build_log" not in script.sent[0][0]["content"]

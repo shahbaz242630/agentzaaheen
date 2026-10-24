@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -27,7 +28,7 @@ from yaqzan.core.api.registry import DashboardSwitches, PasskeyStatus, RegistryP
 from yaqzan.core.auth import Site
 from yaqzan.core.policy import PasskeyApprovals, RegistryControl, Standing, Verdict
 from yaqzan.core.registry import Kind, Registry
-from yaqzan.core.store import Database, DatabaseSettings, StoreError
+from yaqzan.core.store import Database, DatabaseSettings, StoreError, WorkspaceRow, WorkspaceRows
 
 LAPTOP_TENANT = laptop_db.LAPTOP_TENANT
 START_LAPTOP_DB = "uv run python -m tools.laptop_db up"
@@ -35,16 +36,27 @@ START_LAPTOP_DB = "uv run python -m tools.laptop_db up"
 Prepare = Callable[[], Awaitable[SecretStr | None]]
 
 
-def connect(registry: Registry, prepare: Prepare = laptop_db.prepare) -> tuple[SecretStr, Standing] | None:
-    """The laptop database's URL and how every item stands now, or ``None`` (after saying why)."""
+@dataclass(frozen=True)
+class Connected:
+    """The laptop database as the dashboard starts: where it is, how every item stands, its workspaces."""
 
-    async def read() -> tuple[SecretStr, Standing] | None:
+    url: SecretStr
+    standing: Standing
+    workspaces: tuple[WorkspaceRow, ...]
+
+
+def connect(registry: Registry, prepare: Prepare = laptop_db.prepare) -> Connected | None:
+    """The laptop database, how every item stands now, and its workspaces; ``None`` (after saying why)."""
+
+    async def read() -> Connected | None:
         url = await prepare()
         if url is None:
             return None
         db = await Database.open(DatabaseSettings(dsn=url, min_size=1, max_size=1))
         try:
-            return url, await RegistryControl(db, LAPTOP_TENANT, registry).standing()
+            standing = await RegistryControl(db, LAPTOP_TENANT, registry).standing()
+            workspaces = await WorkspaceRows(db.scoped(LAPTOP_TENANT)).workspaces()
+            return Connected(url, standing, tuple(workspaces))
         finally:
             await db.close()
 

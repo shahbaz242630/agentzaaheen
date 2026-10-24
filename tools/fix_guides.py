@@ -216,6 +216,7 @@ def fix_guide_tool(guides: Mapping[str, Project]) -> Tool | None:
         run=run,
         trusted=True,
         label="Fix guide",
+        workspace_of=lambda choice: choice.split("/", 1)[0],
     )
 
 

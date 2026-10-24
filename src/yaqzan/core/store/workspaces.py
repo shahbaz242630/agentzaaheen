@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from yaqzan.core.store.db import Database
+from yaqzan.core.store.db import Scoped
 
 _ADD_TENANT = """
 INSERT INTO yaqzan.tenants (tenant_id, name) VALUES ($1, $2)
@@ -24,7 +24,7 @@ RETURNING workspace_id
 """
 _RENAME = "UPDATE yaqzan.workspaces SET name = $3 WHERE tenant_id = $1 AND workspace_id = $2"
 _LIST = """
-SELECT workspace_id, slug, name FROM yaqzan.workspaces WHERE tenant_id = $1 ORDER BY slug
+SELECT workspace_id, slug, name FROM yaqzan.workspaces WHERE tenant_id = $1 ORDER BY created_at, slug
 """
 
 
@@ -38,31 +38,32 @@ class WorkspaceRow:
 
 
 class WorkspaceRows:
-    """Repository for tenants and workspaces."""
+    """Repository for the tenant of its handle and that tenant's workspaces."""
 
-    def __init__(self, db: Database) -> None:
-        self._db = db
+    def __init__(self, scope: Scoped) -> None:
+        self._scope = scope
+        self._tenant = scope.tenant_id
 
-    async def add_tenant(self, tenant_id: UUID, name: str) -> None:
+    async def add_tenant(self, name: str) -> None:
         """Create the tenant if it does not exist yet."""
-        async with self._db.scoped(tenant_id).write("a tenant") as conn:
-            await conn.execute(_ADD_TENANT, tenant_id, name)
+        async with self._scope.write("a tenant") as conn:
+            await conn.execute(_ADD_TENANT, self._tenant, name)
 
-    async def add(self, tenant_id: UUID, workspace: WorkspaceRow) -> bool:
+    async def add(self, workspace: WorkspaceRow) -> bool:
         """Create a workspace. Returns False if it already existed (its name is then left alone)."""
-        async with self._db.scoped(tenant_id).write("a workspace") as conn:
+        async with self._scope.write("a workspace") as conn:
             added = await conn.fetchval(
-                _ADD_WORKSPACE, tenant_id, workspace.workspace_id, workspace.slug, workspace.name
+                _ADD_WORKSPACE, self._tenant, workspace.workspace_id, workspace.slug, workspace.name
             )
             return added is not None
 
-    async def rename(self, tenant_id: UUID, workspace_id: UUID, name: str) -> None:
+    async def rename(self, workspace_id: UUID, name: str) -> None:
         """Give a workspace a new display name."""
-        async with self._db.scoped(tenant_id).write("a workspace's new name") as conn:
-            await conn.execute(_RENAME, tenant_id, workspace_id, name)
+        async with self._scope.write("a workspace's new name") as conn:
+            await conn.execute(_RENAME, self._tenant, workspace_id, name)
 
-    async def workspaces(self, tenant_id: UUID) -> list[WorkspaceRow]:
-        """Every workspace of the tenant, by slug."""
-        async with self._db.scoped(tenant_id).connection() as conn:
-            rows = await conn.fetch(_LIST, tenant_id)
+    async def workspaces(self) -> list[WorkspaceRow]:
+        """Every workspace of the tenant, in the order they were added."""
+        async with self._scope.connection() as conn:
+            rows = await conn.fetch(_LIST, self._tenant)
         return [WorkspaceRow(**dict(row)) for row in rows]

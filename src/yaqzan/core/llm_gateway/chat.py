@@ -85,12 +85,21 @@ class FactChat:
         self._temperature = temperature
         self._log = get_logger("yaqzan.chat", model=model_id)
 
-    async def ask(self, question: str, facts: str) -> ChatReply:
-        """The trimmed answer and what it used, or ``SourceError(BAD_RESPONSE)`` if the model said nothing."""
-        messages = build_messages(question, facts, tuple(self._tools.values()), self._skills)
+    async def ask(self, question: str, facts: str, workspace: str | None = None) -> ChatReply:
+        """The trimmed answer and what it used, or ``SourceError(BAD_RESPONSE)`` if the model said nothing.
+
+        ``workspace`` (a slug) is the one workspace this question is asked in, set by
+        the door; ``None`` is the Board. Tools are narrowed to it before the model sees them.
+        """
+        tools = {
+            name: narrowed
+            for name, tool in self._tools.items()
+            if (narrowed := tool.for_workspace(workspace)) is not None
+        }
+        messages = build_messages(question, facts, tuple(tools.values()), self._skills)
         used: list[str] = []
         for step in range(self._max_steps + 1):
-            last = step == self._max_steps or not self._tools
+            last = step == self._max_steps or not tools
             if last and step > 0:
                 messages.append({"role": "user", "content": LAST_STEP})
             reply = await self._model.chat(
@@ -99,18 +108,18 @@ class FactChat:
             call = None if last else parse_call(reply)
             if call is None:
                 return ChatReply(answer=_final(reply), used=tuple(used))
-            result, label = await self._run(call.name, call.arg)
+            result, label = await self._run(tools, call.name, call.arg)
             if label:
                 used.append(label)
             messages += [{"role": "assistant", "content": reply}, {"role": "user", "content": result}]
         raise AssertionError("unreachable: the last step always answers")  # pragma: no cover
 
-    async def _run(self, name: str, arg: str) -> tuple[str, str | None]:
+    async def _run(self, tools: dict[str, Tool], name: str, arg: str) -> tuple[str, str | None]:
         """The wrapped result to show the model, and a label for ``used`` (``None`` if refused)."""
-        tool = self._tools.get(name)
+        tool = tools.get(name)
         if tool is None:
             say(self._log, "chat_tool_refused", reason="unknown_tool")  # never the asked-for name
-            allowed = ", ".join(self._tools)
+            allowed = ", ".join(tools)
             return wrap_result("refused", f"There is no tool '{name}'. Tools: {allowed}.", trusted=True), None
         if arg not in tool.choices:
             say(self._log, "chat_tool_refused", tool=name, reason="choice_not_allowed")

@@ -5,13 +5,13 @@ the vault's output (master key id, wrapped data key, ciphertext) against the
 credential's slot. Only the vault, given the master key, can open it.
 
 Beside the ciphertext sit two plain facts that are not secret: when the key
-expires and its access level. :meth:`SealedSecrets.dates` lists them without
+expires and its access level. :meth:`AllSealedSecrets.dates` lists them without
 touching any ciphertext, for the daily expiry check.
 
-Each slot lives in one workspace, behind its wall (ADR-039). The two
-tenant-wide reads (:meth:`SealedSecrets.not_under_key` and
-:meth:`SealedSecrets.dates`) go through the tenant's workspaces one at a time;
-none is missed, because a credential can only be saved in a workspace that exists.
+Each slot lives in one workspace, behind its wall (ADR-039). :class:`SealedSecrets`
+works in one workspace; :class:`AllSealedSecrets` does the two tenant-wide reads
+one workspace at a time; none is missed, because a credential can only be saved
+in a workspace that exists.
 """
 
 from __future__ import annotations
@@ -23,7 +23,8 @@ from uuid import UUID
 
 import asyncpg
 
-from yaqzan.core.store.db import Database
+from yaqzan.core.store.db import Scoped
+from yaqzan.core.store.errors import StoreError, StoreErrorCode
 from yaqzan.core.store.workspaces import WorkspaceRows
 
 _UPSERT = """
@@ -118,14 +119,23 @@ def _row(record: asyncpg.Record) -> SealedRow:
 
 
 class SealedSecrets:
-    """Repository for sealed credentials."""
+    """Repository for the sealed credentials of the one workspace of its handle.
 
-    def __init__(self, db: Database) -> None:
-        self._db = db
+    A slot of another workspace or tenant is refused before any query runs.
+    """
+
+    def __init__(self, scope: Scoped) -> None:
+        self._scope = scope
+        self._key = (scope.tenant_id, scope.require_workspace())
+
+    def _check(self, slot: SlotKey) -> None:
+        if (slot.tenant_id, slot.project_id) != self._key:
+            raise StoreError(StoreErrorCode.DENIED, "a credential slot of another workspace")
 
     async def put(self, row: SealedRow) -> None:
         """Store or replace the credential in one slot."""
-        async with self._db.scoped(row.slot.tenant_id, row.slot.project_id).write("a sealed secret") as conn:
+        self._check(row.slot)
+        async with self._scope.write("a sealed secret") as conn:
             await conn.execute(
                 _UPSERT,
                 *row.slot.params(),
@@ -139,36 +149,48 @@ class SealedSecrets:
 
     async def get(self, slot: SlotKey) -> SealedRow | None:
         """The credential in one slot, or None."""
-        async with self._db.scoped(slot.tenant_id, slot.project_id).connection() as conn:
+        self._check(slot)
+        async with self._scope.connection() as conn:
             record = await conn.fetchrow(_GET, *slot.params())
         return None if record is None else _row(record)
 
     async def delete(self, slot: SlotKey) -> bool:
         """Remove one credential. Returns False if the slot was empty."""
-        where = self._db.scoped(slot.tenant_id, slot.project_id)
-        async with where.write("the removal of a sealed secret") as conn:
+        self._check(slot)
+        async with self._scope.write("the removal of a sealed secret") as conn:
             return await conn.fetchval(_DELETE, *slot.params()) is not None
 
-    async def not_under_key(self, tenant_id: UUID, master_key_id: str) -> list[SealedRow]:
+
+class AllSealedSecrets:
+    """The tenant-wide reads of credentials, done one workspace at a time behind each wall.
+
+    None is missed: a credential can only be saved in a workspace that exists.
+    """
+
+    def __init__(self, scope: Scoped) -> None:
+        self._scope = scope
+
+    async def not_under_key(self, master_key_id: str) -> list[SealedRow]:
         """Credentials still wrapped by an older master key (to re-wrap after rotation)."""
         out: list[SealedRow] = []
-        for workspace_id in await self._workspace_ids(tenant_id):
-            async with self._db.scoped(tenant_id, workspace_id).connection() as conn:
-                records = await conn.fetch(_NOT_UNDER_KEY, tenant_id, workspace_id, master_key_id)
+        for where in await self._each_workspace():
+            async with where.connection() as conn:
+                records = await conn.fetch(_NOT_UNDER_KEY, where.tenant_id, where.workspace_id, master_key_id)
             out.extend(_row(record) for record in records)
         return out
 
-    async def dates(self, tenant_id: UUID) -> list[CredentialDates]:
+    async def dates(self) -> list[CredentialDates]:
         """Every credential's expiry and access, without reading any ciphertext."""
         out = []
-        for workspace_id in await self._workspace_ids(tenant_id):
-            async with self._db.scoped(tenant_id, workspace_id).connection() as conn:
-                records = await conn.fetch(_DATES, tenant_id, workspace_id)
+        for where in await self._each_workspace():
+            async with where.connection() as conn:
+                records = await conn.fetch(_DATES, where.tenant_id, where.workspace_id)
             for record in records:
                 fields = dict(record)
                 out.append(CredentialDates(slot=_slot(fields), **fields))
         return out
 
-    async def _workspace_ids(self, tenant_id: UUID) -> list[UUID]:
-        """The tenant's workspaces in a fixed order (by id), so results come out in a fixed order too."""
-        return sorted(w.workspace_id for w in await WorkspaceRows(self._db).workspaces(tenant_id))
+    async def _each_workspace(self) -> list[Scoped]:
+        """A handle per workspace in a fixed order (by id), so results come out in a fixed order too."""
+        ids = sorted(w.workspace_id for w in await WorkspaceRows(self._scope).workspaces())
+        return [self._scope.within(workspace_id) for workspace_id in ids]

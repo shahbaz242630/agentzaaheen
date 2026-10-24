@@ -41,13 +41,13 @@ def full_batch(**changes: object) -> RevenueBatch:
 def test_a_saved_batch_reads_back_exactly(test_db: ScratchDb) -> None:
     async def body() -> tuple[object, ...]:
         async with open_db(test_db.app_url) as db:
-            rows = RevenueRows(db)
-            await rows.save_batch(TENANT, PROJECT, full_batch(), at=AT)
+            rows = RevenueRows(db.scoped(TENANT, PROJECT))
+            await rows.save_batch(full_batch(), at=AT)
             return (
-                await rows.subscriptions(TENANT, PROJECT, "paddle"),
-                await rows.payments(TENANT, PROJECT, "paddle", START, END),
-                await rows.refunds(TENANT, PROJECT, "paddle", START, END),
-                await rows.sync_state(TENANT, PROJECT, "paddle"),
+                await rows.subscriptions("paddle"),
+                await rows.payments("paddle", START, END),
+                await rows.refunds("paddle", START, END),
+                await rows.sync_state("paddle"),
             )
 
     subs, pays, refunds, state = run(body())
@@ -60,10 +60,10 @@ def test_a_saved_batch_reads_back_exactly(test_db: ScratchDb) -> None:
 def test_saving_twice_changes_nothing(test_db: ScratchDb) -> None:
     async def body() -> int:
         async with open_db(test_db.app_url) as db:
-            rows = RevenueRows(db)
-            await rows.save_batch(TENANT, PROJECT, full_batch(), at=AT)
-            await rows.save_batch(TENANT, PROJECT, full_batch(), at=AT + timedelta(minutes=5))
-            return len(await rows.payments(TENANT, PROJECT, "paddle", START, END))
+            rows = RevenueRows(db.scoped(TENANT, PROJECT))
+            await rows.save_batch(full_batch(), at=AT)
+            await rows.save_batch(full_batch(), at=AT + timedelta(minutes=5))
+            return len(await rows.payments("paddle", START, END))
 
     assert run(body()) == len(world.EXPECTED_PAYMENTS)
 
@@ -85,14 +85,10 @@ def test_older_vendor_data_never_overwrites_newer(test_db: ScratchDb) -> None:
 
     async def body() -> SubscriptionStatus:
         async with open_db(test_db.app_url) as db:
-            rows = RevenueRows(db)
-            await rows.save_batch(
-                TENANT, PROJECT, full_batch(subscriptions=(newer,), payments=(), refunds=()), at=AT
-            )
-            await rows.save_batch(
-                TENANT, PROJECT, full_batch(subscriptions=(older,), payments=(), refunds=()), at=AT
-            )
-            (stored,) = await rows.subscriptions(TENANT, PROJECT, "paddle")
+            rows = RevenueRows(db.scoped(TENANT, PROJECT))
+            await rows.save_batch(full_batch(subscriptions=(newer,), payments=(), refunds=()), at=AT)
+            await rows.save_batch(full_batch(subscriptions=(older,), payments=(), refunds=()), at=AT)
+            (stored,) = await rows.subscriptions("paddle")
             return stored.status
 
     assert run(body()) is SubscriptionStatus.CANCELED
@@ -103,17 +99,13 @@ def test_a_payment_attempt_takes_the_vendors_latest_status(test_db: ScratchDb) -
 
     async def body() -> PaymentStatus:
         async with open_db(test_db.app_url) as db:
-            rows = RevenueRows(db)
+            rows = RevenueRows(db.scoped(TENANT, PROJECT))
+            await rows.save_batch(full_batch(subscriptions=(), payments=(pending,), refunds=()), at=AT)
             await rows.save_batch(
-                TENANT, PROJECT, full_batch(subscriptions=(), payments=(pending,), refunds=()), at=AT
-            )
-            await rows.save_batch(
-                TENANT,
-                PROJECT,
                 full_batch(subscriptions=(), refunds=(), payments=(world.EXPECTED_PAYMENTS[1],)),
                 at=AT,
             )
-            (stored,) = await rows.payments(TENANT, PROJECT, "paddle", START, END)
+            (stored,) = await rows.payments("paddle", START, END)
             return stored.status
 
     assert run(body()) is PaymentStatus.SUCCEEDED
@@ -132,13 +124,11 @@ def test_a_rejected_row_saves_nothing_and_leaves_the_sync_unmarked(test_db: Scra
 
     async def body() -> tuple[int, SyncState | None]:
         async with open_db(test_db.app_url) as db:
-            rows = RevenueRows(db)
+            rows = RevenueRows(db.scoped(TENANT, PROJECT))
             with pytest.raises(StoreError) as caught:
-                await rows.save_batch(TENANT, PROJECT, batch, at=AT)
+                await rows.save_batch(batch, at=AT)
             assert caught.value.code is StoreErrorCode.REJECTED
-            return len(await rows.subscriptions(TENANT, PROJECT, "paddle")), await rows.sync_state(
-                TENANT, PROJECT, "paddle"
-            )
+            return len(await rows.subscriptions("paddle")), await rows.sync_state("paddle")
 
     assert run(body()) == (0, None)
 
@@ -146,15 +136,16 @@ def test_a_rejected_row_saves_nothing_and_leaves_the_sync_unmarked(test_db: Scra
 def test_rows_are_scoped_to_tenant_project_and_source(test_db: ScratchDb) -> None:
     async def body() -> list[int]:
         async with open_db(test_db.app_url) as db:
-            rows = RevenueRows(db)
-            await rows.save_batch(TENANT, PROJECT, full_batch(), at=AT)
-            other_tenant, other_project = uuid4(), uuid4()
+            rows = RevenueRows(db.scoped(TENANT, PROJECT))
+            await rows.save_batch(full_batch(), at=AT)
+            other_tenant = RevenueRows(db.scoped(uuid4(), PROJECT))
+            other_project = RevenueRows(db.scoped(TENANT, uuid4()))
             return [
-                len(await rows.subscriptions(other_tenant, PROJECT, "paddle")),
-                len(await rows.subscriptions(TENANT, other_project, "paddle")),
-                len(await rows.subscriptions(TENANT, PROJECT, "stripe")),
-                len(await rows.payments(other_tenant, PROJECT, "paddle", START, END)),
-                len(await rows.refunds(TENANT, other_project, "paddle", START, END)),
+                len(await other_tenant.subscriptions("paddle")),
+                len(await other_project.subscriptions("paddle")),
+                len(await rows.subscriptions("stripe")),
+                len(await other_tenant.payments("paddle", START, END)),
+                len(await other_project.refunds("paddle", START, END)),
             ]
 
     assert run(body()) == [0, 0, 0, 0, 0]
@@ -163,12 +154,12 @@ def test_rows_are_scoped_to_tenant_project_and_source(test_db: ScratchDb) -> Non
 def test_windows_include_start_and_exclude_end(test_db: ScratchDb) -> None:
     async def body() -> tuple[int, int]:
         async with open_db(test_db.app_url) as db:
-            rows = RevenueRows(db)
-            await rows.save_batch(TENANT, PROJECT, full_batch(), at=AT)
+            rows = RevenueRows(db.scoped(TENANT, PROJECT))
+            await rows.save_batch(full_batch(), at=AT)
             day = world.when(5)  # the annual payment happened exactly at this moment
             return (
-                len(await rows.payments(TENANT, PROJECT, "paddle", day, day + timedelta(seconds=1))),
-                len(await rows.payments(TENANT, PROJECT, "paddle", day - timedelta(days=1), day)),
+                len(await rows.payments("paddle", day, day + timedelta(seconds=1))),
+                len(await rows.payments("paddle", day - timedelta(days=1), day)),
             )
 
     assert run(body()) == (1, 0)
@@ -179,11 +170,11 @@ def test_failure_keeps_the_last_success(test_db: ScratchDb) -> None:
 
     async def body() -> SyncState | None:
         async with open_db(test_db.app_url) as db:
-            rows = RevenueRows(db)
-            await rows.save_batch(TENANT, PROJECT, full_batch(), at=AT)
-            await rows.mark_attempt(TENANT, PROJECT, "paddle", at=later)
-            await rows.mark_failure(TENANT, PROJECT, "paddle", at=later, error_code="source.auth")
-            return await rows.sync_state(TENANT, PROJECT, "paddle")
+            rows = RevenueRows(db.scoped(TENANT, PROJECT))
+            await rows.save_batch(full_batch(), at=AT)
+            await rows.mark_attempt("paddle", at=later)
+            await rows.mark_failure("paddle", at=later, error_code="source.auth")
+            return await rows.sync_state("paddle")
 
     assert run(body()) == SyncState(
         last_attempt_at=later, last_success_at=AT, last_error_code="source.auth", cursor_at=AT
@@ -195,7 +186,7 @@ def test_naive_times_are_refused(test_db: ScratchDb) -> None:
 
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            await RevenueRows(db).mark_attempt(TENANT, PROJECT, "paddle", at=naive)
+            await RevenueRows(db.scoped(TENANT, PROJECT)).mark_attempt("paddle", at=naive)
 
     with pytest.raises(StoreError) as caught:
         run(body())
@@ -209,9 +200,9 @@ def test_a_read_over_the_row_cap_is_refused_not_cut_short(
 
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            rows = RevenueRows(db)
-            await rows.save_batch(TENANT, PROJECT, full_batch(), at=AT)
-            await rows.subscriptions(TENANT, PROJECT, "paddle")
+            rows = RevenueRows(db.scoped(TENANT, PROJECT))
+            await rows.save_batch(full_batch(), at=AT)
+            await rows.subscriptions("paddle")
 
     with pytest.raises(StoreError) as caught:
         run(body())

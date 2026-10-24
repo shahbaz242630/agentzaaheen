@@ -103,7 +103,7 @@ class RegistryControl:
     """One tenant's registry switches: read how things stand, switch off, ask, withdraw."""
 
     def __init__(self, db: Database, tenant_id: UUID, registry: Registry) -> None:
-        self._rows = RegistrySwitchRows(db)
+        self._rows = RegistrySwitchRows(db.scoped(tenant_id))
         self._ledger = Ledger(db, tenant_id)
         self._tenant = tenant_id
         self._items = _items(registry)
@@ -112,7 +112,7 @@ class RegistryControl:
         """Every item's state and every pending request, from the database now."""
         stored = by_item(
             StoredSwitch(kind=Kind(r.kind), item_id=r.item_id, enabled=r.enabled, fingerprint=r.fingerprint)
-            for r in await self._rows.switches(self._tenant)
+            for r in await self._rows.switches()
         )
         states = {key: self._state(key, stored) for key in self._items}
         pending = tuple(
@@ -123,7 +123,7 @@ class RegistryControl:
                 requested_at=r.requested_at,
                 stale=self._items.get((Kind(r.kind), r.item_id)) != r.fingerprint,
             )
-            for r in await self._rows.pending(self._tenant)
+            for r in await self._rows.pending()
         )
         return Standing(states=states, pending=pending)
 
@@ -143,7 +143,7 @@ class RegistryControl:
         if verdict is Verdict.DONE:
             fingerprint = self._items[(kind, item_id)]
             await self._rows.switch_off(
-                self._tenant, kind.value, item_id, fingerprint, changed_by=_ACTORS[role], changed_at=now
+                kind.value, item_id, fingerprint, changed_by=_ACTORS[role], changed_at=now
             )
         await self._audit("registry.switch_off", verdict, role, now=now, target=target)
         return verdict
@@ -169,7 +169,7 @@ class RegistryControl:
                 requested_by=_ACTORS[role],
                 requested_at=now,
             )
-            if not await self._rows.add_request(self._tenant, filed):
+            if not await self._rows.add_request(filed):
                 verdict, request_id = Verdict.ALREADY_ASKED, None
         await self._audit("registry.request_on", verdict, role, now=now, target=target, request_id=request_id)
         return verdict
@@ -179,7 +179,7 @@ class RegistryControl:
         verdict = Verdict.DONE
         if not authorize(role, Operation.WITHDRAW_REQUEST, channel, step_up_at=None, now=now).allowed:
             verdict = Verdict.NOT_ALLOWED
-        elif not await self._rows.withdraw(self._tenant, request_id, by=_ACTORS[role], at=now):
+        elif not await self._rows.withdraw(request_id, by=_ACTORS[role], at=now):
             verdict = Verdict.UNKNOWN_REQUEST
         await self._audit(
             "registry.withdraw", verdict, role, now=now, target=f"request:{request_id}", request_id=request_id
@@ -188,7 +188,7 @@ class RegistryControl:
 
     async def approvable(self, request_id: UUID) -> Verdict:
         """Whether a request could be approved now (pending, files unchanged); asked before the passkey."""
-        request = await self._rows.get_request(self._tenant, request_id)
+        request = await self._rows.get_request(request_id)
         if request is None or request.status is not RequestStatus.PENDING:
             return Verdict.UNKNOWN_REQUEST
         key = (Kind(request.kind), request.item_id)
@@ -208,7 +208,7 @@ class RegistryControl:
         else:
             verdict = await self.approvable(request_id)
             approved = verdict is Verdict.DONE and await self._rows.approve(
-                self._tenant, request_id, by=_ACTORS[role], at=now, step_up_at=step_up_at
+                request_id, by=_ACTORS[role], at=now, step_up_at=step_up_at
             )
             if verdict is Verdict.DONE and not approved:  # decided by someone else in between
                 verdict = Verdict.UNKNOWN_REQUEST
@@ -222,7 +222,7 @@ class RegistryControl:
         verdict = Verdict.DONE
         if not authorize(role, Operation.REFUSE_REQUEST, channel, step_up_at=None, now=now).allowed:
             verdict = Verdict.NOT_ALLOWED
-        elif not await self._rows.refuse(self._tenant, request_id, by=_ACTORS[role], at=now):
+        elif not await self._rows.refuse(request_id, by=_ACTORS[role], at=now):
             verdict = Verdict.UNKNOWN_REQUEST
         await self._audit(
             "registry.refuse", verdict, role, now=now, target=f"request:{request_id}", request_id=request_id

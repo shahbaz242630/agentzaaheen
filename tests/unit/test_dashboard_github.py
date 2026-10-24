@@ -51,7 +51,7 @@ def start(
 
 
 def code_card(app: FastAPI, project: str) -> dict[str, object]:
-    detail = TestClient(app, base_url="http://127.0.0.1").get(f"/api/projects/{project}").json()
+    detail = TestClient(app, base_url="http://127.0.0.1").get(f"/api/workspaces/{project}").json()
     return next(card for card in detail["cards"] if card["id"] == "github")
 
 
@@ -127,7 +127,7 @@ def test_paddle_and_github_together(ui: Path, capsys: pytest.CaptureFixture[str]
     )
     assert code == 0
     assert "real numbers from Paddle for Zaaheen and GitHub for every project" in capsys.readouterr().out
-    detail = TestClient(apps[0], base_url="http://127.0.0.1").get("/api/projects/zaaheen").json()
+    detail = TestClient(apps[0], base_url="http://127.0.0.1").get("/api/workspaces/zaaheen").json()
     real = {card["id"] for card in detail["cards"] if card["sample"] is False}
     assert real == {"paddle", "github"}
 

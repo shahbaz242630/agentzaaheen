@@ -15,7 +15,7 @@ from uuid import UUID
 from yaqzan.core import metrics
 from yaqzan.core.metrics import KeyHealth
 from yaqzan.core.sdk import Severity, explain, get_logger
-from yaqzan.core.store import Database, RevenueRows, SealedSecrets
+from yaqzan.core.store import AllSealedSecrets, RevenueRows, Scoped
 
 _LEVEL = {Severity.P1: "error", Severity.P2: "warning", Severity.P3: "info"}
 
@@ -33,14 +33,16 @@ class KeyAlert:
     days_left: int | None
 
 
-async def check_keys(db: Database, tenant_id: UUID, *, now: datetime) -> list[KeyAlert]:
-    """Judge every saved key for ``tenant_id``; return (and log) the ones that need attention."""
-    log = get_logger("yaqzan.keys", tenant_id=str(tenant_id))
-    syncs = RevenueRows(db)
+async def check_keys(scope: Scoped, *, now: datetime) -> list[KeyAlert]:
+    """Judge every saved key of the tenant; return (and log) the ones that need attention.
+
+    A tenant-wide job: it goes through the workspaces one at a time, behind each wall.
+    """
+    log = get_logger("yaqzan.keys", tenant_id=str(scope.tenant_id))
     alerts: list[KeyAlert] = []
-    for cred in await SealedSecrets(db).dates(tenant_id):
+    for cred in await AllSealedSecrets(scope).dates():
         slot = cred.slot
-        state = await syncs.sync_state(tenant_id, slot.project_id, slot.connector)
+        state = await RevenueRows(scope.within(slot.project_id)).sync_state(slot.connector)
         last_error = None if state is None else state.last_error_code
         health = metrics.key_health(cred.expires_at, now, last_error_code=last_error)
         severity = health.severity
