@@ -84,6 +84,24 @@ describe("what a workspace is built with", () => {
     expect(screen.getByText("Outside providers (2)")).toBeTruthy();
   });
 
+  it("names services Yaqzan watches that the code does not call, but never its own checks", async () => {
+    serve(200, READY);
+    const registry = {
+      connectors: [
+        { id: "github", name: "GitHub", category: "Code", uses: [{ project_id: "shop", status: "live" }] },
+        { id: "supabase", name: "Supabase", category: "Backend", uses: [{ project_id: "shop", status: "live" }] },
+        { id: "paddle", name: "Paddle", category: "Revenue", uses: [{ project_id: "shop", status: "failed" }] },
+        { id: "uptime", name: "Uptime checker", category: "Health", uses: [{ project_id: "shop", status: "live" }] },
+      ],
+    } as unknown as RegistryPage;
+    render(<BuiltWith slug="shop" registry={registry} />);
+    expect(
+      await screen.findByText(
+        "Yaqzan also watches Supabase for this project. The code in this repository does not call it, so it is connected some other way.",
+      ),
+    ).toBeTruthy();
+  });
+
   it.each([
     ["not_connected", "GitHub is not connected, so the languages and providers can't be read."],
     ["no_repo", "No code repository is connected yet."],

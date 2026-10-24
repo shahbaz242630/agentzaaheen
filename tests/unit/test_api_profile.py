@@ -25,7 +25,7 @@ PROFILE = RepoProfile(
             evidence=("package.json: react-native-purchases",),
         ),
     ),
-    manifests_read=1,
+    files_read=1,
     changed_at=NOW,
     read_at=NOW,
 )

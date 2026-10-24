@@ -14,7 +14,7 @@ from pydantic import SecretStr
 
 from tools.dashboard_profile import LaptopProfiles
 from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.sdk import MAX_MANIFEST_BYTES, RepoProfile, SourceError, SourceErrorCode
+from yaqzan.core.sdk import MAX_CODE_BYTES, MAX_MANIFEST_BYTES, RepoProfile, SourceError, SourceErrorCode
 from yaqzan.core.store import WorkspaceRow
 from yaqzan.plugins.connectors.github import ALLOWED_HOSTS, API_HEADERS, BASE_URL, GitHubProfile, Head
 
@@ -35,6 +35,8 @@ class World:
             "secrets/package.json": json.dumps({"dependencies": {"openai": "1"}}),
             "wrangler.jsonc": "{}",
             "src/app.ts": "export {}",
+            "src/api/db.ts": 'const url = "https://abcd.supabase.co/rest/v1"',
+            "test/api.ts": 'fetch("https://api.openai.com/v1")',
         }
         self.languages: dict[str, object] = {"TypeScript": 900, "CSS": 100}
         self.pushed: str | None = PUSHED
@@ -92,22 +94,25 @@ def test_it_reads_languages_and_the_providers_code_finds() -> None:
     assert [(lang.name, lang.bytes) for lang in profile.languages] == [("TypeScript", 900), ("CSS", 100)]
     assert profile.shares() == (9000, 1000)
     assert [p.id for p in profile.providers] == ["cloudflare", "stripe", "supabase"]
+    supabase = next(p for p in profile.providers if p.id == "supabase")
+    assert supabase.evidence == ("package.json: @supabase/supabase-js", "src/api/db.ts: supabase.co")
     assert profile.changed_at == datetime(2026, 10, 24, 8, 0, tzinfo=UTC)
-    assert (profile.branch, profile.manifests_read, profile.read_at) == ("main", 1, NOW)
+    assert (profile.branch, profile.files_read, profile.read_at) == ("main", 3, NOW)
 
 
 def test_secret_files_are_never_asked_for() -> None:
     world = World()
     profile = read(world)
-    assert world.contents() == ["package.json"]
+    assert world.contents() == ["package.json", "wrangler.jsonc", "src/api/db.ts"]
+    assert "test/api.ts" not in world.contents()  # tests are not searched for addresses
     assert "openai" not in [p.id for p in profile.providers]
 
 
 def test_large_manifests_are_not_read() -> None:
     world = World()
-    world.sizes = {"package.json": MAX_MANIFEST_BYTES + 1}
+    world.sizes = {"package.json": MAX_MANIFEST_BYTES + 1, "src/api/db.ts": MAX_CODE_BYTES + 1}
     profile = read(world)
-    assert world.contents() == []
+    assert world.contents() == ["wrangler.jsonc"]
     assert [p.id for p in profile.providers] == ["cloudflare"]
 
 
@@ -198,7 +203,11 @@ def test_a_push_means_the_next_open_reads_it_all_again() -> None:
     world.files["package.json"] = json.dumps({"dependencies": {"resend": "1"}})
     again = asyncio.run(laptop.profile(SHOP))
     assert again is not None
-    assert [p.id for p in again.profile.providers] == ["cloudflare", "resend"]
+    assert [p.id for p in again.profile.providers] == [
+        "cloudflare",
+        "supabase",
+        "resend",
+    ]  # supabase: still called in src/api/db.ts
 
 
 def test_a_new_default_branch_is_read_again_too() -> None:

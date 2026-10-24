@@ -13,15 +13,17 @@ anyone who can push, so it is handed on as untrusted text (the SDK's
 
 ``GitHubProfile`` reads what a project is built with (F17 slice 5b-1): the
 languages GitHub counted (``/languages``: names and byte counts only) and the
-providers the SDK's rules find in the file tree and in a few manifests
-(``package.json``, workflow files...). Manifest text is only matched by those
-rules, never kept. ``head()`` is one cheap call (the default branch and the
-last push time, ``pushed_at``), so a caller reads the full profile only when
-the repository changed.
+providers the SDK's rules find in the file tree, in a few manifests
+(``package.json``, workflow files...) and in a few code and config files
+(providers' web addresses). That text is only matched by those rules, never
+kept. ``head()`` is one cheap call (the default branch and the last push time,
+``pushed_at``), so a caller reads the full profile only when the repository
+changed.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import re
@@ -33,6 +35,7 @@ from urllib.parse import quote
 from pydantic import ValidationError
 
 from yaqzan.core.sdk import (
+    MAX_CODE_BYTES,
     MAX_FILE_BYTES,
     MAX_FILE_CHARS,
     MAX_LANGUAGES,
@@ -50,6 +53,7 @@ from yaqzan.core.sdk import (
     detect,
     is_plain_path,
     is_secret_path,
+    pick_code,
     pick_files,
     pick_manifests,
 )
@@ -57,6 +61,7 @@ from yaqzan.plugins.connectors.github import mapping
 from yaqzan.plugins.connectors.github.mapping import Json
 
 REPOS_PER_PAGE = "100"
+AT_ONCE = 6  # files read from GitHub at the same time for a profile (well inside its limits)
 
 
 def _bad(what: str) -> SourceError:
@@ -139,19 +144,27 @@ class GitHubProfile:
         try:
             sizes = await _tree(self._http, self._repo, head.branch)
             paths = [p for p in sizes if not is_secret_path(p)]
-            small = [p for p in paths if sizes[p] <= MAX_MANIFEST_BYTES]
-            manifests: dict[str, str] = {}
-            for path in pick_manifests(small):
-                text = await _text(self._http, self._repo, path, head.branch)
-                if text is not None:
-                    manifests[path] = text  # matched by the SDK's rules below, then dropped
+            manifests = pick_manifests([p for p in paths if sizes[p] <= MAX_MANIFEST_BYTES])
+            code = [
+                p for p in pick_code([p for p in paths if sizes[p] <= MAX_CODE_BYTES]) if p not in manifests
+            ]
+            wanted = manifests + code
+            limit = asyncio.Semaphore(AT_ONCE)
+
+            async def one(path: str) -> str | None:
+                async with limit:
+                    return await _text(self._http, self._repo, path, head.branch)
+
+            found = await asyncio.gather(*(one(path) for path in wanted))
+            # Matched by the SDK's rules below, then dropped.
+            texts = {path: text for path, text in zip(wanted, found, strict=True) if text is not None}
             languages = _languages(await _get(self._http, f"/repos/{self._repo}/languages", {}))
             return RepoProfile(
                 repo=self._repo,
                 branch=head.branch,
                 languages=languages,
-                providers=detect(paths, manifests),
-                manifests_read=len(manifests),
+                providers=detect(paths, texts),
+                files_read=len(texts),
                 changed_at=head.changed_at,
                 read_at=now,
             )

@@ -90,6 +90,7 @@ from yaqzan.core.sdk.repo_files import (
     pick_files,
 )
 from yaqzan.core.sdk.repo_profile import (
+    MAX_CODE_BYTES,
     MAX_LANGUAGES,
     MAX_MANIFEST_BYTES,
     PROVIDERS,
@@ -98,6 +99,7 @@ from yaqzan.core.sdk.repo_profile import (
     ProviderCategory,
     RepoProfile,
     detect,
+    pick_code,
     pick_manifests,
 )
 from yaqzan.core.sdk.revenue import (
@@ -143,6 +145,7 @@ __all__ = [
     "ALLOWED_ATTRIBUTES",
     "KNOWN_CODES",
     "LOG_EVENTS",
+    "MAX_CODE_BYTES",
     "MAX_FILE_BYTES",
     "MAX_FILE_CHARS",
     "MAX_LANGUAGES",
@@ -234,6 +237,7 @@ __all__ = [
     "make_idempotency_key",
     "max_data_class",
     "note",
+    "pick_code",
     "pick_files",
     "pick_manifests",
     "redact",

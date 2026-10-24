@@ -7,14 +7,19 @@ Cloudflare, RevenueCat, the App Store, Google Play, Stripe, Supabase and so on.
 No model is asked: each provider is found by a fixed rule (:data:`PROVIDERS`)
 and comes with the evidence that matched, so the Chairman can see why.
 
-Evidence comes from two places only:
+Evidence comes from three places only:
 
 - **file paths** from the repository's tree (``wrangler.jsonc``, ``ios/``);
 - **package names** read from the project's manifests (:func:`dependencies`):
   ``package.json``, ``pyproject.toml``, ``requirements.txt``, ``app.json``,
-  workflow files and a few more. A manifest's text is untrusted and is only
-  matched against the rules here, never kept, shown or passed to a model.
-  A package name is kept as evidence only if it matched a rule and is plain.
+  workflow files and a few more;
+- **web addresses** a provider owns (:data:`HOSTS`: ``supabase.co``,
+  ``api.paddle.com``) found in a few code and config files
+  (:func:`pick_code`), for code that calls a provider without its package.
+
+File text is untrusted and is only matched against the rules here, never
+kept, shown or passed to a model. Evidence names a path and, at most, a
+package name that matched a rule and is plain, or one of our own addresses.
 
 Secret files are never read (the same list as :mod:`repo_files`).
 """
@@ -45,6 +50,8 @@ MAX_LANGUAGES = 60
 MAX_PROVIDERS = 60
 MAX_EVIDENCE = 3  # evidence kept per provider
 MAX_MANIFESTS = 16  # manifest files read
+MAX_CODE_FILES = 24  # code and config files searched for providers' web addresses
+MAX_CODE_BYTES = 60_000  # larger code files are not read
 MAX_MANIFEST_BYTES = 100_000  # larger manifests are not read
 SHARE_WHOLE = 10_000  # basis points: language shares add up to exactly this
 
@@ -279,6 +286,65 @@ _CODE_SUFFIXES = frozenset(
 _MAX_WORKFLOWS = 6
 _WORKFLOWS = ".github/workflows/"
 
+# Web addresses that belong to one provider, so finding one in code means the code talks to it.
+# A host matches itself or any name ending in it (``abcd.supabase.co`` matches ``supabase.co``).
+HOSTS: Mapping[str, tuple[str, ...]] = {
+    "cloudflare": ("api.cloudflare.com", "workers.dev", "pages.dev", "r2.cloudflarestorage.com"),
+    "vercel": ("vercel.app", "api.vercel.com"),
+    "netlify": ("netlify.app", "api.netlify.com"),
+    "aws": ("amazonaws.com",),
+    "azure": ("azurewebsites.net", "azurecontainerapps.io", "blob.core.windows.net", "management.azure.com"),
+    "fly": ("fly.dev",),
+    "render": ("onrender.com",),
+    "railway": ("railway.app",),
+    "apple": ("buy.itunes.apple.com", "api.storekit.itunes.apple.com", "api.appstoreconnect.apple.com"),
+    "google-play": ("androidpublisher.googleapis.com",),
+    "expo": ("exp.host", "api.expo.dev"),
+    "revenuecat": ("api.revenuecat.com",),
+    "stripe": ("api.stripe.com", "js.stripe.com", "checkout.stripe.com"),
+    "paddle": ("api.paddle.com", "sandbox-api.paddle.com", "cdn.paddle.com"),
+    "lemon-squeezy": ("api.lemonsqueezy.com",),
+    "supabase": ("supabase.co", "supabase.in"),
+    "firebase": ("firebaseio.com", "firebaseapp.com", "firestore.googleapis.com"),
+    "mongodb": ("mongodb.net",),
+    "neon": ("neon.tech",),
+    "upstash": ("upstash.io",),
+    "sentry": ("sentry.io",),
+    "posthog": ("posthog.com",),
+    "mixpanel": ("api.mixpanel.com", "api-js.mixpanel.com"),
+    "amplitude": ("api.amplitude.com", "api2.amplitude.com"),  # gitleaks:allow (public addresses)
+    "segment": ("api.segment.io", "cdn.segment.com"),
+    "grafana": ("grafana.net",),
+    "resend": ("api.resend.com",),
+    "sendgrid": ("api.sendgrid.com",),
+    "postmark": ("api.postmarkapp.com",),
+    "mailgun": ("api.mailgun.net", "api.eu.mailgun.net"),
+    "twilio": ("api.twilio.com",),
+    "onesignal": ("onesignal.com",),
+    "openai": ("api.openai.com",),
+    "anthropic": ("api.anthropic.com",),
+    "google-gemini": ("generativelanguage.googleapis.com",),
+    "clerk": ("clerk.accounts.dev", "api.clerk.com"),
+    "auth0": ("auth0.com",),
+}
+_HOST_OF = {host: provider for provider, hosts in HOSTS.items() for host in hosts}
+_HOST = re.compile(
+    r"(?<![a-z0-9.-])(?:[a-z0-9-]+\.)*("
+    + "|".join(re.escape(h) for h in sorted(_HOST_OF, key=len, reverse=True))
+    + r")(?![a-z0-9-]|\.[a-z0-9])"
+)
+# Config files that often name the addresses an app calls, read first.
+_CONFIGS = (
+    "wrangler.toml", "wrangler.json", "wrangler.jsonc", "eas.json", "vercel.json", "netlify.toml",
+    "fly.toml", "app.config.ts", "app.config.js", "next.config.js", "next.config.mjs", "next.config.ts",
+)  # fmt: skip
+# Code file names or folders that usually hold the calls to outside services.
+_CALLERS = re.compile(
+    r"client|api|config|const|env|setting|service|lib|http|fetch|db|data|storage|auth|pay|bill|mail"
+    r"|notif|analytic|sync|upload|webhook|worker|server|index|main"
+)
+_CODE_DEPTH = 4
+
 
 class _Shape(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -311,7 +377,7 @@ class RepoProfile(_Shape):
     branch: str = Field(pattern=_BRANCH)
     languages: tuple[Language, ...] = Field(max_length=MAX_LANGUAGES)
     providers: tuple[Provider, ...] = Field(max_length=MAX_PROVIDERS)
-    manifests_read: int = Field(ge=0, le=MAX_MANIFESTS)
+    files_read: int = Field(ge=0, le=MAX_MANIFESTS + MAX_CODE_FILES)
     changed_at: AwareDatetime | None
     read_at: AwareDatetime
 
@@ -351,6 +417,34 @@ def pick_manifests(paths: Sequence[str]) -> list[str]:
     workflows = [p for p in usable if p.startswith(_WORKFLOWS) and p.endswith((".yml", ".yaml"))]
     workflows = workflows[:_MAX_WORKFLOWS]
     return found[: MAX_MANIFESTS - len(workflows)] + workflows
+
+
+def pick_code(paths: Sequence[str]) -> list[str]:
+    """The code and config files searched for providers' web addresses, at most :data:`MAX_CODE_FILES`.
+
+    Config files first, then code files whose names or folders suggest calls to
+    outside services (``api``, ``client``, ``config``...), shallowest first; tests never.
+    """
+    usable = sorted(
+        (p for p in _usable(paths) if not _is_test(p) and p.count("/") <= _CODE_DEPTH),
+        key=lambda p: (p.count("/"), p.lower()),
+    )
+    configs = [p for p in usable if PurePosixPath(p).name.lower() in _CONFIGS]
+    callers = [
+        p
+        for p in usable
+        if PurePosixPath(p).suffix in _CODE_SUFFIXES and _CALLERS.search(p.lower()) and p not in configs
+    ]
+    return (configs + callers)[:MAX_CODE_FILES]
+
+
+def hosts_in(text: str) -> list[str]:
+    """The providers' web addresses (from :data:`HOSTS`) named in ``text``, each once, in order found."""
+    found: list[str] = []
+    for match in _HOST.finditer(text.lower()):
+        if match.group(1) not in found:
+            found.append(match.group(1))
+    return found
 
 
 def _usable(paths: Iterable[str]) -> list[str]:
@@ -470,23 +564,31 @@ def _json(text: str) -> dict[str, object]:
     return data if isinstance(data, dict) else {}
 
 
-def detect(paths: Sequence[str], manifests: Mapping[str, str]) -> tuple[Provider, ...]:
-    """The providers the rules find in these paths and manifest texts, in :data:`PROVIDERS` order.
+def detect(paths: Sequence[str], texts: Mapping[str, str]) -> tuple[Provider, ...]:
+    """The providers the rules find in these paths and file texts, in :data:`PROVIDERS` order.
 
     ``paths`` are the repository's files (secret files are skipped here too);
-    ``manifests`` maps a manifest's path to its text. Each provider keeps its
-    first :data:`MAX_EVIDENCE` reasons: package matches first, then paths.
+    ``texts`` maps a read file's path to its text: manifests give package names,
+    every file gives web addresses. Each provider keeps its first
+    :data:`MAX_EVIDENCE` reasons: packages first, then addresses, then paths.
     """
     usable = sorted(_usable(paths), key=_is_test)  # stable: real code first, tests after
     packages = [
         (path, name)
-        for path, text in sorted(manifests.items())
+        for path, text in sorted(texts.items())
         if _usable([path])
         for name in sorted(dependencies(path, text))
+    ]
+    addresses = [
+        (path, host)
+        for path, text in sorted(texts.items(), key=lambda item: (_is_test(item[0]), item[0]))
+        if _usable([path])
+        for host in hosts_in(text)
     ]
     found: list[Provider] = []
     for rule in PROVIDERS:
         evidence = [f"{path}: {name}" for path, name in packages if _any(name, rule.packages)]
+        evidence += [f"{path}: {host}" for path, host in addresses if _HOST_OF[host] == rule.id]
         evidence += _path_evidence(rule, usable)
         if evidence:
             found.append(
