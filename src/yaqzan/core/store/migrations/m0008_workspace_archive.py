@@ -61,12 +61,13 @@ CREATE TRIGGER workspace_state_change BEFORE INSERT OR UPDATE ON yaqzan.workspac
     FOR EACH ROW EXECUTE FUNCTION yaqzan.workspace_state_check();
 
 -- Nothing new or changed lands in a workspace that is not active (deleting is a separate path).
+-- A workspace this transaction cannot see is left to the walls and the foreign key, which refuse it.
 CREATE FUNCTION yaqzan.workspace_is_open() RETURNS trigger
     LANGUAGE plpgsql SET search_path = pg_catalog AS $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM yaqzan.workspaces w
-                   WHERE w.tenant_id = NEW.tenant_id AND w.workspace_id = NEW.project_id
-                     AND w.state = 'active') THEN
+    IF EXISTS (SELECT 1 FROM yaqzan.workspaces w
+               WHERE w.tenant_id = NEW.tenant_id AND w.workspace_id = NEW.project_id
+                 AND w.state <> 'active') THEN
         RAISE EXCEPTION 'this workspace is archived or deleted' USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;

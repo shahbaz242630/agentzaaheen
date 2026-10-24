@@ -82,8 +82,8 @@ def _key(workspace: UUID) -> SealedRow:
         slot=SlotKey(TENANT, workspace, "paddle", "api_key", "staging"),
         format_version=1,
         master_key_id="k1",
-        wrapped_dek=b"wrapped",
-        ciphertext=b"sealed",
+        wrapped_dek=bytes(60),  # sizes the vault produces; the bytes themselves are never opened here
+        ciphertext=bytes(29),
     )
 
 
@@ -197,6 +197,7 @@ def test_deleting_for_good_needs_it_archived_first_and_keeps_the_audit_log(
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
             await _busy(db, library, EVA)
+            await _busy(db, library, ZAAHEEN)  # must keep everything
             assert await removal(db).erase(EVA, **ME, step_up_at=_hello(3)) is LifecycleVerdict.NOT_ARCHIVED
             await removal(db).archive(EVA, **ME, step_up_at=_hello(4))
             assert await removal(db).erase(EVA, **ME, step_up_at=_hello(5)) is LifecycleVerdict.DONE
