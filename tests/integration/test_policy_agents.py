@@ -352,3 +352,30 @@ def test_the_database_refuses_an_agent_created_switched_on(test_db: ScratchDb, l
 
     with pytest.raises(asyncpg.CheckViolationError):
         run(body())
+
+
+def test_odd_or_unallowed_changes_are_refused_before_anything_changes(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    async def body() -> list[object]:
+        _, agent = await _given(test_db.app_url, library)
+        async with open_db(test_db.app_url) as db:
+            rules = control(db, library)
+            viewer = {"role": Role.VIEWER, "channel": Channel.DASHBOARD}
+            return [
+                await rules.give(EVA, "sales", **viewer),  # type: ignore[arg-type]
+                await rules.set_agent(EVA, agent, enabled=False, cap_minor=-1, **ME),
+                await rules.set_workspace(EVA, enabled=False, cap_minor=-1, **ME),
+                await rules.set_workspace(EVA, enabled=True, cap_minor=5, step_up_at=NOW, **viewer),  # type: ignore[arg-type]
+                (await rules.may_run(EVA, agent)).allowed,
+                [a.agent.role_id for a in (await rules.view(EVA)).agents],
+            ]
+
+    assert run(body()) == [
+        AgentVerdict.NOT_ALLOWED,
+        AgentVerdict.BAD_CAP,
+        AgentVerdict.BAD_CAP,
+        AgentVerdict.NOT_ALLOWED,
+        False,
+        ["monitoring"],
+    ]

@@ -12,8 +12,9 @@ from fastapi.testclient import TestClient
 from yaqzan.core.api import SamplePortfolio, create_app
 from yaqzan.core.api.agents import RoleChoice, SwitchIn, WorkspaceAgentsOut, purpose
 from yaqzan.core.api.app import REQUEST_HEADER
+from yaqzan.core.auth import PasskeyError
 from yaqzan.core.policy import AgentVerdict
-from yaqzan.core.store import WorkspaceRow
+from yaqzan.core.store import StoreError, StoreErrorCode, WorkspaceRow
 
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}
@@ -148,3 +149,34 @@ def test_changes_need_our_own_page() -> None:
     response = client(fake).post("/api/workspaces/eva/agents", json={"role_id": "monitoring"})
     assert response.status_code == 403
     assert fake.calls == []
+
+
+class Broken(FakeAgents):
+    """A database that does not answer, or a passkey problem, on every change."""
+
+    def __init__(self, failure: Exception) -> None:
+        super().__init__()
+        self.failure = failure
+
+    async def give(self, workspace: WorkspaceRow, role_id: str) -> AgentVerdict:
+        raise self.failure
+
+
+def test_a_database_that_does_not_answer_or_a_passkey_problem_is_said_plainly() -> None:
+    down = post(
+        client(Broken(StoreError(StoreErrorCode.UNAVAILABLE, "down"))),
+        "/api/workspaces/eva/agents",
+        {"role_id": "monitoring"},
+    )
+    assert (down.status_code, down.json()) == (503, {"detail": "agents.store_unavailable"})
+    no_key = post(
+        client(Broken(PasskeyError("registry.no_passkey"))),
+        "/api/workspaces/eva/agents",
+        {"role_id": "monitoring"},
+    )
+    assert (no_key.status_code, no_key.json()) == (409, {"detail": "registry.no_passkey"})
+
+
+def test_without_a_database_nothing_can_be_changed() -> None:
+    refused = post(client(None), "/api/workspaces/eva/agents", {"role_id": "monitoring"})
+    assert (refused.status_code, refused.json()) == (503, {"detail": "agents.read_only"})
