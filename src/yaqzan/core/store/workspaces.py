@@ -17,12 +17,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from yaqzan.core.store.db import Scoped, require_aware
+from yaqzan.core.store.db import Scoped, require_aware, written
 from yaqzan.core.store.errors import StoreError, StoreErrorCode
 
 _ADD_TENANT = """
 INSERT INTO yaqzan.tenants (tenant_id, name) VALUES ($1, $2)
 ON CONFLICT (tenant_id) DO NOTHING
+RETURNING tenant_id
 """
 _ADD_WORKSPACE = """
 INSERT INTO yaqzan.workspaces (tenant_id, workspace_id, slug, name) VALUES ($1, $2, $3, $4)
@@ -97,7 +98,7 @@ class WorkspaceRows:
     async def add_tenant(self, name: str) -> None:
         """Create the tenant if it does not exist yet."""
         async with self._scope.write("a tenant") as conn:
-            await conn.execute(_ADD_TENANT, self._tenant, name)
+            written(await conn.fetchval(_ADD_TENANT, self._tenant, name))
 
     async def add(self, workspace: WorkspaceRow) -> bool:
         """Create a workspace. Returns False if it already existed (its name is then left alone)."""
@@ -105,7 +106,7 @@ class WorkspaceRows:
             added = await conn.fetchval(
                 _ADD_WORKSPACE, self._tenant, workspace.workspace_id, workspace.slug, workspace.name
             )
-            return added is not None
+            return written(added)
 
     async def create(self, workspace: WorkspaceRow, *, github: str | None, by: str, at: datetime) -> None:
         """Add a new workspace and, if given, the GitHub repository it reads: both, or neither.
