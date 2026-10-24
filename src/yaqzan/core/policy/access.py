@@ -69,6 +69,7 @@ class Operation(StrEnum):
     ADD_WORKSPACE = "add_workspace"  # a new project: nothing in it is switched on and it cannot spend
     RESTORE_WORKSPACE = "restore_workspace"
     ERASE_WORKSPACE = "erase_workspace"  # delete an archived workspace's data for good
+    ASK_SCOUT = "ask_scout"  # read a workspace's repository and write advice; nothing switches on
 
 
 REDUCES_RISK = frozenset(
@@ -89,6 +90,8 @@ REDUCES_RISK = frozenset(
         Operation.LOWER_CAP,
         # A new workspace likewise: no agents, switched off, no cap (ADR-039 amended 24 Oct).
         Operation.ADD_WORKSPACE,
+        # The scout only reads and advises: its advice switches nothing on (ADR-039, slice 5b-2).
+        Operation.ASK_SCOUT,
     }
 )
 INCREASES_RISK = frozenset(set(Operation) - REDUCES_RISK)

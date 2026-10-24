@@ -121,6 +121,7 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "workspace_settings": mirror,
         "agents": mirror,  # an agent is switched off, never deleted
         "workspace_sources": read_add,  # removed only with the workspace, by the owner function
+        "scout_runs": read_add,  # plus UPDATE on how a run moves and ends (column grants)
     }
 
 

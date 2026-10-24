@@ -39,6 +39,7 @@ from yaqzan.core.store import (
     RevenueRows,
     RoleVersion,
     RoleVersionRows,
+    ScoutRuns,
     SealedRow,
     SealedSecrets,
     SlotKey,
@@ -123,6 +124,9 @@ async def _fill_every_table(url: str) -> None:
         await agents.add(NewAgent(uuid4(), "monitoring", "f" * 64, "local-gemma", by=CHAIRMAN, at=NOW))
         await agents.put_settings(WorkspaceSettings(False, None, CHAIRMAN, NOW, None))
         await WorkspaceSources(here).connect_github("owner/walled", by=CHAIRMAN, at=NOW)
+        await ScoutRuns(here).start(
+            uuid4(), repo="owner/walled", model="local-gemma", by=CHAIRMAN, at=NOW, stale_before=NOW
+        )
 
 
 async def _count(url: str, table: str, tenant: UUID, workspace: UUID | None) -> int:

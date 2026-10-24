@@ -64,6 +64,7 @@ from yaqzan.core.policy.gate import (
 from yaqzan.core.policy.ledger import Ledger, load_kill_switches
 from yaqzan.core.policy.passkey_approvals import PasskeyApprovals
 from yaqzan.core.policy.registry_control import OUTSIDE_KINDS, Pending, RegistryControl, Standing, Verdict
+from yaqzan.core.policy.scout import STALE_AFTER, ScoutControl, ScoutVerdict
 from yaqzan.core.policy.workspaces import Added, LifecycleVerdict, Removal, WorkspaceControl, slug_of
 
 __all__ = [
@@ -72,6 +73,7 @@ __all__ = [
     "MAX_TOOLS_PER_AGENT",
     "OUTSIDE_KINDS",
     "REDUCES_RISK",
+    "STALE_AFTER",
     "STEP_UP_MAX_AGE",
     "AccessDecision",
     "Added",
@@ -102,6 +104,8 @@ __all__ = [
     "RunPermit",
     "RunRefusal",
     "RunState",
+    "ScoutControl",
+    "ScoutVerdict",
     "Standing",
     "Target",
     "ToolCall",

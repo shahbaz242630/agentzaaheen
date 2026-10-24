@@ -43,6 +43,7 @@ from yaqzan.core.policy import (
     RegistryControl,
     Removal,
     Role,
+    ScoutControl,
     Standing,
     Verdict,
     WorkspaceControl,
@@ -115,6 +116,7 @@ class LaptopSwitches:
         self._agents: DashboardAgents | None = None
         self._removal: DashboardRemoval | None = None
         self._workspaces: WorkspaceControl | None = None
+        self._scout: ScoutControl | None = None
         self._site = site
         self._enrol_code = enrol_code
         self._registry = registry
@@ -141,6 +143,7 @@ class LaptopSwitches:
                 self._agents = DashboardAgents(agents, passkeys, self._library)
                 self._workspaces = WorkspaceControl(db, LAPTOP_TENANT, self._clock)
                 self._removal = DashboardRemoval(self._workspaces, passkeys)
+                self._scout = ScoutControl(db, LAPTOP_TENANT, self._clock)
         return self._switches
 
     async def _agents_now(self) -> DashboardAgents:
@@ -190,6 +193,15 @@ class LaptopSwitches:
     async def active(self) -> list[WorkspaceRow]:
         """The workspaces the dashboard serves."""
         return await (await self._removal_now()).active()
+
+    # ---- the scout (ADR-039, F17 slice 5b-2): its runs, behind each workspace's wall
+
+    async def scout_control(self) -> ScoutControl:
+        """The scout's runs (opens the database on first use)."""
+        await self._open()
+        if self._scout is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._scout
 
     # ---- adding a project (ADR-039, F17 slice 5a): the dashboard acts as the Chairman (no login yet)
 
