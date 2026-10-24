@@ -77,6 +77,11 @@ def test_real_code_comes_before_tests_in_the_evidence() -> None:
     assert found(paths)["paddle"] == ("src/paddle.ts", "src/paddle.test.ts", "test/paddle_mock.ts")
 
 
+def test_path_evidence_alone_is_capped_too() -> None:
+    paths = [f"app{i}/Podfile" for i in range(5)]
+    assert found(paths)["apple"] == ("app0/Podfile", "app1/Podfile", "app2/Podfile")
+
+
 def test_evidence_is_capped_and_packages_come_first() -> None:
     package = '{"dependencies": {"@sentry/node": "8", "@sentry/react": "8"}}'
     paths = ["package.json", "sentry.properties", "a/sentry.ts", "b/sentry.ts"]
@@ -129,6 +134,9 @@ def test_manifest_text_is_matched_never_trusted() -> None:
          "steps:\n  - uses: cloudflare/wrangler-action@v3\n    uses: 'expo/expo-github-action@v8'",
          {"action:cloudflare/wrangler-action", "action:expo/expo-github-action"}),
         ("README.md", "stripe", set()),
+        ("app.json", '{"expo": 3}', set()),
+        ("pyproject.toml", 'dependency-groups = 3\n[project]\ndependencies = ["resend"]', {"resend"}),
+        ("Cargo.toml", 'workspace = 1\n[dependencies]\nserde = "1"', {"serde"}),
     ],
 )  # fmt: skip
 def test_dependencies_read_each_manifest_kind(path: str, text: str, expected: set[str]) -> None:
