@@ -16,7 +16,7 @@ import asyncpg
 import pytest
 
 from tests.fixtures.soft_authenticator import SoftAuthenticator
-from tests.integration.conftest import ScratchDb, open_db, run
+from tests.integration.conftest import ScratchDb, connect_as, open_db, run
 from yaqzan.core.auth import PasskeyError, Site
 from yaqzan.core.policy import Channel, PasskeyApprovals, RegistryControl, Role, Verdict
 from yaqzan.core.registry import Invocation, Kind, Registry, Skill, State
@@ -74,7 +74,7 @@ async def asked(control: RegistryControl) -> UUID:
 
 def audit(test_db: ScratchDb) -> list[tuple[str, str, str]]:
     async def body() -> list[tuple[str, str, str]]:
-        conn = await asyncpg.connect(test_db.app_url)
+        conn = await connect_as(test_db.app_url, TENANT)
         try:
             rows = await conn.fetch(
                 "SELECT action, outcome, reason_code FROM yaqzan.audit_log WHERE tenant_id = $1 ORDER BY seq",
@@ -270,7 +270,7 @@ def test_the_app_cannot_swap_a_stored_public_key(test_db: ScratchDb) -> None:
             assert await rows.record_use(TENANT, b"i" * 16, 3, NOW)  # the counter moves forward
             assert not await rows.record_use(TENANT, b"i" * 16, 2, NOW)  # never backwards
             assert not await rows.record_use(TENANT, b"x" * 16, 9, NOW)  # an unknown passkey
-        conn = await asyncpg.connect(test_db.app_url)
+        conn = await connect_as(test_db.app_url, TENANT)
         try:
             with pytest.raises(asyncpg.InsufficientPrivilegeError):
                 await conn.execute("UPDATE yaqzan.passkeys SET public_key = $1", b"z" * 64)
@@ -335,7 +335,7 @@ def test_the_database_keeps_one_active_passkey_and_revoked_ones_stay_revoked(tes
             assert not await rows.record_use(TENANT, b"a" * 16, 5, NOW)  # the revoked one is dead
             assert not await rows.replace(TENANT, second)  # the same credential again: nothing changes
             assert (await rows.active(TENANT)) == active
-        conn = await asyncpg.connect(test_db.app_url)
+        conn = await connect_as(test_db.app_url, TENANT)
         try:
             with pytest.raises(asyncpg.UniqueViolationError):
                 await conn.execute(
@@ -436,7 +436,7 @@ def test_a_request_for_an_outside_bundle_can_never_be_approved(test_db: ScratchD
     request_id = uuid4()
 
     async def plant() -> None:
-        conn = await asyncpg.connect(test_db.app_url)
+        conn = await connect_as(test_db.app_url, TENANT)
         try:
             await conn.execute(
                 "INSERT INTO yaqzan.registry_requests (id, tenant_id, kind, item_id, fingerprint, status,"

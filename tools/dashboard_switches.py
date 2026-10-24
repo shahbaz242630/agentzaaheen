@@ -18,7 +18,7 @@ import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
 from typing import Any
-from uuid import UUID, uuid5
+from uuid import UUID
 
 from pydantic import SecretStr
 
@@ -29,7 +29,7 @@ from yaqzan.core.policy import PasskeyApprovals, RegistryControl, Standing, Verd
 from yaqzan.core.registry import Kind, Registry
 from yaqzan.core.store import Database, DatabaseSettings, StoreError
 
-LAPTOP_TENANT = uuid5(UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8"), "yaqzan:laptop")  # the URL namespace
+LAPTOP_TENANT = laptop_db.LAPTOP_TENANT
 START_LAPTOP_DB = "uv run python -m tools.laptop_db up"
 
 Prepare = Callable[[], Awaitable[SecretStr | None]]

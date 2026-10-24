@@ -11,10 +11,9 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-import asyncpg
 import pytest
 
-from tests.integration.conftest import ScratchDb, open_db, run
+from tests.integration.conftest import ScratchDb, connect_as, open_db, run
 from yaqzan.core.policy import Channel, Ledger, RegistryControl, Role, Standing, Verdict
 from yaqzan.core.registry import Connector, Kind, Layout, Plugin, Registry, Skill, State
 from yaqzan.core.registry.models import Invocation
@@ -66,7 +65,7 @@ def audit(test_db: ScratchDb) -> list[tuple[str, str, str, str | None]]:
         async with open_db(test_db.app_url) as db:
             ledger = Ledger(db, TENANT)
             assert (await ledger.verify()).ok
-            conn = await asyncpg.connect(test_db.app_url)
+            conn = await connect_as(test_db.app_url, TENANT)
             try:
                 rows = await conn.fetch(
                     "SELECT action, outcome, reason_code, target_ref FROM yaqzan.audit_log"
@@ -212,7 +211,7 @@ def test_an_approval_lapses_when_the_files_change(test_db: ScratchDb) -> None:
     approved = uuid4()
 
     async def approve() -> None:
-        conn = await asyncpg.connect(test_db.app_url)
+        conn = await connect_as(test_db.app_url, TENANT)
         try:
             await conn.execute(
                 "INSERT INTO yaqzan.registry_requests (id, tenant_id, kind, item_id, fingerprint, status,"

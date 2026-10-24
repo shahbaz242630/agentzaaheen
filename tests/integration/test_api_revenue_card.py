@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from tests.fixtures import paddle_world as world
-from tests.integration.conftest import ScratchDb, open_db, run
+from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from tests.integration.test_scheduler_collect import END, PROJECT, SCHEDULE, START, TENANT, fake
 from yaqzan.core.api.revenue import revenue_card
 from yaqzan.core.api.views import Card, Count, Money, NotKnown
 from yaqzan.core.metrics import Freshness
 from yaqzan.core.scheduler import revenue_snapshot, sync_revenue
+
+
+@pytest.fixture(autouse=True)
+def _workspace(test_db: ScratchDb) -> None:
+    run(add_workspaces(test_db.app_url, TENANT, PROJECT))
 
 
 def _card_at(test_db: ScratchDb, looked_at: datetime) -> Card:

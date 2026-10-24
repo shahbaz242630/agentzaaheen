@@ -8,13 +8,20 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import SecretStr
 
-from tests.integration.conftest import ScratchDb, open_db, run
+from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from yaqzan.core.broker import BrokerError, BrokerErrorCode, open_credential, save_credential
 from yaqzan.core.store import CredentialDates, SealedSecrets, SlotKey
 from yaqzan.core.vault import CredentialSlot, Keyring, MasterKey, VaultError, VaultErrorCode
 
 TENANT = uuid4()
 PROJECT = uuid4()
+
+
+@pytest.fixture(autouse=True)
+def _workspace(test_db: ScratchDb) -> None:
+    run(add_workspaces(test_db.app_url, TENANT, PROJECT))
+
+
 SECRET = "-".join(["fake", "paddle", "key", "for", "broker", "tests"])  # built at runtime, never real
 ENDS = datetime(2027, 1, 16, 9, 0, tzinfo=UTC)
 RING = Keyring([MasterKey.generate("laptop-test")], "laptop-test")
@@ -50,6 +57,7 @@ def test_saving_again_replaces_the_key_and_its_facts(test_db: ScratchDb) -> None
     other = uuid4()
 
     async def body() -> tuple[SecretStr, list[CredentialDates]]:
+        await add_workspaces(test_db.app_url, TENANT, other)
         async with open_db(test_db.app_url) as db:
             first, second = SecretStr("old-" + SECRET), SecretStr(SECRET)
             await save_credential(db, RING, slot(project=other), first, expires_at=ENDS, access="unknown")

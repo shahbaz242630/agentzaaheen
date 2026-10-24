@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 
-from tests.integration.conftest import ScratchDb, open_db, run
+from tests.integration.conftest import ScratchDb, connect_as, open_db, run
 from yaqzan.core.store import RegistrySwitchRows, RequestRow, RequestStatus, SwitchRow
 
 TENANT = uuid4()
@@ -125,7 +125,7 @@ _APPROVED = """INSERT INTO yaqzan.registry_requests (id, tenant_id, kind, item_i
 
 
 async def _app(test_db: ScratchDb, sql: str, *args: object) -> None:
-    conn = await asyncpg.connect(test_db.app_url)
+    conn = await connect_as(test_db.app_url, TENANT)
     try:
         await conn.execute(sql, *args)
     finally:

@@ -7,6 +7,11 @@ credential's slot. Only the vault, given the master key, can open it.
 Beside the ciphertext sit two plain facts that are not secret: when the key
 expires and its access level. :meth:`SealedSecrets.dates` lists them without
 touching any ciphertext, for the daily expiry check.
+
+Each slot lives in one workspace, behind its wall (ADR-039). The two
+tenant-wide reads (:meth:`SealedSecrets.not_under_key` and
+:meth:`SealedSecrets.dates`) go through the tenant's workspaces one at a time;
+none is missed, because a credential can only be saved in a workspace that exists.
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ from uuid import UUID
 import asyncpg
 
 from yaqzan.core.store.db import Database
+from yaqzan.core.store.workspaces import WorkspaceRows
 
 _UPSERT = """
 INSERT INTO yaqzan.sealed_secrets (tenant_id, project_id, connector, name, environment, format_version,
@@ -43,13 +49,13 @@ RETURNING name
 _NOT_UNDER_KEY = """
 SELECT tenant_id, project_id, connector, name, environment, format_version, master_key_id, wrapped_dek,
     ciphertext, expires_at, access
-FROM yaqzan.sealed_secrets WHERE tenant_id = $1 AND master_key_id <> $2
-ORDER BY project_id, connector, name, environment
+FROM yaqzan.sealed_secrets WHERE tenant_id = $1 AND project_id = $2 AND master_key_id <> $3
+ORDER BY connector, name, environment
 """
 _DATES = """
 SELECT tenant_id, project_id, connector, name, environment, expires_at, access, updated_at
-FROM yaqzan.sealed_secrets WHERE tenant_id = $1
-ORDER BY project_id, connector, name, environment
+FROM yaqzan.sealed_secrets WHERE tenant_id = $1 AND project_id = $2
+ORDER BY connector, name, environment
 """
 
 Access = Literal["read_only", "read_write", "unknown"]
@@ -119,7 +125,7 @@ class SealedSecrets:
 
     async def put(self, row: SealedRow) -> None:
         """Store or replace the credential in one slot."""
-        async with self._db.write("a sealed secret") as conn:
+        async with self._db.scoped(row.slot.tenant_id, row.slot.project_id).write("a sealed secret") as conn:
             await conn.execute(
                 _UPSERT,
                 *row.slot.params(),
@@ -133,27 +139,36 @@ class SealedSecrets:
 
     async def get(self, slot: SlotKey) -> SealedRow | None:
         """The credential in one slot, or None."""
-        async with self._db.connection() as conn:
+        async with self._db.scoped(slot.tenant_id, slot.project_id).connection() as conn:
             record = await conn.fetchrow(_GET, *slot.params())
         return None if record is None else _row(record)
 
     async def delete(self, slot: SlotKey) -> bool:
         """Remove one credential. Returns False if the slot was empty."""
-        async with self._db.write("the removal of a sealed secret") as conn:
+        where = self._db.scoped(slot.tenant_id, slot.project_id)
+        async with where.write("the removal of a sealed secret") as conn:
             return await conn.fetchval(_DELETE, *slot.params()) is not None
 
     async def not_under_key(self, tenant_id: UUID, master_key_id: str) -> list[SealedRow]:
         """Credentials still wrapped by an older master key (to re-wrap after rotation)."""
-        async with self._db.connection() as conn:
-            records = await conn.fetch(_NOT_UNDER_KEY, tenant_id, master_key_id)
-        return [_row(record) for record in records]
+        out: list[SealedRow] = []
+        for workspace_id in await self._workspace_ids(tenant_id):
+            async with self._db.scoped(tenant_id, workspace_id).connection() as conn:
+                records = await conn.fetch(_NOT_UNDER_KEY, tenant_id, workspace_id, master_key_id)
+            out.extend(_row(record) for record in records)
+        return out
 
     async def dates(self, tenant_id: UUID) -> list[CredentialDates]:
         """Every credential's expiry and access, without reading any ciphertext."""
-        async with self._db.connection() as conn:
-            records = await conn.fetch(_DATES, tenant_id)
         out = []
-        for record in records:
-            fields = dict(record)
-            out.append(CredentialDates(slot=_slot(fields), **fields))
+        for workspace_id in await self._workspace_ids(tenant_id):
+            async with self._db.scoped(tenant_id, workspace_id).connection() as conn:
+                records = await conn.fetch(_DATES, tenant_id, workspace_id)
+            for record in records:
+                fields = dict(record)
+                out.append(CredentialDates(slot=_slot(fields), **fields))
         return out
+
+    async def _workspace_ids(self, tenant_id: UUID) -> list[UUID]:
+        """The tenant's workspaces in a fixed order (by id), so results come out in a fixed order too."""
+        return sorted(w.workspace_id for w in await WorkspaceRows(self._db).workspaces(tenant_id))

@@ -11,7 +11,7 @@ import pytest
 from pydantic import SecretStr
 
 from tests.fixtures import paddle_world as world
-from tests.integration.conftest import ScratchDb, open_db, run
+from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from tests.tracing import recorded
 from yaqzan.core.metrics import CountAndAmounts, Freshness, Unknown
 from yaqzan.core.net import JsonClient, NetPolicy
@@ -28,6 +28,13 @@ from yaqzan.plugins.connectors.paddle import (
 
 TENANT = UUID("00000000-0000-4000-8000-000000000001")
 PROJECT = UUID("00000000-0000-4000-8000-0000000000aa")
+
+
+@pytest.fixture(autouse=True)
+def _workspace(test_db: ScratchDb) -> None:
+    run(add_workspaces(test_db.app_url, TENANT, PROJECT))
+
+
 SCHEDULE = timedelta(minutes=15)
 START, END = world.when(1, 0), world.when(18, 12)
 

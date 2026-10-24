@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import SecretStr
 
-from tests.integration.conftest import ScratchDb, open_db, run
+from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from yaqzan.core.broker import save_credential
 from yaqzan.core.metrics import KeyHealth
 from yaqzan.core.scheduler import KeyAlert, check_keys
@@ -46,6 +46,7 @@ def test_each_key_gets_the_right_alert_and_a_plain_english_line(
     fine, soon, gone, refused, undated = (uuid4() for _ in range(5))
 
     async def body() -> list[KeyAlert]:
+        await add_workspaces(test_db.app_url, TENANT, fine, soon, gone, refused, undated)
         async with open_db(test_db.app_url) as db:
             await save(db, fine, NOW + timedelta(days=60))
             await save(db, soon, NOW + timedelta(days=14))
