@@ -119,6 +119,26 @@ def test_a_signature_for_one_cap_cannot_set_a_higher_one(test_db: ScratchDb, lib
     assert audit(test_db)[-1][:2] == ("passkey.step_up", "deny")  # refused before the rules are asked
 
 
+def test_a_counter_going_back_fails_the_step_up(test_db: ScratchDb, library: RoleLibrary) -> None:
+    async def use(
+        agents: DashboardAgents, passkeys: PasskeyApprovals, device: SoftAuthenticator, clock: Clock
+    ) -> list[object]:
+        agent = await _agent(agents)
+        clock.now += timedelta(seconds=1)
+        signed = device.sign(await agents.options(purpose("agent", agent, ON)))
+
+        async def raced(*_args: object) -> bool:  # another signature moved the counter past us
+            return False
+
+        passkeys._rows.record_use = raced  # type: ignore[method-assign,assignment]
+        verdict = await agents.set_agent(EVA, agent, ON, signed)
+        (seen,) = (await agents.view(EVA)).agents
+        return [verdict, seen.enabled]
+
+    assert tab(test_db, library, use) == [AgentVerdict.PASSKEY_FAILED, False]
+    assert audit(test_db)[-1] == ("passkey.step_up", "deny", "passkey.counter_went_back")
+
+
 def test_the_workspace_switch_is_signed_the_same_way(test_db: ScratchDb, library: RoleLibrary) -> None:
     async def use(
         agents: DashboardAgents, _: PasskeyApprovals, device: SoftAuthenticator, clock: Clock
