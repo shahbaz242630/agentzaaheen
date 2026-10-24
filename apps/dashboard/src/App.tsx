@@ -24,6 +24,7 @@ export function App() {
   const [view, setView] = useState<View>({ kind: "board" });
   const [detail, setDetail] = useState<Load<ProjectDetail>>({ state: "loading" });
   const [registry, setRegistry] = useState<Load<RegistryPage>>({ state: "loading" });
+  const [notice, setNotice] = useState<string | null>(null);
 
   const slug = view.kind === "workspace" ? view.slug : null;
 
@@ -89,7 +90,20 @@ export function App() {
     );
   }
 
+  // Read again after a project is archived, brought back or deleted.
+  function reloadWorkspaces() {
+    api.projects().then(
+      (data) => {
+        setWorkspaces({ state: "ready", data });
+      },
+      () => {
+        setWorkspaces({ state: "failed" });
+      },
+    );
+  }
+
   function open(next: View) {
+    setNotice(null);
     if (next.kind === "workspace" && next.slug !== slug) setDetail({ state: "loading" });
     if (next.kind === "customize") retryRegistry();
     setView(next);
@@ -167,6 +181,8 @@ export function App() {
               onCustomize={() => {
                 open({ kind: "customize" });
               }}
+              notice={notice}
+              onChanged={reloadWorkspaces}
             />
           )}
           {view.kind === "customize" && (
@@ -203,6 +219,11 @@ export function App() {
                   tab={view.tab}
                   onTab={(tab) => {
                     open({ ...view, tab });
+                  }}
+                  onRemoved={(message) => {
+                    reloadWorkspaces();
+                    open({ kind: "board" });
+                    setNotice(message);
                   }}
                 />
               )}

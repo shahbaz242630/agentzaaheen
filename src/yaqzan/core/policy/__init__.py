@@ -64,6 +64,7 @@ from yaqzan.core.policy.gate import (
 from yaqzan.core.policy.ledger import Ledger, load_kill_switches
 from yaqzan.core.policy.passkey_approvals import PasskeyApprovals
 from yaqzan.core.policy.registry_control import OUTSIDE_KINDS, Pending, RegistryControl, Standing, Verdict
+from yaqzan.core.policy.workspaces import LifecycleVerdict, Removal, WorkspaceControl
 
 __all__ = [
     "GENESIS_HASH",
@@ -89,11 +90,13 @@ __all__ = [
     "GateChecks",
     "KillSwitches",
     "Ledger",
+    "LifecycleVerdict",
     "Operation",
     "PasskeyApprovals",
     "Pending",
     "ProjectPolicy",
     "RegistryControl",
+    "Removal",
     "Role",
     "RunPermit",
     "RunRefusal",
@@ -103,6 +106,7 @@ __all__ = [
     "ToolCall",
     "Verdict",
     "WorkspaceAgents",
+    "WorkspaceControl",
     "append",
     "audit_draft",
     "authorize",

@@ -207,6 +207,19 @@ export interface SwitchChange {
   cap_minor: number | null;
 }
 
+// Removing a project (ADR-039): what archiving switched off, and the archived projects.
+export const ArchiveResult = z.strictObject({
+  agents_stopped: z.int().nonnegative(),
+  keys_deleted: z.int().nonnegative(),
+});
+export type ArchiveResult = z.infer<typeof ArchiveResult>;
+
+export const ArchivedList = z.strictObject({
+  workspaces: z.array(z.strictObject({ slug: item, name: z.string() })),
+  switches: z.boolean(),
+});
+export type ArchivedList = z.infer<typeof ArchivedList>;
+
 // The Chairman's passkey (ADR-SEC-007): whether it exists, and whether it may be set up on this run.
 export const PasskeyStatus = z.strictObject({ enrolled: z.boolean(), enrolment_open: z.boolean() });
 export type PasskeyStatus = z.infer<typeof PasskeyStatus>;
@@ -260,6 +273,7 @@ async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
 
 const workspacePath = (slug: string) => `/api/workspaces/${encodeURIComponent(slug)}`;
 const agentPath = (slug: string, agentId: string) => `${workspacePath(slug)}/agents/${encodeURIComponent(agentId)}`;
+const archivedPath = (slug: string) => `/api/archived/${encodeURIComponent(slug)}`;
 
 export const api = {
   projects: () => getJson("/api/workspaces", z.array(ProjectSummary)),
@@ -292,6 +306,19 @@ export const api = {
     postJson(`${workspacePath(slug)}/settings`, { ...change, credential }, WorkspaceAgents),
   workspaceOptions: async (slug: string, change: SwitchChange) =>
     (await postJson(`${workspacePath(slug)}/settings/options`, change, PasskeyOptions)).options,
+  // Removing a project: each answers `workspaces.needs_passkey` until Windows Hello signs that exact change.
+  archive: (slug: string, credential?: unknown) =>
+    postJson(`${workspacePath(slug)}/archive`, { credential }, ArchiveResult),
+  archiveOptions: async (slug: string) =>
+    (await postJson(`${workspacePath(slug)}/archive/options`, {}, PasskeyOptions)).options,
+  archived: () => getJson("/api/archived", ArchivedList),
+  restore: (slug: string, credential?: unknown) =>
+    postJson(`${archivedPath(slug)}/restore`, { credential }, ArchivedList),
+  restoreOptions: async (slug: string) =>
+    (await postJson(`${archivedPath(slug)}/restore/options`, {}, PasskeyOptions)).options,
+  erase: (slug: string, credential?: unknown) => postJson(`${archivedPath(slug)}/erase`, { credential }, ArchivedList),
+  eraseOptions: async (slug: string) =>
+    (await postJson(`${archivedPath(slug)}/erase/options`, {}, PasskeyOptions)).options,
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),

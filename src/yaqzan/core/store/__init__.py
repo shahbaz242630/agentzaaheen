@@ -6,7 +6,8 @@ What it does:
     audit rows, sealed credentials, kill-switch state, registry switches
     and requests (ADR-030), the passkey (ADR-SEC-007), the revenue mirror
     (subscriptions, payments, refunds), each collector's sync state, the
-    tenants and workspaces, and each workspace's agents, switch and cap with
+    tenants and workspaces (archived, brought back or deleted for good),
+    and each workspace's agents, switch and cap with
     the frozen role versions they run (ADR-039). Every table has a ``tenant_id`` and sits
     behind a database wall (row-level security, forced): each transaction
     names its tenant, and for project-level tables its workspace, through
@@ -61,7 +62,13 @@ from yaqzan.core.store.sealed import (
     SlotKey,
 )
 from yaqzan.core.store.switches import EngagedSwitch, KillSwitchRows, SwitchScope
-from yaqzan.core.store.workspaces import WorkspaceRow, WorkspaceRows
+from yaqzan.core.store.workspaces import (
+    Archived,
+    StateChange,
+    WorkspaceLifecycle,
+    WorkspaceRow,
+    WorkspaceRows,
+)
 
 __all__ = [
     "LATEST_VERSION",
@@ -73,6 +80,7 @@ __all__ = [
     "AgentRow",
     "AgentRows",
     "AllSealedSecrets",
+    "Archived",
     "AuditRow",
     "AuditRows",
     "CredentialDates",
@@ -97,11 +105,13 @@ __all__ = [
     "SealedRow",
     "SealedSecrets",
     "SlotKey",
+    "StateChange",
     "StoreError",
     "StoreErrorCode",
     "SwitchRow",
     "SwitchScope",
     "SyncState",
+    "WorkspaceLifecycle",
     "WorkspaceRow",
     "WorkspaceRows",
     "WorkspaceSettings",

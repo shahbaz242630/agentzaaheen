@@ -23,8 +23,11 @@ from pydantic import SecretStr
 from tests.fixtures.soft_authenticator import SoftAuthenticator
 from tests.integration.conftest import Server, run
 from tools import dashboard, dashboard_switches, laptop_db
+from yaqzan.core.api.agents import SwitchIn
 from yaqzan.core.api.app import REQUEST_HEADER
-from yaqzan.core.auth import Site
+from yaqzan.core.api.workspaces import WorkspaceDirectory
+from yaqzan.core.auth import PasskeyError, Site
+from yaqzan.core.policy import AgentVerdict, LifecycleVerdict
 from yaqzan.core.store import AuditRow, AuditRows, Database, DatabaseSettings, StoreError, StoreErrorCode
 
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}
@@ -259,6 +262,9 @@ NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 # ---------------------------------------------------------------- Board inspection (ADR-039, amended 24 Oct)
 
 
+LAPTOP = WorkspaceDirectory(laptop_db.LAPTOP_WORKSPACES)
+
+
 def _switches(url: SecretStr) -> dashboard_switches.LaptopSwitches:
     return dashboard_switches.LaptopSwitches(
         url,
@@ -275,7 +281,7 @@ def test_a_board_inspection_is_written_to_the_audit_log(laptop_url: SecretStr) -
     async def body() -> list[AuditRow]:
         switches = _switches(laptop_url)
         try:
-            await switches.recorder(laptop_db.LAPTOP_WORKSPACES)("eva", "failed_build_log", "eva")
+            await switches.recorder(LAPTOP)("eva", "failed_build_log", "eva")
         finally:
             await switches.close()
         db = await Database.open(DatabaseSettings(dsn=laptop_url))
@@ -294,9 +300,51 @@ def test_a_look_at_an_unknown_workspace_raises_and_writes_nothing(laptop_url: Se
     async def body() -> None:
         switches = _switches(laptop_url)
         try:
-            await switches.recorder(laptop_db.LAPTOP_WORKSPACES)("nope", "failed_build_log", "nope")
+            await switches.recorder(LAPTOP)("nope", "failed_build_log", "nope")
         finally:
             await switches.close()
 
     with pytest.raises(KeyError):
         run(body())
+
+
+def test_the_agents_tab_and_removal_reach_the_laptop_database(laptop_url: SecretStr) -> None:
+    eva = next(w for w in laptop_db.LAPTOP_WORKSPACES if w.slug == "eva")
+    on = SwitchIn(enabled=True, cap_minor=500)
+
+    async def body() -> list[object]:
+        switches = _switches(laptop_url)
+        try:
+            agents = [
+                switches.roles(),
+                (await switches.view(eva)).agents,
+                await switches.give(eva, "monitoring"),  # the library here is empty
+                await switches.set_agent(eva, uuid4(), on, None),
+                await switches.set_workspace(eva, on, None),
+            ]
+            with pytest.raises(PasskeyError) as caught:  # no passkey set up yet
+                await switches.options("step:workspace:x:archive")
+            removal = [
+                len(await switches.active()),
+                await switches.archived(),
+                (await switches.archive(eva, None)).verdict,
+                await switches.restore(eva, None),
+                await switches.erase(eva, None),
+            ]
+        finally:
+            await switches.close()
+        return [*agents, caught.value.code, *removal]
+
+    assert run(body()) == [
+        (),
+        (),
+        AgentVerdict.UNKNOWN_ROLE,
+        AgentVerdict.UNKNOWN_AGENT,
+        AgentVerdict.NEEDS_PASSKEY,
+        "registry.no_passkey",
+        len(laptop_db.LAPTOP_WORKSPACES),
+        [],
+        LifecycleVerdict.NEEDS_PASSKEY,
+        LifecycleVerdict.NEEDS_PASSKEY,
+        LifecycleVerdict.NEEDS_PASSKEY,
+    ]

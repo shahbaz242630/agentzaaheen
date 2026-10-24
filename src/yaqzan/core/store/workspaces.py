@@ -4,11 +4,17 @@ A workspace must exist before any project-level row can be saved in it (the
 database refuses the row otherwise), so a tenant-wide job can go through the
 list of workspaces and know it missed none. Both tables sit behind the tenant
 wall: a tenant sees only its own workspaces.
+
+A workspace can be archived (everything in it disconnected, its history kept)
+and then brought back or deleted for good (migration 0008). Only active
+workspaces are listed by :meth:`WorkspaceRows.workspaces`; a deleted one stays
+only as a marker, with no data.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from yaqzan.core.store.db import Scoped
@@ -24,8 +30,26 @@ RETURNING workspace_id
 """
 _RENAME = "UPDATE yaqzan.workspaces SET name = $3 WHERE tenant_id = $1 AND workspace_id = $2"
 _LIST = """
-SELECT workspace_id, slug, name FROM yaqzan.workspaces WHERE tenant_id = $1 ORDER BY created_at, slug
+SELECT workspace_id, slug, name FROM yaqzan.workspaces WHERE tenant_id = $1 AND state = $2
+ORDER BY created_at, slug
 """
+_AGENTS_OFF = """
+UPDATE yaqzan.agents SET enabled = false, cap_minor = NULL, changed_by = $3, changed_at = $4
+WHERE tenant_id = $1 AND project_id = $2 AND (enabled OR cap_minor IS NOT NULL)
+"""
+_WORKSPACE_OFF = """
+INSERT INTO yaqzan.workspace_settings (tenant_id, project_id, enabled, cap_minor, changed_by, changed_at)
+VALUES ($1, $2, false, NULL, $3, $4)
+ON CONFLICT (tenant_id, project_id) DO UPDATE SET enabled = false, cap_minor = NULL,
+    changed_by = EXCLUDED.changed_by, changed_at = EXCLUDED.changed_at
+"""
+_FORGET_KEYS = "DELETE FROM yaqzan.sealed_secrets WHERE tenant_id = $1 AND project_id = $2"
+_MOVE = """
+UPDATE yaqzan.workspaces SET state = $4, state_changed_by = $5, state_changed_at = $6, step_up_at = $7
+WHERE tenant_id = $1 AND workspace_id = $2 AND state = $3
+"""
+_ERASE = "SELECT yaqzan.erase_workspace($1, $2, $3, $4)"
+_STATE = "SELECT state FROM yaqzan.workspaces WHERE tenant_id = $1 AND workspace_id = $2 FOR UPDATE"
 
 
 @dataclass(frozen=True)
@@ -35,6 +59,23 @@ class WorkspaceRow:
     workspace_id: UUID
     slug: str
     name: str
+
+
+@dataclass(frozen=True)
+class StateChange:
+    """Who moved a workspace, when, and the passkey step-up that allowed it."""
+
+    by: str
+    at: datetime
+    step_up_at: datetime
+
+
+@dataclass(frozen=True)
+class Archived:
+    """What archiving switched off and deleted."""
+
+    agents_stopped: int
+    keys_deleted: int
 
 
 class WorkspaceRows:
@@ -63,7 +104,59 @@ class WorkspaceRows:
             await conn.execute(_RENAME, self._tenant, workspace_id, name)
 
     async def workspaces(self) -> list[WorkspaceRow]:
-        """Every workspace of the tenant, in the order they were added."""
+        """Every active workspace of the tenant, in the order they were added."""
+        return await self._listed("active")
+
+    async def archived(self) -> list[WorkspaceRow]:
+        """The tenant's archived workspaces (they can be brought back or deleted for good)."""
+        return await self._listed("archived")
+
+    async def _listed(self, state: str) -> list[WorkspaceRow]:
         async with self._scope.connection() as conn:
-            rows = await conn.fetch(_LIST, self._tenant)
+            rows = await conn.fetch(_LIST, self._tenant, state)
         return [WorkspaceRow(**dict(row)) for row in rows]
+
+
+class WorkspaceLifecycle:
+    """Archive, bring back or delete for good the one workspace of its handle.
+
+    Each is one transaction, so a workspace is never left half disconnected.
+    The database checks the step-up and the order (only an archived workspace
+    can be deleted) whatever the code above does.
+    """
+
+    def __init__(self, scope: Scoped) -> None:
+        self._scope = scope
+        self._key = (scope.tenant_id, scope.require_workspace())
+
+    async def archive(self, change: StateChange) -> Archived | None:
+        """Switch everything off, delete its saved keys, mark it archived. ``None``: it was not active."""
+        async with self._scope.write("an archived workspace") as conn:
+            # Held until the end, so nothing can change the workspace's state half way.
+            if await conn.fetchval(_STATE, *self._key) != "active":
+                return None
+            stopped = await conn.execute(_AGENTS_OFF, *self._key, change.by, change.at)
+            await conn.execute(_WORKSPACE_OFF, *self._key, change.by, change.at)
+            forgotten = await conn.execute(_FORGET_KEYS, *self._key)
+            await conn.execute(_MOVE, *self._key, "active", "archived", *_fields(change))
+        return Archived(agents_stopped=_count(stopped), keys_deleted=_count(forgotten))
+
+    async def restore(self, change: StateChange) -> bool:
+        """Bring an archived workspace back (its agents stay off). False if it was not archived."""
+        async with self._scope.write("a workspace brought back") as conn:
+            moved = await conn.execute(_MOVE, *self._key, "archived", "active", *_fields(change))
+        return _count(moved) == 1
+
+    async def erase(self, change: StateChange) -> None:
+        """Delete an archived workspace's data for good; only its marker stays."""
+        async with self._scope.write("a workspace deleted for good") as conn:
+            await conn.execute(_ERASE, self._key[1], change.by, change.step_up_at, change.at)
+
+
+def _fields(change: StateChange) -> tuple[str, datetime, datetime]:
+    return change.by, change.at, change.step_up_at
+
+
+def _count(status: str) -> int:
+    """Rows touched, from a command status such as ``UPDATE 3``."""
+    return int(status.rsplit(" ", 1)[-1])

@@ -15,7 +15,7 @@ There is one tenant on the laptop: :data:`LAPTOP_TENANT`.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -26,6 +26,8 @@ from pydantic import SecretStr
 from tools import laptop_db
 from yaqzan.core.api.agents import DashboardAgents, RoleChoice, SwitchIn, WorkspaceAgentsOut
 from yaqzan.core.api.registry import DashboardSwitches, PasskeyStatus, RegistryPage, Use
+from yaqzan.core.api.removal import DashboardRemoval
+from yaqzan.core.api.workspaces import WorkspaceDirectory
 from yaqzan.core.auth import Site
 from yaqzan.core.llm_gateway import Inspect
 from yaqzan.core.policy import (
@@ -34,10 +36,13 @@ from yaqzan.core.policy import (
     AuditDraft,
     AuditOutcome,
     Ledger,
+    LifecycleVerdict,
     PasskeyApprovals,
     RegistryControl,
+    Removal,
     Standing,
     Verdict,
+    WorkspaceControl,
 )
 from yaqzan.core.registry import Kind, Registry
 from yaqzan.core.registry.roles import RoleLibrary
@@ -105,6 +110,7 @@ class LaptopSwitches:
         self._settings = DatabaseSettings(dsn=url, min_size=1, max_size=4)
         self._library = library or RoleLibrary((), ())
         self._agents: DashboardAgents | None = None
+        self._removal: DashboardRemoval | None = None
         self._site = site
         self._enrol_code = enrol_code
         self._registry = registry
@@ -129,6 +135,7 @@ class LaptopSwitches:
                 self._switches = DashboardSwitches(control, passkeys, self._registry, self._uses, self._clock)
                 agents = AgentControl(db, LAPTOP_TENANT, self._library, self._clock)
                 self._agents = DashboardAgents(agents, passkeys, self._library)
+                self._removal = DashboardRemoval(WorkspaceControl(db, LAPTOP_TENANT, self._clock), passkeys)
         return self._switches
 
     async def _agents_now(self) -> DashboardAgents:
@@ -167,15 +174,46 @@ class LaptopSwitches:
         """Options to sign one exact change."""
         return await (await self._agents_now()).options(step)
 
-    def recorder(self, workspaces: Sequence[WorkspaceRow]) -> Inspect:
+    # ---- removing a project (ADR-039, F17 slice 4): the same passkey
+
+    async def _removal_now(self) -> DashboardRemoval:
+        await self._open()
+        if self._removal is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._removal
+
+    async def active(self) -> list[WorkspaceRow]:
+        """The workspaces the dashboard serves."""
+        return await (await self._removal_now()).active()
+
+    async def archived(self) -> list[WorkspaceRow]:
+        """The archived workspaces."""
+        return await (await self._removal_now()).archived()
+
+    async def archive(self, workspace: WorkspaceRow, credential: dict[str, Any] | None) -> Removal:
+        """Archive a workspace."""
+        return await (await self._removal_now()).archive(workspace, credential)
+
+    async def restore(self, workspace: WorkspaceRow, credential: dict[str, Any] | None) -> LifecycleVerdict:
+        """Bring an archived workspace back."""
+        return await (await self._removal_now()).restore(workspace, credential)
+
+    async def erase(self, workspace: WorkspaceRow, credential: dict[str, Any] | None) -> LifecycleVerdict:
+        """Delete an archived workspace for good."""
+        return await (await self._removal_now()).erase(workspace, credential)
+
+    def recorder(self, workspaces: WorkspaceDirectory) -> Inspect:
         """Board inspections (ADR-039), each written to the audit log before anything is read.
 
-        An unknown workspace, or an audit log that cannot be written, raises: the look is then not made.
+        An unknown or archived workspace (the directory is kept current), or an audit log that
+        cannot be written, raises: the look is then not made.
         """
-        ids = {w.slug: w.workspace_id for w in workspaces}
 
         async def record(workspace: str, tool: str, choice: str) -> None:
-            workspace_id = ids[workspace]  # an unknown workspace raises before anything is opened
+            found = workspaces.find(workspace)
+            if found is None:  # raised before anything is opened
+                raise KeyError(workspace)
+            workspace_id = found.workspace_id
             await self._open()
             if self._ledger is None:  # pragma: no cover  # _open always sets it
                 raise RuntimeError("the laptop database is not open")

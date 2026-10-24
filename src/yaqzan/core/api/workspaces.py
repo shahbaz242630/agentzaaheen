@@ -23,12 +23,18 @@ SCOPE_KEY = "yaqzan.workspace"
 
 
 class WorkspaceDirectory:
-    """The tenant's workspaces this dashboard serves, read by the server at start."""
+    """The tenant's active workspaces this dashboard serves, read by the server from the database.
+
+    Read at start, and again whenever a workspace is archived or brought back,
+    so an archived workspace's address stops answering at once.
+    """
 
     def __init__(self, workspaces: Sequence[WorkspaceRow]) -> None:
-        self._by_slug = {w.slug: w for w in workspaces}
-        if len(self._by_slug) != len(workspaces):
-            raise ValueError("workspace slugs must be unique")
+        self._by_slug = _by_slug(workspaces)
+
+    def replace(self, workspaces: Sequence[WorkspaceRow]) -> None:
+        """Serve this list from now on (read fresh from the database)."""
+        self._by_slug = _by_slug(workspaces)
 
     def all(self) -> tuple[WorkspaceRow, ...]:
         """Every workspace, in the order given."""
@@ -37,6 +43,13 @@ class WorkspaceDirectory:
     def find(self, slug: str) -> WorkspaceRow | None:
         """One workspace by its address, or ``None``."""
         return self._by_slug.get(slug)
+
+
+def _by_slug(workspaces: Sequence[WorkspaceRow]) -> dict[str, WorkspaceRow]:
+    found = {w.slug: w for w in workspaces}
+    if len(found) != len(workspaces):
+        raise ValueError("workspace slugs must be unique")
+    return found
 
 
 def directory_of(request: Request) -> WorkspaceDirectory:
