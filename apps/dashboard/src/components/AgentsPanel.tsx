@@ -2,7 +2,11 @@ import { Fingerprint, Plus, Power } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 
 import { ApiError, api, type AgentOut, type RoleChoice, type SwitchChange, type WorkspaceAgents } from "../api";
+import { capWords, centsFrom, money } from "../format";
 import { PasskeyProblem, withPasskeyIfNeeded } from "../passkey";
+import { ScoutPanel } from "./ScoutPanel";
+
+export { capWords, centsFrom, money };
 
 type Load<T> = { state: "loading" } | { state: "ready"; data: T } | { state: "failed" };
 
@@ -23,23 +27,6 @@ const PROBLEM: Record<PasskeyProblem["reason"], string> = {
   cancelled: "Windows Hello was closed, so nothing changed.",
 };
 
-export function money(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-// A cap in words: "not set" means nothing may be spent.
-export function capWords(cents: number | null): string {
-  return cents === null ? "not set" : money(cents);
-}
-
-// Dollars typed by a person, as cents; empty means no cap (then nothing may be spent).
-export function centsFrom(text: string): number | null | "bad" {
-  const trimmed = text.trim().replace(/^\$/, "");
-  if (trimmed === "") return null;
-  if (!/^\d{1,7}(\.\d{1,2})?$/.test(trimmed)) return "bad";
-  return Math.round(Number(trimmed) * 100);
-}
-
 function said(failure: unknown): string {
   if (failure instanceof PasskeyProblem) return PROBLEM[failure.reason];
   const code = failure instanceof ApiError ? failure.code : null;
@@ -54,11 +41,13 @@ const BUTTON = [
 interface Props {
   slug: string;
   name: string;
+  // A project just added: the scout is asked straight away.
+  askScout?: boolean;
 }
 
 // The Agents tab (ADR-039): this workspace's agents, its switch and its monthly cap.
 // Going riskier (on, a higher cap) asks Windows Hello to sign that exact change; going safer never does.
-export function AgentsPanel({ slug, name }: Props) {
+export function AgentsPanel({ slug, name, askScout = false }: Props) {
   const [loaded, setLoaded] = useState<Load<WorkspaceAgents>>({ state: "loading" });
   const [roles, setRoles] = useState<RoleChoice[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
@@ -116,6 +105,42 @@ export function AgentsPanel({ slug, name }: Props) {
       ),
     );
 
+  // The scout's Create: each ticked agent is made switched off with no spending (one at a time, so a
+  // failure half way says how many were made), then the workspace cap if one was typed (Windows Hello).
+  async function create(roleIds: string[], cap: number | null): Promise<number> {
+    setBusy(true);
+    setProblem(null);
+    let made = 0;
+    try {
+      let data: WorkspaceAgents | null = null;
+      for (const roleId of roleIds) {
+        data = await api.giveAgent(slug, roleId);
+        made += 1;
+        setLoaded({ state: "ready", data });
+      }
+      if (data !== null && cap !== null && cap !== data.cap_minor) {
+        const change = { enabled: data.enabled, cap_minor: cap };
+        setLoaded({
+          state: "ready",
+          data: await withPasskeyIfNeeded(
+            () => api.setWorkspace(slug, change),
+            () => api.workspaceOptions(slug, change),
+            (credential) => api.setWorkspace(slug, change, credential),
+          ),
+        });
+      }
+    } catch (failure) {
+      const part =
+        made === roleIds.length
+          ? `All ${String(made)} agents were made, but the cap was not set. `
+          : `${String(made)} of ${String(roleIds.length)} agents were made. `;
+      setProblem(part + said(failure));
+    } finally {
+      setBusy(false);
+    }
+    return made;
+  }
+
   if (loaded.state === "loading") return <p className="text-sm text-muted">Loading…</p>;
   if (loaded.state === "failed") {
     return (
@@ -143,6 +168,17 @@ export function AgentsPanel({ slug, name }: Props) {
           {problem}
         </p>
       )}
+
+      <ScoutPanel
+        key={slug}
+        slug={slug}
+        name={name}
+        roles={roles}
+        given={given}
+        busy={busy}
+        onCreate={create}
+        askNow={askScout}
+      />
 
       <section aria-labelledby="workspace-switch" className="rounded-2xl border border-line bg-panel p-5">
         <h2 id="workspace-switch" className="font-semibold text-ink">

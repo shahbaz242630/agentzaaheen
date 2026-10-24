@@ -101,6 +101,55 @@ describe("the dashboard", () => {
   });
 });
 
+describe("adding a project", () => {
+  it("opens the new project on its Agents tab and asks the scout straight away", async () => {
+    const sage = { id: "sage", name: "Sage", summary: "", health: "unknown", escalations: 0, sample: false };
+    let added = false;
+    const posts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((path: string, init?: RequestInit) => {
+        const reply = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
+        if (init?.method === "POST") {
+          posts.push(path);
+          if (path === "/api/workspaces") {
+            added = true;
+            return reply({ slug: "sage", name: "Sage" }, 201);
+          }
+          return reply({ ...scoutView, state: "running", stage: "reading", started_at: "2026-10-24T20:00:00+00:00" }, 202);
+        }
+        if (path === "/api/workspaces") return reply(added ? [...sample.projects, sage] : sample.projects);
+        if (path === "/api/workspaces/sage") return reply({ project: sage, cards: [] });
+        if (path === "/api/workspaces/sage/agents") return reply({ ...NO_AGENTS, switches: true });
+        if (path === "/api/workspaces/sage/scout") return reply(scoutView);
+        if (path === "/api/github/repos") return reply({ repos: [{ repo: "acme/sage", used_by: null }], connected: true });
+        return reply(answer(path));
+      }),
+    );
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "Add a project" }));
+    await userEvent.type(screen.getByLabelText("Project name"), "Sage");
+    await userEvent.selectOptions(await screen.findByLabelText("GitHub repository (read-only)"), "acme/sage");
+    await userEvent.click(screen.getByRole("button", { name: "Add project" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Sage" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Agents" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText(/Reading the repository/)).toBeInTheDocument();
+    expect(posts).toEqual(["/api/workspaces", "/api/workspaces/sage/scout"]);
+  });
+});
+
+const scoutView = {
+  connected: true,
+  state: "none",
+  stage: null,
+  repo: "acme/sage",
+  branch: null,
+  started_at: null,
+  finished_at: null,
+  reason: null,
+  report: null,
+};
+
 describe("real and sample cards side by side", () => {
   it("tags sample cards and says the others are real", async () => {
     const zaaheen = sample.details.zaaheen;

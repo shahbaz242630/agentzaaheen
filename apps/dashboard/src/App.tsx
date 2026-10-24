@@ -11,7 +11,8 @@ import { type Tab, WorkspaceView } from "./components/WorkspaceView";
 type Load<T> = { state: "loading" } | { state: "ready"; data: T } | { state: "failed" };
 
 // What the centre shows: the Board (home), one workspace and its tab, or the Customize page.
-type View = { kind: "board" } | { kind: "workspace"; slug: string; tab: Tab } | { kind: "customize" };
+// ``scout``: a project just added, so its Agents tab asks the scout straight away.
+type View = { kind: "board" } | { kind: "workspace"; slug: string; tab: Tab; scout?: boolean } | { kind: "customize" };
 
 const NAV_BUTTON = [
   "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left font-medium transition-colors",
@@ -187,7 +188,7 @@ export function App() {
                 api.projects().then(
                   (data) => {
                     setWorkspaces({ state: "ready", data });
-                    open({ kind: "workspace", slug: added, tab: "overview" });
+                    open({ kind: "workspace", slug: added, tab: "agents", scout: true });
                   },
                   () => {
                     setWorkspaces({ state: "failed" });
@@ -228,6 +229,7 @@ export function App() {
                   detail={detail.data}
                   registry={registry.state === "failed" ? "failed" : registryData}
                   tab={view.tab}
+                  askScout={view.scout === true}
                   onTab={(tab) => {
                     open({ ...view, tab });
                   }}

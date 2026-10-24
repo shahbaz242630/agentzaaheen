@@ -25,6 +25,18 @@ const ROLES = [
   { id: "sales", title: "Sales", mission: "Sell.", permission: "draft" },
 ];
 const SIGNED = { id: "cred", response: { signature: "sig" } };
+// The scout has its own tests (ScoutPanel.test.tsx); here it is never connected.
+const NO_SCOUT = {
+  connected: false,
+  state: "none",
+  stage: null,
+  repo: null,
+  branch: null,
+  started_at: null,
+  finished_at: null,
+  reason: null,
+  report: null,
+};
 
 type Route = [status: number, body: unknown];
 
@@ -32,7 +44,7 @@ type Route = [status: number, body: unknown];
 function serve(start: WorkspaceAgents, replies: Record<string, Route[]> = {}) {
   const fetch = vi.fn((path: string, init?: RequestInit) => {
     if (init?.method !== "POST") {
-      const body = path === "/api/roles" ? ROLES : start;
+      const body = path === "/api/roles" ? ROLES : path.endsWith("/scout") ? NO_SCOUT : start;
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
     }
     const [status, body] = replies[path]?.shift() ?? [404, { detail: "nope" }];
