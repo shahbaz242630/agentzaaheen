@@ -24,10 +24,13 @@ from uuid import UUID, uuid4
 from pydantic import SecretStr
 
 from tools import laptop_db
+from yaqzan.core.api.agents import DashboardAgents, RoleChoice, SwitchIn, WorkspaceAgentsOut
 from yaqzan.core.api.registry import DashboardSwitches, PasskeyStatus, RegistryPage, Use
 from yaqzan.core.auth import Site
 from yaqzan.core.llm_gateway import Inspect
 from yaqzan.core.policy import (
+    AgentControl,
+    AgentVerdict,
     AuditDraft,
     AuditOutcome,
     Ledger,
@@ -37,6 +40,7 @@ from yaqzan.core.policy import (
     Verdict,
 )
 from yaqzan.core.registry import Kind, Registry
+from yaqzan.core.registry.roles import RoleLibrary
 from yaqzan.core.store import Database, DatabaseSettings, StoreError, WorkspaceRow, WorkspaceRows
 
 LAPTOP_TENANT = laptop_db.LAPTOP_TENANT
@@ -96,8 +100,11 @@ class LaptopSwitches:
         *,
         site: Site,
         enrol_code: str | None = None,
+        library: RoleLibrary | None = None,
     ) -> None:
         self._settings = DatabaseSettings(dsn=url, min_size=1, max_size=4)
+        self._library = library or RoleLibrary((), ())
+        self._agents: DashboardAgents | None = None
         self._site = site
         self._enrol_code = enrol_code
         self._registry = registry
@@ -120,7 +127,45 @@ class LaptopSwitches:
                     db, LAPTOP_TENANT, control, self._site, enrol_code=self._enrol_code, clock=self._clock
                 )
                 self._switches = DashboardSwitches(control, passkeys, self._registry, self._uses, self._clock)
+                agents = AgentControl(db, LAPTOP_TENANT, self._library, self._clock)
+                self._agents = DashboardAgents(agents, passkeys, self._library)
         return self._switches
+
+    async def _agents_now(self) -> DashboardAgents:
+        await self._open()
+        if self._agents is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._agents
+
+    # ---- the Agents tab (ADR-039, F17 slice 3): the same passkey and challenges as Customize
+
+    def roles(self) -> tuple[RoleChoice, ...]:
+        """The role library."""
+        return DashboardAgents.roles_of(self._library)
+
+    async def view(self, workspace: WorkspaceRow) -> WorkspaceAgentsOut:
+        """A workspace's agents, switch and cap."""
+        return await (await self._agents_now()).view(workspace)
+
+    async def give(self, workspace: WorkspaceRow, role_id: str) -> AgentVerdict:
+        """Give a workspace an agent."""
+        return await (await self._agents_now()).give(workspace, role_id)
+
+    async def set_agent(
+        self, workspace: WorkspaceRow, agent_id: UUID, change: SwitchIn, credential: dict[str, Any] | None
+    ) -> AgentVerdict:
+        """Change one agent."""
+        return await (await self._agents_now()).set_agent(workspace, agent_id, change, credential)
+
+    async def set_workspace(
+        self, workspace: WorkspaceRow, change: SwitchIn, credential: dict[str, Any] | None
+    ) -> AgentVerdict:
+        """Change a workspace's switch and cap."""
+        return await (await self._agents_now()).set_workspace(workspace, change, credential)
+
+    async def options(self, step: str) -> dict[str, Any]:
+        """Options to sign one exact change."""
+        return await (await self._agents_now()).options(step)
 
     def recorder(self, workspaces: Sequence[WorkspaceRow]) -> Inspect:
         """Board inspections (ADR-039), each written to the audit log before anything is read.

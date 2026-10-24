@@ -60,6 +60,9 @@ class Operation(StrEnum):
     WITHDRAW_REQUEST = "withdraw_request"
     REFUSE_REQUEST = "refuse_request"
     APPROVE_REGISTRY = "approve_registry"  # switch a registry item on (ADR-SEC-007): needs a fresh passkey
+    ASSIGN_AGENT = "assign_agent"  # give a workspace an agent: it starts off, with no cap (ADR-039)
+    LOWER_CAP = "lower_cap"  # a lower spending cap, for an agent or a workspace
+    RAISE_CAP = "raise_cap"  # a higher (or first) spending cap: needs a fresh passkey
 
 
 REDUCES_RISK = frozenset(
@@ -75,6 +78,9 @@ REDUCES_RISK = frozenset(
         Operation.REQUEST_ON,
         Operation.WITHDRAW_REQUEST,
         Operation.REFUSE_REQUEST,
+        # A new agent is switched off and cannot spend: nothing runs until a passkey turns it on.
+        Operation.ASSIGN_AGENT,
+        Operation.LOWER_CAP,
     }
 )
 INCREASES_RISK = frozenset(set(Operation) - REDUCES_RISK)

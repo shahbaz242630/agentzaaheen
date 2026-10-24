@@ -38,7 +38,8 @@ CHALLENGE_TTL = timedelta(minutes=2)
 MAX_ANSWER_BYTES = 16_384
 MAX_OPEN_CHALLENGES = 32
 USER_ID = b"yaqzan-chairman"  # one approver per tenant; the same id for every passkey
-_PURPOSE = r"^(enrol|approve:[0-9a-f-]{36})$"
+# "step:..." names one exact change (an agent on, a cap of exactly N): a signature for it fits nothing else.
+_PURPOSE = r"^(enrol|approve:[0-9a-f-]{36}|step:[a-z0-9:._-]{1,160})$"
 
 
 class PasskeyError(Exception):

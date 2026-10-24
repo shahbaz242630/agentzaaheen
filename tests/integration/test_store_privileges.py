@@ -117,6 +117,9 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "passkeys": read_add,  # plus UPDATE on sign_count and last_used_at only (a column grant)
         "tenants": read_add,  # plus UPDATE on name only (a column grant)
         "workspaces": read_add,  # plus UPDATE on name only (a column grant)
+        "role_versions": read_add,  # a frozen copy never changes
+        "workspace_settings": mirror,
+        "agents": mirror,  # an agent is switched off, never deleted
     }
 
 

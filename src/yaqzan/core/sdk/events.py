@@ -88,6 +88,17 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="The chat tried to read {tool}, but the read failed.",
         explains="code",
     ),
+    "agents_decided": LogEvent(
+        "info",
+        what="An agent change ({action}) by {actor} ended as {verdict}.",
+        why="Someone gave a workspace an agent, or changed an agent's or a workspace's switch or cap.",
+    ),
+    "agent_run_refused": LogEvent(
+        "info",
+        what="Agent {agent_id} was not allowed to run ({reason}).",
+        why="Its switch, its workspace's switch or a spending cap said no; no cap means no spending.",
+        next="Nothing to do unless it should be running: check its switch and caps on the workspace page.",
+    ),
     "board_inspection": LogEvent(
         "info",
         what="The Board's chat looked inside the {workspace} workspace with {tool}.",
