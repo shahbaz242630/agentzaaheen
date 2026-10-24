@@ -24,7 +24,8 @@ role. Their passwords are derived from the container's own password, so
 nothing new is stored anywhere. It also makes sure the laptop's one tenant
 and its five workspaces exist, one per project (ADR-039): :data:`LAPTOP_TENANT`
 and :data:`LAPTOP_WORKSPACES`. Their ids are derived from fixed names, so they
-are the same on every run.
+are the same on every run. Each of the five reads its GitHub repository
+(:data:`LAPTOP_REPOS`), saved once, for a workspace that is active and has none yet.
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ import secrets
 import sys
 import time
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 from uuid import UUID, uuid5
 
@@ -42,7 +44,14 @@ import asyncpg
 from pydantic import SecretStr
 
 from tools import dev_db
-from yaqzan.core.store import Database, DatabaseSettings, WorkspaceRow, WorkspaceRows, migrate
+from yaqzan.core.store import (
+    Database,
+    DatabaseSettings,
+    WorkspaceRow,
+    WorkspaceRows,
+    WorkspaceSources,
+    migrate,
+)
 
 NAME = "yaqzan-laptop-db"
 LABEL_VALUE = "laptop-db"
@@ -67,6 +76,14 @@ LAPTOP_WORKSPACES = tuple(
         ("family-checkin", "Family Check-in"),
     )
 )
+# Which repository each project reads (checked against the local clones, 20 Oct 2026).
+LAPTOP_REPOS: dict[str, str] = {
+    "zaaheen": "shahbaz242630/zaaheen",
+    "sandoq-kin": "shahbaz242630/Document-Vault",
+    "agent-x": "shahbaz242630/agent-x",
+    "eva": "shahbaz242630/AI-Agent-SAAS",
+    "family-checkin": "shahbaz242630/Family-Checkin",
+}
 
 
 def _ours(run: dev_db.Runner) -> str:
@@ -184,9 +201,21 @@ async def set_up(admin: str, database: str = DATABASE) -> SecretStr:
         await workspaces.add_tenant("Yaqzan")
         for workspace in LAPTOP_WORKSPACES:
             await workspaces.add(workspace)
+        await _connect_repos(app, await workspaces.workspaces())
     finally:
         await app.close()
     return url
+
+
+async def _connect_repos(app: Database, active: Sequence[WorkspaceRow]) -> None:
+    """Save each laptop project's repository once (an archived or removed one is left alone)."""
+    for workspace in active:
+        repo = LAPTOP_REPOS.get(workspace.slug)
+        if repo is None or workspace not in LAPTOP_WORKSPACES:
+            continue
+        sources = WorkspaceSources(app.scoped(LAPTOP_TENANT, workspace.workspace_id))
+        if await sources.github() is None:
+            await sources.connect_github(repo, by="system:laptop-setup", at=datetime.now(UTC))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

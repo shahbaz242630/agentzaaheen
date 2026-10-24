@@ -8,7 +8,8 @@ What it does:
     every module and plugin uses, and the error catalogue that puts every
     reason code into plain English (:func:`explain`), the uptime shapes
     (an address's rule, its status and timing, never its page) and the
-    backend health shapes (codes and numbers only), and spans: :func:`span`
+    backend health shapes (codes and numbers only), the repository bundle
+    the scout reads (paths and untrusted file text, secret files never), and spans: :func:`span`
     opens one, :func:`traceparent` names the current one, and every log line
     inside a span carries its IDs (ADR-032); :func:`install_log_sink` lets
     telemetry ship each redacted line.
@@ -76,6 +77,17 @@ from yaqzan.core.sdk.models import (
     make_idempotency_key,
     max_data_class,
 )
+from yaqzan.core.sdk.repo_files import (
+    MAX_FILE_BYTES,
+    MAX_FILE_CHARS,
+    MAX_PATHS,
+    MAX_TOTAL_CHARS,
+    RepoBundle,
+    RepoFile,
+    is_plain_path,
+    is_secret_path,
+    pick_files,
+)
 from yaqzan.core.sdk.revenue import (
     BillingCycle,
     Interval,
@@ -119,8 +131,12 @@ __all__ = [
     "ALLOWED_ATTRIBUTES",
     "KNOWN_CODES",
     "LOG_EVENTS",
+    "MAX_FILE_BYTES",
+    "MAX_FILE_CHARS",
     "MAX_LOG_CHARS",
     "MAX_LOG_LINES",
+    "MAX_PATHS",
+    "MAX_TOTAL_CHARS",
     "PROJECT_REF",
     "REDACTED",
     "REPO_PATTERN",
@@ -155,6 +171,8 @@ __all__ = [
     "Refund",
     "RefundKind",
     "RefundStatus",
+    "RepoBundle",
+    "RepoFile",
     "RepoHealth",
     "RepoSource",
     "RevenueBatch",
@@ -187,6 +205,8 @@ __all__ = [
     "get_logger",
     "install_log_sink",
     "install_tracing",
+    "is_plain_path",
+    "is_secret_path",
     "is_sensitive_key",
     "judge",
     "log_digest",
@@ -194,6 +214,7 @@ __all__ = [
     "make_idempotency_key",
     "max_data_class",
     "note",
+    "pick_files",
     "redact",
     "redact_text",
     "say",

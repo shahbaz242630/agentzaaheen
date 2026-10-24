@@ -77,6 +77,7 @@ from pydantic import SecretStr
 
 from tools import laptop_db
 from tools.chat_tools import Switched, model_chat, tools_for
+from tools.dashboard_adding import LaptopAdding
 from tools.dashboard_sources import (
     GITHUB_REPOS,
     Clock,
@@ -354,6 +355,12 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         )
         if code is not None:
             print(f"dashboard: passkey set-up is open. The code to type on the Customize page is {code}")
+    # Adding a project lists the repositories the GitHub token covers (unless GitHub is switched off).
+    adding = None
+    if switches is not None:
+        github_token = (env.get(ns.github_token_env or "", "") if "github" not in off else "").strip()
+        usable = SecretStr(github_token) if github_token and usable_secret(github_token) else None
+        adding = LaptopAdding(switches, usable, transport)
     # The workspaces the door knows (ADR-039): the laptop database's, or the fixed five without it.
     known = connected.workspaces if connected else laptop_db.LAPTOP_WORKSPACES
     # Read again whenever a workspace is archived or brought back.
@@ -384,6 +391,8 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         workspaces=directory,
         agents=switches,
         removal=switches,
+        adding=adding,
+        on_close=switches.close if switches is not None else None,
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:

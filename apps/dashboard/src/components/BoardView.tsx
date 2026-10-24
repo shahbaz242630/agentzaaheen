@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { api, type ProjectSummary, type RegistryPage, type WorkspaceAgents } from "../api";
+import { AddProject } from "./AddProject";
 import { capWords, money } from "./AgentsPanel";
 import { HealthPill } from "./health";
 import { ArchivedProjects } from "./RemoveProject";
@@ -25,12 +26,14 @@ interface Props {
   notice: string | null;
   // A project was brought back: the workspace list must be read again.
   onChanged: () => void;
+  // A project was added: read the list again and open it.
+  onAdded: (slug: string) => void;
 }
 
 const KIND_WORDS = { connector: "connector", skill: "skill", plugin: "plugin bundle" } as const;
 
 // The Board (ADR-039): every workspace's summary line and what needs the Chairman, never a workspace's raw data.
-export function BoardView({ workspaces, registry, onOpen, onCustomize, notice, onChanged }: Props) {
+export function BoardView({ workspaces, registry, onOpen, onCustomize, notice, onChanged, onAdded }: Props) {
   const [agents, setAgents] = useState<Record<string, WorkspaceAgents | "failed">>({});
   useEffect(() => {
     let live = true;
@@ -116,6 +119,7 @@ export function BoardView({ workspaces, registry, onOpen, onCustomize, notice, o
         <h2 id="board-workspaces" className="font-semibold text-ink">
           Workspaces
         </h2>
+        <AddProject onAdded={onAdded} />
         {workspaces.length === 0 ? (
           <p className="text-sm text-muted">No workspaces yet.</p>
         ) : (

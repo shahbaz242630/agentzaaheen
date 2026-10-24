@@ -95,8 +95,8 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
     ),
     "workspace_lifecycle_decided": LogEvent(
         "info",
-        what="Removing a project ({action}) by {actor} ended as {verdict}.",
-        why="Someone archived a workspace, brought one back, or deleted one for good.",
+        what="A project change ({action}) by {actor} ended as {verdict}.",
+        why="Someone added a project, archived one, brought one back, or deleted one for good.",
     ),
     "agent_run_refused": LogEvent(
         "info",

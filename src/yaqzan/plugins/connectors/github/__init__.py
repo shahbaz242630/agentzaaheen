@@ -8,11 +8,13 @@ What it does:
     fixed shape for tests. ``GitHubBuildLog`` reads, only when triage asks,
     the newest failed run's first failed job log (ADR-029): a cleaned,
     redacted excerpt that is always untrusted; ``FakeGitHubBuildLog`` stands
-    in for it.
+    in for it. ``GitHubFiles`` reads, for the scout (ADR-039), the main
+    branch's paths (secret files left out) and a few files' text, always
+    untrusted; ``GitHubRepos`` lists the repositories the token covers.
 
 Public interface:
     ``GitHubSource``, ``FakeGitHubSource``, ``GitHubBuildLog``,
-    ``FakeGitHubBuildLog``, ``BASE_URL``, ``ALLOWED_HOSTS``, ``LOG_HOST``,
+    ``FakeGitHubBuildLog``, ``GitHubFiles``, ``GitHubRepos``, ``BASE_URL``, ``ALLOWED_HOSTS``, ``LOG_HOST``,
     ``API_HEADERS``, ``SOURCE``. Manifest: ``plugin.yaml`` next to this file.
 
 How to test:
@@ -23,13 +25,15 @@ How to test:
 Must never:
     Call anything but its named GET endpoints; read an issue title, a body, a
     name or a commit message (people write those, so they are untrusted), the
-    one build log aside, which is read only on demand and handed on untrusted;
+    one build log and the scout's files aside, which are read only on demand
+    and handed on untrusted; read or list a secret file (the SDK's list);
     hold or log the token (the core's client carries it); guess a count
     GitHub says is incomplete.
 """
 
 from yaqzan.plugins.connectors.github.adapter import ALLOWED_HOSTS, API_HEADERS, BASE_URL, GitHubSource
 from yaqzan.plugins.connectors.github.fake import FakeGitHubBuildLog, FakeGitHubSource
+from yaqzan.plugins.connectors.github.files import GitHubFiles, GitHubRepos
 from yaqzan.plugins.connectors.github.logs import LOG_HOST, GitHubBuildLog
 from yaqzan.plugins.connectors.github.mapping import SOURCE
 
@@ -42,5 +46,7 @@ __all__ = [
     "FakeGitHubBuildLog",
     "FakeGitHubSource",
     "GitHubBuildLog",
+    "GitHubFiles",
+    "GitHubRepos",
     "GitHubSource",
 ]

@@ -31,15 +31,18 @@ from yaqzan.core.api.workspaces import WorkspaceDirectory
 from yaqzan.core.auth import Site
 from yaqzan.core.llm_gateway import Inspect
 from yaqzan.core.policy import (
+    Added,
     AgentControl,
     AgentVerdict,
     AuditDraft,
     AuditOutcome,
+    Channel,
     Ledger,
     LifecycleVerdict,
     PasskeyApprovals,
     RegistryControl,
     Removal,
+    Role,
     Standing,
     Verdict,
     WorkspaceControl,
@@ -111,6 +114,7 @@ class LaptopSwitches:
         self._library = library or RoleLibrary((), ())
         self._agents: DashboardAgents | None = None
         self._removal: DashboardRemoval | None = None
+        self._workspaces: WorkspaceControl | None = None
         self._site = site
         self._enrol_code = enrol_code
         self._registry = registry
@@ -135,7 +139,8 @@ class LaptopSwitches:
                 self._switches = DashboardSwitches(control, passkeys, self._registry, self._uses, self._clock)
                 agents = AgentControl(db, LAPTOP_TENANT, self._library, self._clock)
                 self._agents = DashboardAgents(agents, passkeys, self._library)
-                self._removal = DashboardRemoval(WorkspaceControl(db, LAPTOP_TENANT, self._clock), passkeys)
+                self._workspaces = WorkspaceControl(db, LAPTOP_TENANT, self._clock)
+                self._removal = DashboardRemoval(self._workspaces, passkeys)
         return self._switches
 
     async def _agents_now(self) -> DashboardAgents:
@@ -185,6 +190,24 @@ class LaptopSwitches:
     async def active(self) -> list[WorkspaceRow]:
         """The workspaces the dashboard serves."""
         return await (await self._removal_now()).active()
+
+    # ---- adding a project (ADR-039, F17 slice 5a): the dashboard acts as the Chairman (no login yet)
+
+    async def _workspaces_now(self) -> WorkspaceControl:
+        await self._open()
+        if self._workspaces is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._workspaces
+
+    async def add_workspace(self, name: str, repo: str | None) -> Added:
+        """Add a project, reading ``repo`` if given (no step-up: nothing in it runs or spends)."""
+        return await (await self._workspaces_now()).add(
+            name, github=repo, role=Role.CHAIRMAN, channel=Channel.DASHBOARD
+        )
+
+    async def repos_in_use(self) -> dict[str, str]:
+        """The repository each active or archived workspace reads, by its address."""
+        return await (await self._workspaces_now()).repos()
 
     async def archived(self) -> list[WorkspaceRow]:
         """The archived workspaces."""

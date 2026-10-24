@@ -183,6 +183,17 @@ export function App() {
               }}
               notice={notice}
               onChanged={reloadWorkspaces}
+              onAdded={(added) => {
+                api.projects().then(
+                  (data) => {
+                    setWorkspaces({ state: "ready", data });
+                    open({ kind: "workspace", slug: added, tab: "overview" });
+                  },
+                  () => {
+                    setWorkspaces({ state: "failed" });
+                  },
+                );
+              }}
             />
           )}
           {view.kind === "customize" && (

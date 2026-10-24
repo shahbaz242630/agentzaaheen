@@ -120,6 +120,7 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "role_versions": read_add,  # a frozen copy never changes
         "workspace_settings": mirror,
         "agents": mirror,  # an agent is switched off, never deleted
+        "workspace_sources": read_add,  # removed only with the workspace, by the owner function
     }
 
 

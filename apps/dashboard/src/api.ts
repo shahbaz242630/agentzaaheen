@@ -220,6 +220,15 @@ export const ArchivedList = z.strictObject({
 });
 export type ArchivedList = z.infer<typeof ArchivedList>;
 
+// Adding a project (F17 slice 5a): the repositories the read-only GitHub token covers, and who reads each.
+const repoName = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_.-]{1,100}$/);
+export const RepoList = z.strictObject({
+  repos: z.array(z.strictObject({ repo: repoName, used_by: item.nullable() })),
+  connected: z.boolean(),
+});
+export type RepoList = z.infer<typeof RepoList>;
+export const AddedProject = z.strictObject({ slug: item, name: z.string() });
+
 // The Chairman's passkey (ADR-SEC-007): whether it exists, and whether it may be set up on this run.
 export const PasskeyStatus = z.strictObject({ enrolled: z.boolean(), enrolment_open: z.boolean() });
 export type PasskeyStatus = z.infer<typeof PasskeyStatus>;
@@ -319,6 +328,9 @@ export const api = {
   erase: (slug: string, credential?: unknown) => postJson(`${archivedPath(slug)}/erase`, { credential }, ArchivedList),
   eraseOptions: async (slug: string) =>
     (await postJson(`${archivedPath(slug)}/erase/options`, {}, PasskeyOptions)).options,
+  // Adding a project: no Windows Hello (nothing in a new project runs or spends).
+  repos: () => getJson("/api/github/repos", RepoList),
+  addProject: (name: string, repo: string | null) => postJson("/api/workspaces", { name, repo }, AddedProject),
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),
