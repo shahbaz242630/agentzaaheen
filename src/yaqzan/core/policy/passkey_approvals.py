@@ -133,8 +133,38 @@ class PasskeyApprovals:
             request_id, role=Role.CHAIRMAN, channel=Channel.DASHBOARD, step_up_at=now, now=now
         )
 
-    async def _audit(
-        self, action: str, reason: str, now: datetime, *, allowed: bool, request_id: UUID | None = None
+    async def step_up_options(self, purpose: str) -> dict[str, object]:
+        """Options for Windows Hello to sign one exact change, named by ``purpose`` (``step:...``)."""
+        if not purpose.startswith("step:"):
+            raise PasskeyError("passkey.bad_purpose")
+        known = await self._known()
+        if not known:
+            raise PasskeyError(Verdict.NO_PASSKEY.value)
+        return approve_options(self._site, self._challenges.issue(purpose), known)
+
+    async def step_up(self, purpose: str, answer: dict[str, object]) -> datetime | None:
+        """The time of a good signature for exactly ``purpose``, or ``None`` (audited) if it does not hold."""
+        now = self._clock()
+        try:
+            challenge = self._challenges.take(purpose)
+            used, count = verify_approval(self._site, challenge, answer, await self._known())
+            if not await self._rows.record_use(used.credential_id, count, now):
+                raise PasskeyError("passkey.counter_went_back")
+        except PasskeyError as exc:
+            await self._audit("passkey.step_up", exc.code, now, allowed=False, purpose=purpose)
+            return None
+        await self._audit("passkey.step_up", "passkey.step_up_ok", now, allowed=True, purpose=purpose)
+        return now
+
+    async def _audit(  # noqa: PLR0913  # what, why, when, the outcome, and what it was for
+        self,
+        action: str,
+        reason: str,
+        now: datetime,
+        *,
+        allowed: bool,
+        request_id: UUID | None = None,
+        purpose: str | None = None,
     ) -> None:
         say(get_logger("yaqzan.passkey"), "passkey_decided", action=action, verdict=reason)
         await self._ledger.record(
@@ -145,7 +175,7 @@ class PasskeyApprovals:
                 outcome=AuditOutcome.ALLOW if allowed else AuditOutcome.DENY,
                 reason_code=reason,
                 correlation_id=uuid4(),
-                target_ref=None if request_id is None else f"request:{request_id}",
+                target_ref=purpose if request_id is None else f"request:{request_id}",
                 details={} if request_id is None else {"request": str(request_id)},
             )
         )

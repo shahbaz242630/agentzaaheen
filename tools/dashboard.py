@@ -100,6 +100,7 @@ from yaqzan.core.auth import Site
 from yaqzan.core.llm_gateway import Tool
 from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Registry, load_registry
+from yaqzan.core.registry.roles import RoleLibrary, load_roles
 from yaqzan.core.sdk import SiteRule, span
 from yaqzan.core.store import WorkspaceRow
 
@@ -107,6 +108,8 @@ UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
 CONTRACT_FIXTURE = UI_ROOT / "src" / "contract" / "sample.json"
 PLUGINS_ROOT = UI_ROOT.parent.parent / "src" / "yaqzan" / "plugins"
+# The role packs stay off GitHub (docs/ is local only); on the server they live in their own folder.
+ROLES_ROOT = UI_ROOT.parent.parent / "docs" / "hr" / "roles"
 CONTRACT_TIME = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -283,6 +286,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--ntfy-topic-env", help="env var holding the secret ntfy topic for uptime alerts")
     parser.add_argument("--supabase", type=Path, help="read the Supabase projects in this local list")
     parser.add_argument("--fixes", type=Path, help="give the chat the fix guides in this local file")
+    parser.add_argument(
+        "--roles",
+        type=Path,
+        default=ROLES_ROOT,
+        help="the role library for the Agents tab (needs --switches)",
+    )
     add_tracing_options(parser)
     return parser
 
@@ -342,6 +351,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
             clock,
             site=Site(origin=f"http://localhost:{ns.port}"),
             enrol_code=code,
+            library=_library(ns.roles),
         )
         if code is not None:
             print(f"dashboard: passkey set-up is open. The code to type on the Customize page is {code}")
@@ -372,6 +382,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         registry=page,
         switches=switches,
         workspaces=directory,
+        agents=switches,
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
@@ -422,6 +433,15 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
         switched=Switched(build=build, standing=switches.standing),
         inspect=switches.recorder(workspaces),
     )
+
+
+def _library(folder: Path) -> RoleLibrary:
+    """The role library, saying how many roles it holds and which were refused, and why."""
+    library = load_roles(folder)
+    print(f"dashboard: {len(library.packs)} roles in the library ({folder.name}).")
+    for problem in library.problems:
+        print(f"dashboard: role {problem.id or folder.name} not used: {problem.message}.")
+    return library
 
 
 def _serve(app: FastAPI, host: str, port: int) -> None:  # pragma: no cover - starts a real server

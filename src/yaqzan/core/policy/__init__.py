@@ -34,6 +34,7 @@ from yaqzan.core.policy.access import (
     Role,
     authorize,
 )
+from yaqzan.core.policy.agents import AgentControl, AgentVerdict, RunPermit, RunRefusal, WorkspaceAgents
 from yaqzan.core.policy.audit import (
     GENESIS_HASH,
     AuditDraft,
@@ -72,7 +73,9 @@ __all__ = [
     "REDUCES_RISK",
     "STEP_UP_MAX_AGE",
     "AccessDecision",
+    "AgentControl",
     "AgentPolicy",
+    "AgentVerdict",
     "AuditDraft",
     "AuditEntry",
     "AuditOutcome",
@@ -92,11 +95,14 @@ __all__ = [
     "ProjectPolicy",
     "RegistryControl",
     "Role",
+    "RunPermit",
+    "RunRefusal",
     "RunState",
     "Standing",
     "Target",
     "ToolCall",
     "Verdict",
+    "WorkspaceAgents",
     "append",
     "audit_draft",
     "authorize",

@@ -28,13 +28,17 @@ from tests.integration.test_store_registry_switches import CHAIRMAN, request
 from tests.integration.test_store_revenue import AT, full_batch
 from yaqzan.core.policy import Ledger
 from yaqzan.core.store import (
+    AgentRows,
     AllSealedSecrets,
     KillSwitchRows,
+    NewAgent,
     PasskeyRow,
     PasskeyRows,
     Records,
     RegistrySwitchRows,
     RevenueRows,
+    RoleVersion,
+    RoleVersionRows,
     SealedRow,
     SealedSecrets,
     SlotKey,
@@ -42,6 +46,7 @@ from yaqzan.core.store import (
     StoreErrorCode,
     SwitchScope,
     WorkspaceRows,
+    WorkspaceSettings,
 )
 from yaqzan.core.store.db import _SET_SCOPE as SET_SCOPE  # the exact statement the store runs
 
@@ -110,6 +115,12 @@ async def _fill_every_table(url: str) -> None:
                 created_at=NOW,
             ),
         )
+        await RoleVersionRows(db.scoped(TENANT)).put(
+            RoleVersion("monitoring", "f" * 64, {"ROLE.md": "# Monitoring"}, "read", NOW)
+        )
+        agents = AgentRows(here)
+        await agents.add(NewAgent(uuid4(), "monitoring", "f" * 64, "local-gemma", by=CHAIRMAN, at=NOW))
+        await agents.put_settings(WorkspaceSettings(False, None, CHAIRMAN, NOW, None))
 
 
 async def _count(url: str, table: str, tenant: UUID, workspace: UUID | None) -> int:

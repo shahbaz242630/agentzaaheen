@@ -5,8 +5,9 @@ What it does:
     (:func:`migrate`, :func:`check_schema`) and saves/loads the SDK records,
     audit rows, sealed credentials, kill-switch state, registry switches
     and requests (ADR-030), the passkey (ADR-SEC-007), the revenue mirror
-    (subscriptions, payments, refunds), each collector's sync state, and the
-    tenants and workspaces (ADR-039). Every table has a ``tenant_id`` and sits
+    (subscriptions, payments, refunds), each collector's sync state, the
+    tenants and workspaces, and each workspace's agents, switch and cap with
+    the frozen role versions they run (ADR-039). Every table has a ``tenant_id`` and sits
     behind a database wall (row-level security, forced): each transaction
     names its tenant, and for project-level tables its workspace, through
     :meth:`Database.scoped`; one that names none is refused. The app connects
@@ -27,6 +28,16 @@ Must never:
     module reads tables directly); query a tenant table outside ``Database.scoped``.
 """
 
+from yaqzan.core.store.agents import (
+    AgentChange,
+    AgentRow,
+    AgentRows,
+    NewAgent,
+    Permission,
+    RoleVersion,
+    RoleVersionRows,
+    WorkspaceSettings,
+)
 from yaqzan.core.store.audit import AuditRow, AuditRows
 from yaqzan.core.store.db import Database, DatabaseSettings, Scoped
 from yaqzan.core.store.errors import StoreError, StoreErrorCode
@@ -58,6 +69,9 @@ __all__ = [
     "MAX_ROWS",
     "MIGRATIONS",
     "Access",
+    "AgentChange",
+    "AgentRow",
+    "AgentRows",
     "AllSealedSecrets",
     "AuditRow",
     "AuditRows",
@@ -68,13 +82,17 @@ __all__ = [
     "ItemKind",
     "KillSwitchRows",
     "Migration",
+    "NewAgent",
     "PasskeyRow",
     "PasskeyRows",
+    "Permission",
     "Records",
     "RegistrySwitchRows",
     "RequestRow",
     "RequestStatus",
     "RevenueRows",
+    "RoleVersion",
+    "RoleVersionRows",
     "Scoped",
     "SealedRow",
     "SealedSecrets",
@@ -86,6 +104,7 @@ __all__ = [
     "SyncState",
     "WorkspaceRow",
     "WorkspaceRows",
+    "WorkspaceSettings",
     "check_schema",
     "migrate",
 ]

@@ -22,6 +22,8 @@ DOORS = {
     "src/yaqzan/core/store/sealed.py",
     # The daily key check is a tenant-wide job (the Board's), one workspace at a time.
     "src/yaqzan/core/scheduler/keys.py",
+    # Agents: the workspace comes from the API door's address or the job's own saved record (may_run).
+    "src/yaqzan/core/policy/agents.py",
 }
 
 

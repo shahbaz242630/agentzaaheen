@@ -47,6 +47,7 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "project",
         "project_id",
         "workspace",
+        "agent_id",
         "source",
         "kind",
         "tool",
