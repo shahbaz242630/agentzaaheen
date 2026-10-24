@@ -39,6 +39,8 @@ const LANGUAGE_COLOUR: Record<string, string> = {
   "Jupyter Notebook": "#da5b0b",
 };
 const OTHER_COLOUR = "#9ca3af";
+// The connector category for Yaqzan's own checks (uptime): not an outside provider of the project.
+const OWN_CHECKS = "Health";
 const MAX_SHOWN = 8; // languages named in the legend; the rest are "Other"
 
 const CATEGORY: Record<ProviderCategory, string> = {
@@ -133,12 +135,16 @@ function Body({ loaded, slug, registry }: { loaded: Load } & Props) {
       </p>
     );
   }
-  // Providers Yaqzan itself reads for this workspace (its connectors), so each can say so.
-  const watched = new Set(
+  // Outside services Yaqzan itself reads for this workspace (its connectors; not its own health checks).
+  const connectors =
     registry !== null && registry !== "failed"
-      ? registry.connectors.filter((c) => c.uses.some((u) => u.project_id === slug && u.status === "live")).map((c) => c.id)
-      : [],
-  );
+      ? registry.connectors.filter(
+          (c) => c.category !== OWN_CHECKS && c.uses.some((u) => u.project_id === slug && u.status === "live"),
+        )
+      : [];
+  const watched = new Set(connectors.map((c) => c.id));
+  // Watched, but not found in the code: connected some other way (e.g. a key the app keeps outside the code).
+  const elsewhere = connectors.filter((c) => !profile.providers.some((p) => p.id === c.id)).map((c) => c.name);
   return (
     <div className="flex flex-col gap-5">
       <p className="text-xs text-faint">
@@ -147,6 +153,12 @@ function Body({ loaded, slug, registry }: { loaded: Load } & Props) {
       </p>
       <Languages languages={profile.languages} />
       <Providers providers={profile.providers} watched={watched} />
+      {elsewhere.length > 0 && (
+        <p className="text-sm text-muted">
+          Yaqzan also watches {elsewhere.join(", ")} for this project. The code in this repository does not call{" "}
+          {elsewhere.length === 1 ? "it" : "them"}, so it is connected some other way.
+        </p>
+      )}
     </div>
   );
 }
