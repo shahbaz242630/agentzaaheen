@@ -22,7 +22,23 @@ Must never:
     talk HTTP itself (the model is reached only through ``core.net``).
 """
 
-from yaqzan.core.llm_gateway.chat import SYSTEM_PROMPT, ChatModel, ChatReply, FactChat, build_messages
+from yaqzan.core.llm_gateway.chat import (
+    SYSTEM_PROMPT,
+    ChatModel,
+    ChatReply,
+    FactChat,
+    Inspect,
+    build_messages,
+)
 from yaqzan.core.llm_gateway.tools import Tool, catalogue
 
-__all__ = ["SYSTEM_PROMPT", "ChatModel", "ChatReply", "FactChat", "Tool", "build_messages", "catalogue"]
+__all__ = [
+    "SYSTEM_PROMPT",
+    "ChatModel",
+    "ChatReply",
+    "FactChat",
+    "Inspect",
+    "Tool",
+    "build_messages",
+    "catalogue",
+]

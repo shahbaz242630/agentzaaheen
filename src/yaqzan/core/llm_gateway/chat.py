@@ -7,12 +7,17 @@ results, one at a time, before it must answer. A tool or argument that is
 not on the lists is refused and never run. Its final reply is plain text,
 which the dashboard shows as plain text; the reply also lists which tools
 were used, so the person can see what the answer rests on.
+
+The Board's chat (no workspace) may look inside a workspace only through an
+``inspect`` recorder (ADR-039, Board inspection): the look is recorded before
+anything is read, and refused if it cannot be. The answer then says which
+workspace it looked into.
 """
 
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -32,6 +37,8 @@ as proposals the owner approves.
 Write short plain text (no markdown tables), at most a few sentences or a short list."""
 
 MAX_ANSWER_CHARS = 4000
+# Records a Board inspection before it happens: (workspace slug, tool name, choice). Raises if it could not.
+Inspect = Callable[[str, str, str], Awaitable[None]]
 LAST_STEP = "You have used all your tool calls. Write the final answer now, with no tool block."
 
 
@@ -75,8 +82,10 @@ class FactChat:
         max_steps: int = 4,
         max_tokens: int = 400,
         temperature: float = 0.2,
+        inspect: Inspect | None = None,
     ) -> None:
         self.model_id = model_id
+        self._inspect = inspect
         self._model = model
         self._tools = {tool.name: tool for tool in tools}
         self._skills = skills
@@ -91,10 +100,11 @@ class FactChat:
         ``workspace`` (a slug) is the one workspace this question is asked in, set by
         the door; ``None`` is the Board. Tools are narrowed to it before the model sees them.
         """
+        inspecting = workspace is None and self._inspect is not None
         tools = {
             name: narrowed
             for name, tool in self._tools.items()
-            if (narrowed := tool.for_workspace(workspace)) is not None
+            if (narrowed := tool.for_workspace(workspace, inspecting=inspecting)) is not None
         }
         messages = build_messages(question, facts, tuple(tools.values()), self._skills)
         used: list[str] = []
@@ -108,13 +118,15 @@ class FactChat:
             call = None if last else parse_call(reply)
             if call is None:
                 return ChatReply(answer=_final(reply), used=tuple(used))
-            result, label = await self._run(tools, call.name, call.arg)
+            result, label = await self._run(tools, call.name, call.arg, board=workspace is None)
             if label:
                 used.append(label)
             messages += [{"role": "assistant", "content": reply}, {"role": "user", "content": result}]
         raise AssertionError("unreachable: the last step always answers")  # pragma: no cover
 
-    async def _run(self, tools: dict[str, Tool], name: str, arg: str) -> tuple[str, str | None]:
+    async def _run(  # one return per refusal, then the result
+        self, tools: dict[str, Tool], name: str, arg: str, *, board: bool
+    ) -> tuple[str, str | None]:
         """The wrapped result to show the model, and a label for ``used`` (``None`` if refused)."""
         tool = tools.get(name)
         if tool is None:
@@ -125,6 +137,15 @@ class FactChat:
             say(self._log, "chat_tool_refused", tool=name, reason="choice_not_allowed")
             allowed = " | ".join(tool.choices)
             return wrap_result(name, f"'{arg}' is not allowed. Allowed: {allowed}.", trusted=True), None
+        inspected = board and tool.workspace_of is not None
+        if (
+            tool.workspace_of is not None
+            and board
+            and not await self._recorded(tool.workspace_of(arg), name, arg)
+        ):
+            return wrap_result(
+                name, "That look could not be recorded, so it was not made.", trusted=True
+            ), None
         try:
             text = await tool.run(arg)
         except SourceError as exc:
@@ -133,7 +154,25 @@ class FactChat:
             return wrap_result(name, f"The read failed: {said.what} {said.fix}", trusted=True), None
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
         say(self._log, "chat_tool_used", tool=name, arg=arg, chars=len(text), sha256=digest)
-        return wrap_result(name, text, trusted=tool.trusted), f"{tool.label}: {arg}"
+        label = f"{tool.label}: {arg}"
+        return wrap_result(
+            name, text, trusted=tool.trusted
+        ), f"Board inspection: {label}" if inspected else label
+
+    async def _recorded(self, workspace: str, tool: str, choice: str) -> bool:
+        """Write a Board inspection down before it happens; False (and nothing read) if that failed."""
+        if self._inspect is None:
+            return self._refused(workspace, tool)
+        try:
+            await self._inspect(workspace, tool, choice)
+        except Exception:  # noqa: BLE001  # whatever failed, nothing is read unrecorded
+            return self._refused(workspace, tool)
+        say(self._log, "board_inspection", workspace=workspace, tool=tool)
+        return True
+
+    def _refused(self, workspace: str, tool: str) -> bool:
+        say(self._log, "board_inspection_refused", workspace=workspace, tool=tool)
+        return False
 
 
 def _final(reply: str) -> str:

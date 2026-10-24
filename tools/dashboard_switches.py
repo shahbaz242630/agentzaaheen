@@ -15,18 +15,27 @@ There is one tenant on the laptop: :data:`LAPTOP_TENANT`.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import SecretStr
 
 from tools import laptop_db
 from yaqzan.core.api.registry import DashboardSwitches, PasskeyStatus, RegistryPage, Use
 from yaqzan.core.auth import Site
-from yaqzan.core.policy import PasskeyApprovals, RegistryControl, Standing, Verdict
+from yaqzan.core.llm_gateway import Inspect
+from yaqzan.core.policy import (
+    AuditDraft,
+    AuditOutcome,
+    Ledger,
+    PasskeyApprovals,
+    RegistryControl,
+    Standing,
+    Verdict,
+)
 from yaqzan.core.registry import Kind, Registry
 from yaqzan.core.store import Database, DatabaseSettings, StoreError, WorkspaceRow, WorkspaceRows
 
@@ -95,6 +104,7 @@ class LaptopSwitches:
         self._uses = uses
         self._clock = clock
         self._switches: DashboardSwitches | None = None
+        self._ledger: Ledger | None = None
         self._opening: asyncio.Lock | None = None
 
     async def _open(self) -> DashboardSwitches:
@@ -103,12 +113,40 @@ class LaptopSwitches:
         async with self._opening:
             if self._switches is None:
                 db = await Database.open(self._settings)
+                self._ledger = Ledger(db, LAPTOP_TENANT)
                 control = RegistryControl(db, LAPTOP_TENANT, self._registry)
                 passkeys = PasskeyApprovals(
                     db, LAPTOP_TENANT, control, self._site, enrol_code=self._enrol_code, clock=self._clock
                 )
                 self._switches = DashboardSwitches(control, passkeys, self._registry, self._uses, self._clock)
         return self._switches
+
+    def recorder(self, workspaces: Sequence[WorkspaceRow]) -> Inspect:
+        """Board inspections (ADR-039), each written to the audit log before anything is read.
+
+        An unknown workspace, or an audit log that cannot be written, raises: the look is then not made.
+        """
+        ids = {w.slug: w.workspace_id for w in workspaces}
+
+        async def record(workspace: str, tool: str, choice: str) -> None:
+            await self._open()
+            if self._ledger is None:  # pragma: no cover  # _open always sets it
+                raise RuntimeError("the laptop database is not open")
+            await self._ledger.record(
+                AuditDraft(
+                    at=self._clock(),
+                    actor="user:chairman",
+                    action="board.inspection",
+                    outcome=AuditOutcome.INFO,
+                    reason_code="board.inspection",
+                    correlation_id=uuid4(),
+                    project_id=ids[workspace],
+                    target_ref=f"{tool}:{choice}",
+                    details={"workspace": workspace, "tool": tool},
+                )
+            )
+
+        return record
 
     async def standing(self) -> Standing:
         """How every item stands now (the chat asks before every question)."""

@@ -264,3 +264,62 @@ def test_a_workspace_with_no_choices_of_a_tool_does_not_see_that_tool() -> None:
     script = Script("Nothing to read.")
     ask_in(script, "sandoq-kin", per_workspace(Ran()))
     assert "failed_build_log" not in script.sent[0][0]["content"]
+
+
+# ---------------------------------------------------------------- Board inspection (ADR-039, amended 24 Oct)
+
+
+class Recorder:
+    """Stands in for the audit log: notes each look, or fails like a database that is down."""
+
+    def __init__(self, events: list[str], *, fail: bool = False) -> None:
+        self.events = events
+        self.fail = fail
+
+    async def __call__(self, workspace: str, tool: str, choice: str) -> None:
+        if self.fail:
+            raise RuntimeError("audit log unavailable")
+        self.events.append(f"recorded {workspace} {tool} {choice}")
+
+
+class Noting(Ran):
+    def __init__(self, events: list[str]) -> None:
+        super().__init__("log text")
+        self.events = events
+
+    async def __call__(self, arg: str) -> str:
+        self.events.append(f"read {arg}")
+        return await super().__call__(arg)
+
+
+def ask_board(script: Script, recorder: Recorder | None, *tools: Tool) -> ChatReply:
+    chat = FactChat(script, "local-gemma", tools=tools, skills="- fix-build: Fix a build.", inspect=recorder)
+    return asyncio.run(chat.ask("Is Eva's summary right?", "summaries"))
+
+
+def test_the_board_may_look_inside_a_workspace_and_the_look_is_recorded_first() -> None:
+    events: list[str] = []
+    script = Script(block("failed_build_log", "eva"), "Eva's build failed at the test step.")
+    reply = ask_board(script, Recorder(events), per_workspace(Noting(events)))
+    assert "zaaheen" in script.sent[0][0]["content"]  # every workspace is offered to the Board
+    assert events == ["recorded eva failed_build_log eva", "read eva"]  # recorded before it is read
+    assert reply.used == ("Board inspection: Build log: eva",)
+
+
+def test_a_look_that_cannot_be_recorded_is_not_made() -> None:
+    events: list[str] = []
+    script = Script(block("failed_build_log", "eva"), "I could not look.")
+    reply = ask_board(script, Recorder(events, fail=True), per_workspace(Noting(events)))
+    assert events == []  # nothing read
+    assert reply.used == ()
+    assert "could not be recorded" in script.sent[1][-1]["content"]
+
+
+def test_a_workspace_chat_never_inspects_even_with_a_recorder() -> None:
+    events: list[str] = []
+    script = Script(block("failed_build_log", "zaaheen"), "Not allowed.")
+    chat = FactChat(script, "local-gemma", tools=(per_workspace(Noting(events)),), inspect=Recorder(events))
+    reply = asyncio.run(chat.ask("Why red?", "facts", "eva"))
+    assert events == []
+    assert reply.used == ()
+    assert "zaaheen" not in script.sent[0][0]["content"]

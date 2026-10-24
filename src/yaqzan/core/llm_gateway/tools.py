@@ -17,8 +17,9 @@ untrusted (anything from outside, such as a build log).
 
 A tool that reads one project's data says which workspace each choice belongs
 to (``workspace_of``). A chat inside a workspace is given only that
-workspace's choices; the Board's chat is given none of them (ADR-039: the
-Board reads summaries, never a workspace's raw data).
+workspace's choices. The Board's chat reads summaries by default; it gets the
+workspaces' choices only for a Board inspection, when every look is recorded
+first (ADR-039, amended 24 Oct), and none at all otherwise.
 """
 
 from __future__ import annotations
@@ -50,12 +51,16 @@ class Tool:
     label: str
     workspace_of: Callable[[str], str] | None = None
 
-    def for_workspace(self, workspace: str | None) -> Tool | None:
-        """This tool as one workspace's chat may use it (``None``: the Board), or ``None`` if not at all."""
+    def for_workspace(self, workspace: str | None, *, inspecting: bool = False) -> Tool | None:
+        """This tool as one workspace's chat may use it, or ``None`` if not at all.
+
+        ``workspace`` ``None`` is the Board: it keeps every choice only when ``inspecting``
+        (each look is recorded before it is read), and gets none otherwise.
+        """
         if self.workspace_of is None:
             return self
         if workspace is None:
-            return None
+            return self if inspecting else None
         mine = tuple(c for c in self.choices if self.workspace_of(c) == workspace)
         return replace(self, choices=mine) if mine else None
 
