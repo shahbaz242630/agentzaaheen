@@ -323,3 +323,14 @@ def test_a_workspace_chat_never_inspects_even_with_a_recorder() -> None:
     assert events == []
     assert reply.used == ()
     assert "zaaheen" not in script.sent[0][0]["content"]
+
+
+def test_without_a_recorder_a_board_look_is_refused_even_if_the_tool_slipped_through() -> None:
+    """A guard behind the narrowing: if the Board ever got a per-workspace tool, it still fails closed."""
+    events: list[str] = []
+    chat = FactChat(Script("unused"), "local-gemma", inspect=None)
+    look = per_workspace(Noting(events))
+    result, label = asyncio.run(chat._run({look.name: look}, look.name, "eva", board=True))
+    assert events == []
+    assert label is None
+    assert "could not be recorded" in result
