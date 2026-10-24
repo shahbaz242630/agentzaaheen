@@ -106,13 +106,14 @@ class LaptopSwitches:
         self._switches: DashboardSwitches | None = None
         self._ledger: Ledger | None = None
         self._opening: asyncio.Lock | None = None
+        self._db: Database | None = None
 
     async def _open(self) -> DashboardSwitches:
         if self._opening is None:
             self._opening = asyncio.Lock()
         async with self._opening:
             if self._switches is None:
-                db = await Database.open(self._settings)
+                db = self._db = await Database.open(self._settings)
                 self._ledger = Ledger(db, LAPTOP_TENANT)
                 control = RegistryControl(db, LAPTOP_TENANT, self._registry)
                 passkeys = PasskeyApprovals(
@@ -129,6 +130,7 @@ class LaptopSwitches:
         ids = {w.slug: w.workspace_id for w in workspaces}
 
         async def record(workspace: str, tool: str, choice: str) -> None:
+            workspace_id = ids[workspace]  # an unknown workspace raises before anything is opened
             await self._open()
             if self._ledger is None:  # pragma: no cover  # _open always sets it
                 raise RuntimeError("the laptop database is not open")
@@ -140,13 +142,19 @@ class LaptopSwitches:
                     outcome=AuditOutcome.INFO,
                     reason_code="board.inspection",
                     correlation_id=uuid4(),
-                    project_id=ids[workspace],
+                    project_id=workspace_id,
                     target_ref=f"{tool}:{choice}",
                     details={"workspace": workspace, "tool": tool},
                 )
             )
 
         return record
+
+    async def close(self) -> None:
+        """Close the laptop database, if it was opened."""
+        if self._db is not None:
+            await self._db.close()
+            self._db = None
 
     async def standing(self) -> Standing:
         """How every item stands now (the chat asks before every question)."""

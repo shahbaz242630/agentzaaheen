@@ -273,7 +273,11 @@ def test_a_board_inspection_is_written_to_the_audit_log(laptop_url: SecretStr) -
     eva = next(w for w in laptop_db.LAPTOP_WORKSPACES if w.slug == "eva")
 
     async def body() -> list[AuditRow]:
-        await _switches(laptop_url).recorder(laptop_db.LAPTOP_WORKSPACES)("eva", "failed_build_log", "eva")
+        switches = _switches(laptop_url)
+        try:
+            await switches.recorder(laptop_db.LAPTOP_WORKSPACES)("eva", "failed_build_log", "eva")
+        finally:
+            await switches.close()
         db = await Database.open(DatabaseSettings(dsn=laptop_url))
         try:
             return await AuditRows(db.scoped(laptop_db.LAPTOP_TENANT)).all_rows()
@@ -288,7 +292,11 @@ def test_a_board_inspection_is_written_to_the_audit_log(laptop_url: SecretStr) -
 
 def test_a_look_at_an_unknown_workspace_raises_and_writes_nothing(laptop_url: SecretStr) -> None:
     async def body() -> None:
-        await _switches(laptop_url).recorder(laptop_db.LAPTOP_WORKSPACES)("nope", "failed_build_log", "nope")
+        switches = _switches(laptop_url)
+        try:
+            await switches.recorder(laptop_db.LAPTOP_WORKSPACES)("nope", "failed_build_log", "nope")
+        finally:
+            await switches.close()
 
     with pytest.raises(KeyError):
         run(body())
