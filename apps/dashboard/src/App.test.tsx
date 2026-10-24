@@ -33,10 +33,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Open a workspace from the left column (the Board's cards carry the same names).
+async function openWorkspace(name: string) {
+  const nav = await screen.findByRole("navigation", { name: "Workspaces" });
+  await userEvent.click(within(nav).getByRole("button", { name: new RegExp(name) }));
+  return screen.findByRole("heading", { level: 1, name });
+}
+
+async function startOn(name: string) {
+  render(<App />);
+  await openWorkspace(name);
+}
+
 describe("the dashboard", () => {
-  it("lists the projects and opens the first one", async () => {
+  it("opens on the Board and lists every workspace on the left", async () => {
     render(<App />);
-    const nav = await screen.findByRole("navigation", { name: "Projects" });
+    expect(await screen.findByRole("heading", { level: 1, name: "The Board" })).toBeInTheDocument();
+    const nav = await screen.findByRole("navigation", { name: "Workspaces" });
     const names = within(nav)
       .getAllByRole("button")
       .map((button) => button.textContent);
@@ -47,21 +60,20 @@ describe("the dashboard", () => {
       expect.stringContaining("Eva"),
       expect.stringContaining("Family Check-in"),
     ]);
-    expect(await screen.findByRole("heading", { level: 1, name: "Zaaheen" })).toBeInTheDocument();
+    expect(await openWorkspace("Zaaheen")).toBeInTheDocument();
     expect(screen.getByText(/Sample data/)).toBeInTheDocument();
     expect(screen.getByRole("article", { name: "Support email" })).toHaveTextContent("Responded23");
   });
 
   it("switches project when one is clicked", async () => {
     render(<App />);
-    await userEvent.click(await screen.findByRole("button", { name: /Agent X/ }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Agent X" })).toBeInTheDocument();
+    await openWorkspace("Zaaheen");
+    expect(await openWorkspace("Agent X")).toBeInTheDocument();
     expect(screen.getByText("99.95%")).toBeInTheDocument();
   });
 
   it("shows unknown, never 0, for a source that is not connected", async () => {
-    render(<App />);
-    await userEvent.click(await screen.findByRole("button", { name: /Eva/ }));
+    await startOn("Eva");
     const revenue = await screen.findByRole("article", { name: "Revenue" });
     expect(revenue).toHaveTextContent("Not connected yet");
     expect(within(revenue).getAllByText("unknown")).toHaveLength(2);
@@ -71,7 +83,7 @@ describe("the dashboard", () => {
   it("says so when the server cannot be reached", async () => {
     serve(() => new Response("{}", { status: 500 }));
     render(<App />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load the projects");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load the workspaces");
   });
 
   it("refuses an answer that breaks the contract", async () => {
@@ -81,7 +93,7 @@ describe("the dashboard", () => {
         : undefined,
     );
     render(<App />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load the projects");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load the workspaces");
   });
 });
 
@@ -95,7 +107,7 @@ describe("real and sample cards side by side", () => {
     serve((path) =>
       path === "/api/workspaces/zaaheen" ? new Response(JSON.stringify(mixed), { status: 200 }) : undefined,
     );
-    render(<App />);
+    await startOn("Zaaheen");
     expect(await screen.findByText(/The others are real/)).toBeInTheDocument();
     const revenue = screen.getAllByRole("article", { name: "Revenue" });
     expect(revenue[0]).not.toHaveTextContent("Sample");
@@ -115,7 +127,9 @@ describe("the UI enforces the API's rules too", () => {
       path === "/api/workspaces/zaaheen" ? new Response(JSON.stringify(stale), { status: 200 }) : undefined,
     );
     render(<App />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load this project");
+    const nav = await screen.findByRole("navigation", { name: "Workspaces" });
+    await userEvent.click(within(nav).getByRole("button", { name: /Zaaheen/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load this workspace");
     expect(screen.queryByText("$1,240")).not.toBeInTheDocument();
   });
 
@@ -127,8 +141,9 @@ describe("the UI enforces the API's rules too", () => {
     };
     serve((path) => (path === "/api/workspaces/eva" ? new Response(JSON.stringify(odd), { status: 200 }) : undefined));
     render(<App />);
-    await userEvent.click(await screen.findByRole("button", { name: /Eva/ }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load this project");
+    const nav = await screen.findByRole("navigation", { name: "Workspaces" });
+    await userEvent.click(within(nav).getByRole("button", { name: /Eva/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load this workspace");
   });
 
   it.each([
@@ -138,15 +153,15 @@ describe("the UI enforces the API's rules too", () => {
     const models = { models: sample.models.models.map((m) => ({ ...m, ...change(m) })) };
     serve((path) => (path === "/api/models" ? new Response(JSON.stringify(models), { status: 200 }) : undefined));
     render(<App />);
-    await screen.findByRole("heading", { level: 1, name: "Zaaheen" });
+    await screen.findByRole("heading", { level: 1, name: "The Board" });
     expect(screen.queryByRole("option", { name: /Claude/ })).not.toBeInTheDocument();
     expect(screen.getByText(/No model list yet/)).toBeInTheDocument();
   });
 
-  it("says so when there are no projects", async () => {
+  it("says so when there are no workspaces", async () => {
     serve((path) => (path === "/api/workspaces" ? new Response("[]", { status: 200 }) : undefined));
     render(<App />);
-    expect(await screen.findByText("No projects yet.")).toBeInTheDocument();
+    expect(await screen.findAllByText("No workspaces yet.")).not.toHaveLength(0);
   });
 });
 
@@ -159,8 +174,7 @@ describe("the chat", () => {
   });
 
   it("answers honestly that no model is connected yet", async () => {
-    render(<App />);
-    await screen.findByRole("heading", { level: 1, name: "Zaaheen" });
+    await startOn("Zaaheen");
     await userEvent.type(screen.getByLabelText("Message"), "Summarise yesterday's actions{Enter}");
     expect(screen.getByText("Summarise yesterday's actions")).toBeInTheDocument();
     expect(screen.getByText(/so I can.t answer for real/)).toHaveTextContent("Zaaheen");
@@ -191,15 +205,14 @@ describe("the chat", () => {
   });
 
   it("shows text exactly as written, never as HTML", async () => {
-    render(<App />);
-    await screen.findByRole("heading", { level: 1, name: "Zaaheen" });
+    await startOn("Zaaheen");
     await userEvent.type(screen.getByLabelText("Message"), "<b>bold</b>{Enter}");
     expect(screen.getByText("<b>bold</b>")).toBeInTheDocument();
     expect(document.querySelector("b")).toBeNull();
   });
 
   it("words the reply without a model or a project", () => {
-    expect(notConnectedReply(undefined, null)).toMatch(/^The model is not connected yet.*your projects/);
+    expect(notConnectedReply(undefined, null)).toMatch(/^The model is not connected yet.*all your workspaces/);
   });
 });
 
@@ -226,8 +239,7 @@ describe("the chat with the local model connected", () => {
   }
 
   async function ask(question: string) {
-    render(<App />);
-    await screen.findByRole("heading", { level: 1, name: "Zaaheen" });
+    await startOn("Zaaheen");
     await screen.findByRole("option", { name: /Gemma \(local\) · default$/ });
     await userEvent.type(screen.getByLabelText("Message"), `${question}{Enter}`);
   }
@@ -305,5 +317,122 @@ describe("the chat with the local model connected", () => {
     expect(failureReply(new Error("boom"), undefined, null)).toBe(
       "Something went wrong asking the model. Nothing was changed.",
     );
+  });
+});
+
+describe("the Board and the workspace pages (ADR-039)", () => {
+  it("lists what needs you from every workspace, and opens one from its card", async () => {
+    render(<App />);
+    const needs = await screen.findByRole("region", { name: "Needs you" });
+    const escalated = sample.projects.filter((p) => p.escalations > 0);
+    for (const project of escalated) {
+      expect(within(needs).getByRole("button", { name: `Open ${project.name}` })).toBeInTheDocument();
+    }
+    const cards = screen.getByRole("region", { name: "Workspaces" });
+    await userEvent.click(within(cards).getByRole("button", { name: /Sandoq Kin/ }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Sandoq Kin" })).toBeInTheDocument();
+  });
+
+  it("shows a waiting Customize request under Needs you and opens Customize to review it", async () => {
+    const asked = {
+      ...sample.registry,
+      requests: [
+        {
+          id: "8f2d7c1e-2b3a-4c5d-8e9f-0a1b2c3d4e5f",
+          kind: "skill",
+          item_id: "triage-failing-build",
+          requested_at: "2026-10-18T11:00:00Z",
+          stale: false,
+        },
+      ],
+    };
+    serve((path) => (path === "/api/registry" ? new Response(JSON.stringify(asked), { status: 200 }) : undefined));
+    render(<App />);
+    const needs = await screen.findByRole("region", { name: "Needs you" });
+    expect(await within(needs).findByText(/switch on the skill “triage-failing-build”/)).toBeInTheDocument();
+    await userEvent.click(within(needs).getByRole("button", { name: "Review" }));
+    expect(screen.getByRole("button", { name: "Customize" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("says plainly what is not set up yet, never made-up agents or summaries", async () => {
+    render(<App />);
+    const cards = await screen.findByRole("region", { name: "Workspaces" });
+    expect(within(cards).getAllByText("Agents: none yet")).toHaveLength(sample.projects.length);
+    expect(within(cards).getAllByText("Daily summary: not set up yet")).toHaveLength(sample.projects.length);
+  });
+
+  it("has tabs: the cards, no agents yet, the open alerts, and the connected sources", async () => {
+    await startOn("Zaaheen");
+    expect(screen.getByText("Everything on this page belongs to Zaaheen only.")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+
+    await userEvent.click(screen.getByRole("tab", { name: "Agents" }));
+    expect(screen.getByRole("heading", { name: "No agents yet" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Alerts" }));
+    const alerts = sample.details.zaaheen.cards.flatMap((c) =>
+      c.entries.filter((e) => e.tone === "alert" || e.tone === "warn"),
+    );
+    const panel = screen.getByRole("tabpanel");
+    if (alerts.length === 0) expect(panel).toHaveTextContent("No open alerts.");
+    for (const alert of alerts) expect(panel).toHaveTextContent(alert.text);
+
+    await userEvent.click(screen.getByRole("tab", { name: "Sources" }));
+    const used = sample.registry.connectors.filter((c) => c.uses.some((u) => u.project_id === "zaaheen"));
+    const sources = screen.getByRole("tabpanel");
+    if (used.length === 0) expect(sources).toHaveTextContent("No sources connected yet.");
+    for (const connector of used) expect(sources).toHaveTextContent(connector.name);
+  });
+
+  it("lists only this workspace's sources, never another's", async () => {
+    await startOn("Agent X");
+    await userEvent.click(screen.getByRole("tab", { name: "Sources" }));
+    const sources = screen.getByRole("tabpanel");
+    expect(sources).toHaveTextContent("GitHub");
+    expect(sources).not.toHaveTextContent("Paddle"); // Zaaheen's, not Agent X's
+  });
+
+  it("starts a fresh chat in each workspace, so one workspace's talk never shows in another", async () => {
+    await startOn("Zaaheen");
+    await userEvent.type(screen.getByLabelText("Message"), "Only about Zaaheen{Enter}");
+    expect(screen.getByText("Only about Zaaheen")).toBeInTheDocument();
+    await openWorkspace("Eva");
+    expect(screen.queryByText("Only about Zaaheen")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /The Board/ }));
+    expect(screen.queryByText("Only about Zaaheen")).not.toBeInTheDocument();
+  });
+});
+
+describe("the chat asks at the open workspace's own address", () => {
+  const connected = { models: sample.models.models.map((m) => ({ ...m, available: m.id === "local-gemma" })) };
+
+  function serveAsked(): string[] {
+    const asked: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((path: string, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          asked.push(path);
+          const body = { model_id: "local-gemma", answer: "Done.", from_sample: false, used: [] };
+          return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+        }
+        const body = path === "/api/models" ? connected : answer(path);
+        return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+      }),
+    );
+    return asked;
+  }
+
+  it("asks Eva's chat at Eva's address and the Board's at the Board's", async () => {
+    const asked = serveAsked();
+    await startOn("Eva");
+    await screen.findByRole("option", { name: /Gemma \(local\) · default$/ });
+    await userEvent.type(screen.getByLabelText("Message"), "Why red?{Enter}");
+    await screen.findByText("Done.");
+    await userEvent.click(screen.getByRole("button", { name: /The Board/ }));
+    await screen.findByRole("option", { name: /Gemma \(local\) · default$/ });
+    await userEvent.type(screen.getByLabelText("Message"), "Any news?{Enter}");
+    await screen.findByText("Done.");
+    expect(asked).toEqual(["/api/workspaces/eva/chat", "/api/chat"]);
   });
 });

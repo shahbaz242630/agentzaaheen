@@ -1,11 +1,5 @@
-import type { Health, ProjectSummary } from "../api";
-
-const HEALTH: Record<Health, { dot: string; label: string }> = {
-  ok: { dot: "bg-ok", label: "All good" },
-  warn: { dot: "bg-warn", label: "Needs a look" },
-  alert: { dot: "bg-alert", label: "Urgent" },
-  unknown: { dot: "bg-unknown", label: "Unknown" },
-};
+import type { ProjectSummary } from "../api";
+import { HEALTH } from "./health";
 
 interface Props {
   projects: readonly ProjectSummary[];
@@ -15,8 +9,8 @@ interface Props {
 
 export function ProjectList({ projects, selected, onSelect }: Props) {
   return (
-    <nav aria-label="Projects" className="flex flex-col gap-1">
-      <h2 className="px-3 pb-2 text-xs font-semibold tracking-wider text-faint uppercase">Projects</h2>
+    <nav aria-label="Workspaces" className="flex flex-col gap-1">
+      <h2 className="px-3 pb-2 text-xs font-semibold tracking-wider text-faint uppercase">Workspaces</h2>
       <ul className="flex flex-col gap-1">
         {projects.map((project) => {
           const health = HEALTH[project.health];
