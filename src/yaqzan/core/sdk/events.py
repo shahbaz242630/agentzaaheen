@@ -244,6 +244,11 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="Wrote {record} to the database in {duration_ms} ms.",
         why="Yaqzan keeps it so it is not forgotten.",
     ),
+    "store_unchanged": LogEvent(
+        "info",
+        what="Nothing needed writing for {record} ({duration_ms} ms).",
+        why="The database already had it, or it was no longer waiting, so nothing changed.",
+    ),
     "store_write_failed": LogEvent(
         "warning",
         what="Could not save {record} to the database.",

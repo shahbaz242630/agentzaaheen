@@ -8,6 +8,7 @@ belongs to at most one workspace of a tenant; every attempt is audited.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -274,3 +275,25 @@ def test_a_database_that_fails_while_adding_is_not_called_taken(
     with pytest.raises(StoreError) as caught:
         run(body())
     assert caught.value.code is StoreErrorCode.UNAVAILABLE
+
+
+def test_adding_what_is_already_there_logs_that_nothing_needed_writing(
+    test_db: ScratchDb, capsys: pytest.CaptureFixture[str]
+) -> None:
+    async def body() -> list[bool]:
+        async with open_db(test_db.app_url) as db:
+            rows = WorkspaceRows(db.scoped(TENANT))
+            capsys.readouterr()  # only this test's lines
+            await rows.add_tenant("Test tenant")
+            existing = WorkspaceRow(workspace_id=EXISTING, slug=f"w-{EXISTING.hex}", name="Renamed?")
+            fresh = WorkspaceRow(workspace_id=UUID(int=7), slug="fresh", name="Fresh")
+            return [await rows.add(existing), await rows.add(fresh)]
+
+    assert run(body()) == [False, True]
+    events = [json.loads(raw) for raw in capsys.readouterr().err.splitlines() if raw.startswith("{")]
+    said = [(e["event"], e["record"]) for e in events if e.get("event", "").startswith("store_")]
+    assert said == [
+        ("store_unchanged", "a tenant"),
+        ("store_unchanged", "a workspace"),
+        ("store_saved", "a workspace"),
+    ]

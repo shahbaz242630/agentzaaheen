@@ -18,7 +18,7 @@ from uuid import UUID
 
 import asyncpg
 
-from yaqzan.core.store.db import Scoped, require_aware
+from yaqzan.core.store.db import Scoped, require_aware, written
 
 ItemKind = Literal["connector", "skill", "plugin"]
 
@@ -170,7 +170,7 @@ class RegistrySwitchRows:
                 request.requested_by,
                 request.requested_at,
             )
-        return added is not None
+            return written(added)
 
     async def approve(self, request_id: UUID, *, by: str, at: datetime, step_up_at: datetime) -> bool:
         """Approve a pending request and switch its item on, in one transaction. False if not pending.
@@ -181,7 +181,7 @@ class RegistrySwitchRows:
         require_aware(at, step_up_at)
         async with self._scope.write("an approved request and its switch") as conn:
             asked = await conn.fetchrow(_APPROVE, self._tenant, request_id, by, at, step_up_at)
-            if asked is None:
+            if not written(asked) or asked is None:  # the second test is for the type checker
                 return False
             await conn.execute(
                 _SWITCH_ON,
@@ -199,10 +199,10 @@ class RegistrySwitchRows:
         """Refuse a pending request. Returns False if it is unknown or already decided."""
         require_aware(at)
         async with self._scope.write("a refused request") as conn:
-            return await conn.fetchval(_REFUSE, self._tenant, request_id, by, at) is not None
+            return written(await conn.fetchval(_REFUSE, self._tenant, request_id, by, at))
 
     async def withdraw(self, request_id: UUID, *, by: str, at: datetime) -> bool:
         """Withdraw a pending request. Returns False if it is unknown or already decided."""
         require_aware(at)
         async with self._scope.write("a withdrawn request") as conn:
-            return await conn.fetchval(_WITHDRAW, self._tenant, request_id, by, at) is not None
+            return written(await conn.fetchval(_WITHDRAW, self._tenant, request_id, by, at))
