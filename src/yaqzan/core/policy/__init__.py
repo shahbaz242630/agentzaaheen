@@ -64,7 +64,7 @@ from yaqzan.core.policy.gate import (
 from yaqzan.core.policy.ledger import Ledger, load_kill_switches
 from yaqzan.core.policy.passkey_approvals import PasskeyApprovals
 from yaqzan.core.policy.registry_control import OUTSIDE_KINDS, Pending, RegistryControl, Standing, Verdict
-from yaqzan.core.policy.workspaces import LifecycleVerdict, Removal, WorkspaceControl
+from yaqzan.core.policy.workspaces import Added, LifecycleVerdict, Removal, WorkspaceControl, slug_of
 
 __all__ = [
     "GENESIS_HASH",
@@ -74,6 +74,7 @@ __all__ = [
     "REDUCES_RISK",
     "STEP_UP_MAX_AGE",
     "AccessDecision",
+    "Added",
     "AgentControl",
     "AgentPolicy",
     "AgentVerdict",
@@ -112,5 +113,6 @@ __all__ = [
     "authorize",
     "decide",
     "load_kill_switches",
+    "slug_of",
     "verify_chain",
 ]

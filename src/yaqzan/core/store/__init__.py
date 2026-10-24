@@ -6,7 +6,8 @@ What it does:
     audit rows, sealed credentials, kill-switch state, registry switches
     and requests (ADR-030), the passkey (ADR-SEC-007), the revenue mirror
     (subscriptions, payments, refunds), each collector's sync state, the
-    tenants and workspaces (archived, brought back or deleted for good),
+    tenants and workspaces (archived, brought back or deleted for good, and the
+    GitHub repository each reads),
     and each workspace's agents, switch and cap with
     the frozen role versions they run (ADR-039). Every table has a ``tenant_id`` and sits
     behind a database wall (row-level security, forced): each transaction
@@ -68,6 +69,7 @@ from yaqzan.core.store.workspaces import (
     WorkspaceLifecycle,
     WorkspaceRow,
     WorkspaceRows,
+    WorkspaceSources,
 )
 
 __all__ = [
@@ -115,6 +117,7 @@ __all__ = [
     "WorkspaceRow",
     "WorkspaceRows",
     "WorkspaceSettings",
+    "WorkspaceSources",
     "check_schema",
     "migrate",
 ]

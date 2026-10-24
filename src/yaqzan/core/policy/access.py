@@ -66,6 +66,7 @@ class Operation(StrEnum):
     # Removing a project (ADR-039). Archiving stops everything but deletes the saved keys, which cannot be
     # undone, so it needs a fresh passkey like the other two.
     ARCHIVE_WORKSPACE = "archive_workspace"
+    ADD_WORKSPACE = "add_workspace"  # a new project: nothing in it is switched on and it cannot spend
     RESTORE_WORKSPACE = "restore_workspace"
     ERASE_WORKSPACE = "erase_workspace"  # delete an archived workspace's data for good
 
@@ -86,6 +87,8 @@ REDUCES_RISK = frozenset(
         # A new agent is switched off and cannot spend: nothing runs until a passkey turns it on.
         Operation.ASSIGN_AGENT,
         Operation.LOWER_CAP,
+        # A new workspace likewise: no agents, switched off, no cap (ADR-039 amended 24 Oct).
+        Operation.ADD_WORKSPACE,
     }
 )
 INCREASES_RISK = frozenset(set(Operation) - REDUCES_RISK)

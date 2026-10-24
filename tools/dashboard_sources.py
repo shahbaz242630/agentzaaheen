@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from pydantic import SecretStr
 
+from tools.laptop_db import LAPTOP_REPOS
 from yaqzan.core.api import Portfolio, SamplePortfolio
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
 from yaqzan.core.api.code import code_card, failed_code_card
@@ -30,14 +31,8 @@ from yaqzan.plugins.connectors.paddle import ALLOWED_HOSTS, API_VERSION_HEADER, 
 PADDLE_SCHEDULE = timedelta(hours=1)
 # Read once at start, like Paddle: "unknown" after two hours.
 GITHUB_SCHEDULE = timedelta(hours=1)
-# Which repository each project's Code card reads (checked against the local clones, 20 Oct 2026).
-GITHUB_REPOS: dict[str, str] = {
-    "zaaheen": "shahbaz242630/zaaheen",
-    "sandoq-kin": "shahbaz242630/Document-Vault",
-    "agent-x": "shahbaz242630/agent-x",
-    "eva": "shahbaz242630/AI-Agent-SAAS",
-    "family-checkin": "shahbaz242630/Family-Checkin",
-}
+# Which repository each project's Code card reads (the laptop's five projects).
+GITHUB_REPOS: dict[str, str] = dict(LAPTOP_REPOS)
 
 Clock = Callable[[], datetime]
 

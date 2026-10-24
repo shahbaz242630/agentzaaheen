@@ -1,7 +1,7 @@
 id: github
 type: connector
-version: 0.2.0
-sdk: ">=1.6,<2"
+version: 0.3.0
+sdk: ">=1.11,<2"
 permissions: [read]
 egress: [api.github.com, "productionresultssa<n>.blob.core.windows.net"]
 endpoints:
@@ -10,12 +10,15 @@ endpoints:
   - GET /search/issues
   - GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs
   - GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs
+  - GET /repos/{owner}/{repo}/git/trees/{branch}
+  - GET /repos/{owner}/{repo}/contents/{path}
+  - GET /user/repos
 credentials:
   - name: token
-    scope_hint: "fine-grained, read-only: issues, pull requests, actions, metadata; chosen repositories only"
+    scope_hint: "fine-grained, read-only: contents, issues, pull requests, actions, metadata; chosen repositories only"
     verify: true
 data_class: internal
 interface:
   display_name: GitHub
   category: Code
-  description: "Open issues, open pull requests and the main branch's latest build as counts; a failed build's log only when triage asks (untrusted)."
+  description: "Open issues, open pull requests and the main branch's latest build as counts; a failed build's log only when triage asks, and the scout's file list and a few files (both untrusted)."

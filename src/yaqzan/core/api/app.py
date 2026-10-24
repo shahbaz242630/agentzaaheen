@@ -28,7 +28,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID, uuid5
@@ -37,6 +38,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from yaqzan.core.api.adding import WorkspaceAdding, adding_routes
 from yaqzan.core.api.agents import AgentSwitches, agent_routes
 from yaqzan.core.api.facts import portfolio_facts, project_facts, uses_sample
 from yaqzan.core.api.registry import (
@@ -358,6 +360,8 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     workspaces: WorkspaceDirectory | None = None,
     agents: AgentSwitches | None = None,
     removal: WorkspaceRemoval | None = None,
+    adding: WorkspaceAdding | None = None,
+    on_close: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
     """Build the app. ``static_dir`` is the built web UI; without it only the API is served.
 
@@ -365,6 +369,8 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     it, each project of the portfolio is a workspace (sample data, no database).
     ``agents`` is the Agents tab (with a database); without it the tab is read-only and empty.
     ``removal`` archives, brings back and deletes workspaces (with a database); without it, it is refused.
+    ``adding`` adds a project from the Board (with a database); without it, it is refused.
+    ``on_close`` runs when the server stops (the laptop database's pool is closed there).
 
     Without ``chat`` the chat route answers ``chat.not_connected``. ``registry`` is
     what the Customize page shows (read once at start); without it the page is empty.
@@ -374,7 +380,16 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     page = registry or RegistryPage()
     log = get_logger("yaqzan.api")
     busy = asyncio.Lock()
-    app = FastAPI(title="Yaqzan", docs_url=None, redoc_url=None, openapi_url=None)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            if on_close is not None:
+                await on_close()
+
+    app = FastAPI(title="Yaqzan", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
 
     app.middleware("http")(_with_headers)
@@ -389,10 +404,8 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     app.state.workspaces = directory
 
     def detail_of(workspace: WorkspaceRow) -> ProjectDetail:
-        detail = portfolio.project(workspace.slug)
-        if detail is None:
-            raise HTTPException(status_code=404, detail="workspace.no_data")
-        return detail
+        # A project just added has no cards yet: its page says so ("No data yet"), never an error.
+        return portfolio.project(workspace.slug) or ProjectDetail(project=_no_data(workspace), cards=())
 
     @app.get("/api/workspaces")
     def list_workspaces() -> tuple[ProjectSummary, ...]:
@@ -411,6 +424,7 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     _passkey_routes(app, switches)
     agent_routes(app, agents, _refuse_foreign)
     removal_routes(app, removal, directory, _refuse_foreign)
+    adding_routes(app, adding, directory, _refuse_foreign)
 
     async def answer(question: ChatQuestion, facts: str, sample: bool, workspace: str | None) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:

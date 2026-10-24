@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from yaqzan.core.store.db import Scoped
+from yaqzan.core.store.db import Scoped, require_aware
+from yaqzan.core.store.errors import StoreError, StoreErrorCode
 
 _ADD_TENANT = """
 INSERT INTO yaqzan.tenants (tenant_id, name) VALUES ($1, $2)
@@ -28,6 +29,14 @@ INSERT INTO yaqzan.workspaces (tenant_id, workspace_id, slug, name) VALUES ($1, 
 ON CONFLICT (tenant_id, workspace_id) DO NOTHING
 RETURNING workspace_id
 """
+_ADD_SOURCE = """
+INSERT INTO yaqzan.workspace_sources (tenant_id, project_id, kind, ref, added_by, added_at)
+VALUES ($1, $2, 'github', $3, $4, $5)
+"""
+_SOURCE = """
+SELECT ref FROM yaqzan.workspace_sources WHERE tenant_id = $1 AND project_id = $2 AND kind = 'github'
+"""
+_SLUGS = "SELECT slug FROM yaqzan.workspaces WHERE tenant_id = $1"
 _RENAME = "UPDATE yaqzan.workspaces SET name = $3 WHERE tenant_id = $1 AND workspace_id = $2"
 _LIST = """
 SELECT workspace_id, slug, name FROM yaqzan.workspaces WHERE tenant_id = $1 AND state = $2
@@ -98,6 +107,30 @@ class WorkspaceRows:
             )
             return added is not None
 
+    async def create(self, workspace: WorkspaceRow, *, github: str | None, by: str, at: datetime) -> None:
+        """Add a new workspace and, if given, the GitHub repository it reads: both, or neither.
+
+        The handle must be for the new workspace itself (its id chosen by the caller), so the
+        repository row lands behind that workspace's wall. A slug or repository already taken
+        fails as :class:`StoreError` ``store.conflict``.
+        """
+        if self._scope.workspace_id != workspace.workspace_id:
+            raise ValueError("create a workspace through a handle for that workspace")
+        require_aware(at)
+        async with self._scope.write("a new workspace") as conn:
+            added = await conn.fetchval(
+                _ADD_WORKSPACE, self._tenant, workspace.workspace_id, workspace.slug, workspace.name
+            )
+            if added is None:
+                raise StoreError(StoreErrorCode.CONFLICT, "this workspace already exists")
+            if github is not None:
+                await conn.execute(_ADD_SOURCE, self._tenant, workspace.workspace_id, github, by, at)
+
+    async def slugs(self) -> set[str]:
+        """Every address the tenant has used, archived and deleted ones too (they stay reserved)."""
+        async with self._scope.connection() as conn:
+            return {row["slug"] for row in await conn.fetch(_SLUGS, self._tenant)}
+
     async def rename(self, workspace_id: UUID, name: str) -> None:
         """Give a workspace a new display name."""
         async with self._scope.write("a workspace's new name") as conn:
@@ -115,6 +148,26 @@ class WorkspaceRows:
         async with self._scope.connection() as conn:
             rows = await conn.fetch(_LIST, self._tenant, state)
         return [WorkspaceRow(**dict(row)) for row in rows]
+
+
+class WorkspaceSources:
+    """The repository the one workspace of its handle reads."""
+
+    def __init__(self, scope: Scoped) -> None:
+        self._scope = scope
+        self._key = (scope.tenant_id, scope.require_workspace())
+
+    async def github(self) -> str | None:
+        """The GitHub repository (``owner/name``), or ``None`` if none is connected."""
+        async with self._scope.connection() as conn:
+            found: str | None = await conn.fetchval(_SOURCE, *self._key)
+        return found
+
+    async def connect_github(self, repo: str, *, by: str, at: datetime) -> None:
+        """Connect a GitHub repository to a workspace that has none (the laptop set-up's projects)."""
+        require_aware(at)
+        async with self._scope.write("a workspace's repository") as conn:
+            await conn.execute(_ADD_SOURCE, *self._key, repo, by, at)
 
 
 class WorkspaceLifecycle:

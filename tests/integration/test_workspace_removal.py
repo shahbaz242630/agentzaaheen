@@ -42,6 +42,7 @@ from yaqzan.core.store import (
     StoreError,
     WorkspaceRow,
     WorkspaceRows,
+    WorkspaceSources,
 )
 
 EVA = UUID("00000000-0000-4000-8000-0000000000f2")
@@ -50,6 +51,7 @@ NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 PROJECT_TABLES = (
     "events", "runs", "findings", "actions", "sealed_secrets", "revenue_subscriptions",
     "revenue_payments", "revenue_refunds", "source_syncs", "workspace_settings", "agents",
+    "workspace_sources",
 )  # fmt: skip
 
 
@@ -96,6 +98,9 @@ async def _busy(db: Database, library: RoleLibrary, workspace: UUID) -> UUID:
     await rules.set_workspace(workspace, enabled=True, cap_minor=1000, **ME, step_up_at=_hello(1))
     await rules.set_agent(workspace, agent, enabled=True, cap_minor=500, **ME, step_up_at=_hello(2))
     await SealedSecrets(db.scoped(TENANT, workspace)).put(_key(workspace))
+    await WorkspaceSources(db.scoped(TENANT, workspace)).connect_github(
+        f"owner/busy-{workspace.hex[-4:]}", by="user:chairman", at=NOW
+    )
     await Records(db.scoped(TENANT, workspace)).add_run(
         run_record(
             project_id=workspace, tenant_id=TENANT, agent=str(agent), cost_minor_units=10, started_at=NOW
@@ -148,6 +153,7 @@ def test_archiving_switches_everything_off_deletes_the_keys_and_keeps_the_histor
         counts = await _counts(test_db.admin_url, EVA)
         assert counts["sealed_secrets"] == 0
         assert counts["runs"] == 1  # the history is kept
+        assert counts["workspace_sources"] == 1  # still its repository: bringing it back needs no new link
         assert (await _counts(test_db.admin_url, ZAAHEEN))["sealed_secrets"] == 1
 
     run(body())

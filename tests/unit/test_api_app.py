@@ -71,6 +71,12 @@ def test_serves_the_web_ui(client: TestClient) -> None:
 
 @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
 def test_the_api_is_read_only(client: TestClient, method: str) -> None:
+    assert client.request(method, "/api/models").status_code == 405
+
+
+@pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])
+def test_the_workspace_list_only_reads_and_adds(client: TestClient, method: str) -> None:
+    # POST adds a project (F17 slice 5a, test_api_adding.py); nothing changes or deletes the list itself.
     assert client.request(method, "/api/workspaces").status_code == 405
 
 
@@ -93,3 +99,15 @@ def test_serves_the_api_alone_without_a_ui() -> None:
     client = TestClient(create_app(SamplePortfolio(NOW)), base_url="http://localhost")
     assert client.get("/api/workspaces").status_code == 200
     assert client.get("/").status_code == 404
+
+
+def test_what_must_be_closed_is_closed_when_the_server_stops() -> None:
+    closed: list[bool] = []
+
+    async def close() -> None:
+        closed.append(True)
+
+    with TestClient(create_app(SamplePortfolio(NOW), on_close=close), base_url="http://localhost") as running:
+        assert running.get("/api/models").status_code == 200
+        assert closed == []
+    assert closed == [True]
