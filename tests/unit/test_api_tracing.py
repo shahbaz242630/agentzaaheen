@@ -36,18 +36,18 @@ def client(tmp_path: Path) -> TestClient:
 
 
 def test_an_api_answer_carries_the_traceparent_of_its_span(client: TestClient, spans: Recorded) -> None:
-    response = client.get("/api/projects/zaaheen")
+    response = client.get("/api/workspaces/zaaheen")
     assert response.status_code == 200
     match = TRACEPARENT.fullmatch(response.headers["traceparent"])
     assert match is not None
-    done = spans.named("GET /api/projects/{project_id}")
+    done = spans.named("GET /api/workspaces/{slug}")
     assert done.kind is SpanKind.SERVER
     assert done.context is not None
     assert match.group(1) == f"{done.context.trace_id:032x}"
     assert match.group(2) == f"{done.context.span_id:016x}"
     assert dict(done.attributes or {}) == {
         "http.request.method": "GET",
-        "http.route": "/api/projects/{project_id}",
+        "http.route": "/api/workspaces/{slug}",
         "http.response.status_code": 200,
     }
     assert "zaaheen" not in done.to_json()  # the template, never the filled-in path
@@ -55,15 +55,15 @@ def test_an_api_answer_carries_the_traceparent_of_its_span(client: TestClient, s
 
 
 def test_a_refusal_is_traced_but_not_an_error(client: TestClient, spans: Recorded) -> None:
-    response = client.get("/api/projects/nope")
+    response = client.get("/api/workspaces/nope")
     assert response.status_code == 404
     assert "traceparent" in response.headers
-    done = spans.named("GET /api/projects/{project_id}")
+    done = spans.named("GET /api/workspaces/{slug}")
     assert done.status.status_code is StatusCode.UNSET
 
 
 def test_a_server_error_marks_the_span(client: TestClient, spans: Recorded) -> None:
-    question = {"project_id": "zaaheen", "model_id": "local-gemma", "question": "How is revenue?"}
+    question = {"model_id": "local-gemma", "question": "How is revenue?"}
     response = client.post("/api/chat", json=question, headers=OURS)
     assert response.status_code == 503
     done = spans.named("POST /api/chat")
@@ -80,9 +80,9 @@ def test_an_unknown_api_path_is_unmatched(client: TestClient, spans: Recorded) -
 
 def test_a_traceparent_sent_to_us_is_ignored(client: TestClient, spans: Recorded) -> None:
     theirs = "00-" + "a" * 32 + "-" + "b" * 16 + "-01"
-    response = client.get("/api/projects", headers={"traceparent": theirs})
+    response = client.get("/api/workspaces", headers={"traceparent": theirs})
     assert not response.headers["traceparent"].startswith("00-" + "a" * 32)
-    done = spans.named("GET /api/projects")
+    done = spans.named("GET /api/workspaces")
     assert done.parent is None
 
 
@@ -94,6 +94,6 @@ def test_the_web_ui_is_not_traced(client: TestClient, spans: Recorded) -> None:
 
 
 def test_without_tracing_there_is_no_traceparent(client: TestClient) -> None:
-    response = client.get("/api/projects")
+    response = client.get("/api/workspaces")
     assert response.status_code == 200
     assert "traceparent" not in response.headers

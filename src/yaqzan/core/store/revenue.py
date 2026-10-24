@@ -15,7 +15,7 @@ from uuid import UUID
 import asyncpg
 
 from yaqzan.core.sdk import BillingCycle, Payment, Refund, RevenueBatch, Subscription
-from yaqzan.core.store.db import Connection, Database, require_aware
+from yaqzan.core.store.db import Connection, Scoped, require_aware
 from yaqzan.core.store.errors import StoreError, StoreErrorCode
 
 # A read that would return more rows than this is refused rather than silently cut short.
@@ -117,19 +117,18 @@ def _bounded(rows: list[asyncpg.Record]) -> list[asyncpg.Record]:
 
 
 class RevenueRows:
-    """Repository for the revenue mirror and the sync state of every collector."""
+    """Repository for the revenue mirror and the sync state of every collector, in one workspace."""
 
-    def __init__(self, db: Database) -> None:
-        self._db = db
+    def __init__(self, scope: Scoped) -> None:
+        self._scope = scope
+        self._key = (scope.tenant_id, scope.require_workspace())
 
-    async def save_batch(
-        self, tenant_id: UUID, project_id: UUID, batch: RevenueBatch, *, at: datetime
-    ) -> None:
+    async def save_batch(self, batch: RevenueBatch, *, at: datetime) -> None:
         """Upsert everything in ``batch`` and mark the sync successful, all in one transaction."""
         require_aware(at)
-        async with self._db.scoped(tenant_id, project_id).write("a revenue batch") as conn:
-            await self._write(conn, tenant_id, project_id, batch, at)
-            await conn.execute(_MARK_SUCCESS, tenant_id, project_id, batch.source, at, batch.fetched_at)
+        async with self._scope.write("a revenue batch") as conn:
+            await self._write(conn, *self._key, batch, at)
+            await conn.execute(_MARK_SUCCESS, *self._key, batch.source, at, batch.fetched_at)
 
     @staticmethod
     async def _write(
@@ -157,30 +156,28 @@ class RevenueRows:
             if rows:
                 await conn.executemany(sql, rows)
 
-    async def mark_attempt(self, tenant_id: UUID, project_id: UUID, source: str, *, at: datetime) -> None:
+    async def mark_attempt(self, source: str, *, at: datetime) -> None:
         """Record that a sync started."""
         require_aware(at)
-        async with self._db.scoped(tenant_id, project_id).write("a revenue sync attempt") as conn:
-            await conn.execute(_MARK_ATTEMPT, tenant_id, project_id, source, at)
+        async with self._scope.write("a revenue sync attempt") as conn:
+            await conn.execute(_MARK_ATTEMPT, *self._key, source, at)
 
-    async def mark_failure(
-        self, tenant_id: UUID, project_id: UUID, source: str, *, at: datetime, error_code: str
-    ) -> None:
+    async def mark_failure(self, source: str, *, at: datetime, error_code: str) -> None:
         """Record that a sync failed and why. The last success (and so freshness) is untouched."""
         require_aware(at)
-        async with self._db.scoped(tenant_id, project_id).write("a failed revenue sync") as conn:
-            await conn.execute(_MARK_FAILURE, tenant_id, project_id, source, at, error_code)
+        async with self._scope.write("a failed revenue sync") as conn:
+            await conn.execute(_MARK_FAILURE, *self._key, source, at, error_code)
 
-    async def sync_state(self, tenant_id: UUID, project_id: UUID, source: str) -> SyncState | None:
+    async def sync_state(self, source: str) -> SyncState | None:
         """The collector's state, or None if it has never run for this project."""
-        async with self._db.scoped(tenant_id, project_id).connection() as conn:
-            row = await conn.fetchrow(_SYNC_STATE, tenant_id, project_id, source)
+        async with self._scope.connection() as conn:
+            row = await conn.fetchrow(_SYNC_STATE, *self._key, source)
         return None if row is None else SyncState(**dict(row))
 
-    async def subscriptions(self, tenant_id: UUID, project_id: UUID, source: str) -> list[Subscription]:
+    async def subscriptions(self, source: str) -> list[Subscription]:
         """Every stored subscription from ``source`` for this project."""
-        async with self._db.scoped(tenant_id, project_id).connection() as conn:
-            rows = _bounded(await conn.fetch(_SUBSCRIPTIONS, tenant_id, project_id, source, MAX_ROWS + 1))
+        async with self._scope.connection() as conn:
+            rows = _bounded(await conn.fetch(_SUBSCRIPTIONS, *self._key, source, MAX_ROWS + 1))
         out: list[Subscription] = []
         for row in rows:
             data = dict(row)
@@ -188,24 +185,16 @@ class RevenueRows:
             out.append(Subscription.model_validate({**data, "cycle": cycle}))
         return out
 
-    async def payments(  # tenant, project, source and a window
-        self, tenant_id: UUID, project_id: UUID, source: str, start: datetime, end: datetime
-    ) -> list[Payment]:
+    async def payments(self, source: str, start: datetime, end: datetime) -> list[Payment]:
         """Stored payment attempts from ``source`` that happened in ``[start, end)``."""
         require_aware(start, end)
-        async with self._db.scoped(tenant_id, project_id).connection() as conn:
-            rows = _bounded(
-                await conn.fetch(_PAYMENTS, tenant_id, project_id, source, start, end, MAX_ROWS + 1)
-            )
+        async with self._scope.connection() as conn:
+            rows = _bounded(await conn.fetch(_PAYMENTS, *self._key, source, start, end, MAX_ROWS + 1))
         return [Payment.model_validate(dict(row)) for row in rows]
 
-    async def refunds(  # tenant, project, source and a window
-        self, tenant_id: UUID, project_id: UUID, source: str, start: datetime, end: datetime
-    ) -> list[Refund]:
+    async def refunds(self, source: str, start: datetime, end: datetime) -> list[Refund]:
         """Stored refunds and chargebacks from ``source`` created in ``[start, end)``."""
         require_aware(start, end)
-        async with self._db.scoped(tenant_id, project_id).connection() as conn:
-            rows = _bounded(
-                await conn.fetch(_REFUNDS, tenant_id, project_id, source, start, end, MAX_ROWS + 1)
-            )
+        async with self._scope.connection() as conn:
+            rows = _bounded(await conn.fetch(_REFUNDS, *self._key, source, start, end, MAX_ROWS + 1))
         return [Refund.model_validate(dict(row)) for row in rows]

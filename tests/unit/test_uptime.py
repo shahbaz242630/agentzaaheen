@@ -349,10 +349,10 @@ def test_the_dashboard_shows_real_uptime_cards(
     assert code == 0
     assert "eva: 1 of 2 addresses up; down: https://site.example/health" in capsys.readouterr().out
     client = TestClient(apps[0], base_url="http://127.0.0.1")  # type: ignore[arg-type]
-    card = next(c for c in client.get("/api/projects/eva").json()["cards"] if c["id"] == "uptime")
+    card = next(c for c in client.get("/api/workspaces/eva").json()["cards"] if c["id"] == "uptime")
     assert (card["sample"], card["source"]) == (False, "Uptime (live)")
     assert card["entries"][0]["text"] == "site.example/health is down: page not found (http 404)"
-    zaaheen = next(c for c in client.get("/api/projects/zaaheen").json()["cards"] if c["id"] == "uptime")
+    zaaheen = next(c for c in client.get("/api/workspaces/zaaheen").json()["cards"] if c["id"] == "uptime")
     assert zaaheen["sample"] is True  # not on the list: still the sample card
     uptime = next(c for c in client.get("/api/registry").json()["connectors"] if c["id"] == "uptime")
     assert uptime["uses"] == [{"project_id": "eva", "status": "live"}]

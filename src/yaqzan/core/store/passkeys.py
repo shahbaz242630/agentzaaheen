@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from uuid import UUID
 
-from yaqzan.core.store.db import Database, require_aware
+from yaqzan.core.store.db import Scoped, require_aware
 
 _ACTIVE = """
 SELECT credential_id, public_key, sign_count, created_by, created_at, last_used_at
@@ -50,22 +49,23 @@ class PasskeyRow:
 class PasskeyRows:
     """Repository for passkeys."""
 
-    def __init__(self, db: Database) -> None:
-        self._db = db
+    def __init__(self, scope: Scoped) -> None:
+        self._scope = scope
+        self._tenant = scope.tenant_id
 
-    async def active(self, tenant_id: UUID) -> PasskeyRow | None:
+    async def active(self) -> PasskeyRow | None:
         """The tenant's one active passkey, or None."""
-        async with self._db.scoped(tenant_id).connection() as conn:
-            record = await conn.fetchrow(_ACTIVE, tenant_id)
+        async with self._scope.connection() as conn:
+            record = await conn.fetchrow(_ACTIVE, self._tenant)
         return None if record is None else PasskeyRow(**dict(record))
 
-    async def add_first(self, tenant_id: UUID, row: PasskeyRow) -> bool:
+    async def add_first(self, row: PasskeyRow) -> bool:
         """Store the first passkey. Returns False if the tenant already has an active one."""
         require_aware(row.created_at)
-        async with self._db.scoped(tenant_id).write("the Chairman's first passkey") as conn:
+        async with self._scope.write("the Chairman's first passkey") as conn:
             added = await conn.fetchval(
                 _ADD,
-                tenant_id,
+                self._tenant,
                 row.credential_id,
                 row.public_key,
                 row.sign_count,
@@ -74,15 +74,15 @@ class PasskeyRows:
             )
         return added is not None
 
-    async def replace(self, tenant_id: UUID, row: PasskeyRow) -> bool:
+    async def replace(self, row: PasskeyRow) -> bool:
         """Revoke the active passkey and add ``row``, all or nothing. False if the new one was not added."""
         require_aware(row.created_at)
         try:
-            async with self._db.scoped(tenant_id).write("a replacement passkey") as conn:
-                await conn.fetch(_REVOKE, tenant_id, row.created_at)
+            async with self._scope.write("a replacement passkey") as conn:
+                await conn.fetch(_REVOKE, self._tenant, row.created_at)
                 added = await conn.fetchval(
                     _ADD,
-                    tenant_id,
+                    self._tenant,
                     row.credential_id,
                     row.public_key,
                     row.sign_count,
@@ -95,11 +95,11 @@ class PasskeyRows:
             return False
         return True
 
-    async def record_use(self, tenant_id: UUID, credential_id: bytes, sign_count: int, at: datetime) -> bool:
+    async def record_use(self, credential_id: bytes, sign_count: int, at: datetime) -> bool:
         """Move the counter forward after a verified use. False if unknown, revoked or going backwards."""
         require_aware(at)
-        async with self._db.scoped(tenant_id).write("a passkey's use counter") as conn:
-            return await conn.fetchval(_USED, tenant_id, credential_id, sign_count, at) is not None
+        async with self._scope.write("a passkey's use counter") as conn:
+            return await conn.fetchval(_USED, self._tenant, credential_id, sign_count, at) is not None
 
 
 class _RollbackError(Exception):

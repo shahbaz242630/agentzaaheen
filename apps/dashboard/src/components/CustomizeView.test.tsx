@@ -25,11 +25,11 @@ function serve(registry: Response | null) {
     vi.fn((path: string) => {
       if (path === "/api/registry" && registry) return Promise.resolve(registry);
       const answers: Record<string, unknown> = {
-        "/api/projects": sample.projects,
+        "/api/workspaces": sample.projects,
         "/api/models": sample.models,
         "/api/registry": sample.registry,
       };
-      const id = decodeURIComponent(path.replace("/api/projects/", ""));
+      const id = decodeURIComponent(path.replace("/api/workspaces/", ""));
       const body = answers[path] ?? (sample.details as Record<string, unknown>)[id];
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
     }),

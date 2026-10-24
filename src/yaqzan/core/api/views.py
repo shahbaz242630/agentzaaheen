@@ -164,9 +164,8 @@ class ModelList(_View):
 
 
 class ChatQuestion(_View):
-    """One question typed into the chat, about one project or (``None``) all of them."""
+    """One question typed into the chat. Which workspace it is about is in the address, never here."""
 
-    project_id: str | None = Field(default=None, pattern=_SLUG)
     model_id: str = Field(pattern=_SLUG)
     question: str = Field(min_length=1, max_length=2000)
 

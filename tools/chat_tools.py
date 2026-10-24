@@ -71,14 +71,15 @@ class SwitchedChat:
         self._switched = switched
         self._log = get_logger("yaqzan.chat", model=LOCAL_MODEL_ID)
 
-    async def ask(self, question: str, facts: str) -> ChatReply:
+    async def ask(self, question: str, facts: str, workspace: str | None = None) -> ChatReply:
         """Answer with the tools of the items that are on; with none if the switches can't be read."""
         try:
             tools, skills = self._switched.build(await self._switched.standing())
         except StoreError as exc:
             say(self._log, "chat_switches_unreadable", code=exc.code.value, effect="no_tools")
             tools, skills = [], ""
-        return await FactChat(self._model, self.model_id, tools=tools, skills=skills).ask(question, facts)
+        chat = FactChat(self._model, self.model_id, tools=tools, skills=skills)
+        return await chat.ask(question, facts, workspace)
 
 
 def model_chat(
@@ -164,6 +165,7 @@ def build_log_tool(
         run=run,
         trusted=False,
         label="Build log",
+        workspace_of=lambda project: project,
     )
 
 

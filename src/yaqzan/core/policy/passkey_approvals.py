@@ -54,7 +54,7 @@ class PasskeyApprovals:
         enrol_code: str | None,
         clock: Callable[[], datetime],
     ) -> None:
-        self._rows = PasskeyRows(db)
+        self._rows = PasskeyRows(db.scoped(tenant_id))
         self._ledger = Ledger(db, tenant_id)
         self._tenant = tenant_id
         self._control = control
@@ -65,12 +65,12 @@ class PasskeyApprovals:
         self._challenges = Challenges(clock)
 
     async def _known(self) -> list[KnownPasskey]:
-        row = await self._rows.active(self._tenant)
+        row = await self._rows.active()
         return [] if row is None else [KnownPasskey(row.credential_id, row.public_key, row.sign_count)]
 
     async def status(self) -> tuple[bool, bool]:
         """(a passkey exists, set-up or replacement is open on this run)."""
-        enrolled = await self._rows.active(self._tenant) is not None
+        enrolled = await self._rows.active() is not None
         return enrolled, self._code is not None and self._wrong < MAX_WRONG_CODES
 
     def _check_code(self, code: str) -> None:
@@ -96,8 +96,8 @@ class PasskeyApprovals:
             self._check_code(code)
             made = verify_enrol(self._site, self._challenges.take(ENROL), answer)
             row = PasskeyRow(made.credential_id, made.public_key, made.sign_count, CHAIRMAN, now)
-            replacing = await self._rows.active(self._tenant) is not None
-            done = await (self._rows.replace if replacing else self._rows.add_first)(self._tenant, row)
+            replacing = await self._rows.active() is not None
+            done = await (self._rows.replace if replacing else self._rows.add_first)(row)
             if not done:
                 raise PasskeyError("passkey.not_saved")
         except PasskeyError as exc:
@@ -124,7 +124,7 @@ class PasskeyApprovals:
         try:
             challenge = self._challenges.take(f"approve:{request_id}")
             used, count = verify_approval(self._site, challenge, answer, await self._known())
-            if not await self._rows.record_use(self._tenant, used.credential_id, count, now):
+            if not await self._rows.record_use(used.credential_id, count, now):
                 raise PasskeyError("passkey.counter_went_back")
         except PasskeyError as exc:
             await self._audit("registry.approve", exc.code, now, allowed=False, request_id=request_id)

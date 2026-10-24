@@ -7,10 +7,10 @@ import { failureReply, notConnectedReply, SAMPLE_NOTE } from "./components/ChatP
 import sample from "./contract/sample.json";
 
 function answer(path: string): unknown {
-  if (path === "/api/projects") return sample.projects;
+  if (path === "/api/workspaces") return sample.projects;
   if (path === "/api/models") return sample.models;
   if (path === "/api/registry") return sample.registry;
-  const id = decodeURIComponent(path.replace("/api/projects/", ""));
+  const id = decodeURIComponent(path.replace("/api/workspaces/", ""));
   return (sample.details as Record<string, unknown>)[id];
 }
 
@@ -76,7 +76,7 @@ describe("the dashboard", () => {
 
   it("refuses an answer that breaks the contract", async () => {
     serve((path) =>
-      path === "/api/projects"
+      path === "/api/workspaces"
         ? new Response(JSON.stringify([{ ...sample.projects[0], email: "a@b.c" }]), { status: 200 })
         : undefined,
     );
@@ -93,7 +93,7 @@ describe("real and sample cards side by side", () => {
       cards: zaaheen.cards.map((card) => (card.id === "paddle" ? { ...card, sample: false } : card)),
     };
     serve((path) =>
-      path === "/api/projects/zaaheen" ? new Response(JSON.stringify(mixed), { status: 200 }) : undefined,
+      path === "/api/workspaces/zaaheen" ? new Response(JSON.stringify(mixed), { status: 200 }) : undefined,
     );
     render(<App />);
     expect(await screen.findByText(/The others are real/)).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe("the UI enforces the API's rules too", () => {
       cards: zaaheen.cards.map((card) => (card.id === "paddle" ? { ...card, freshness: "stale" } : card)),
     };
     serve((path) =>
-      path === "/api/projects/zaaheen" ? new Response(JSON.stringify(stale), { status: 200 }) : undefined,
+      path === "/api/workspaces/zaaheen" ? new Response(JSON.stringify(stale), { status: 200 }) : undefined,
     );
     render(<App />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not load this project");
@@ -125,7 +125,7 @@ describe("the UI enforces the API's rules too", () => {
       ...eva,
       cards: eva.cards.map((card) => ({ ...card, last_success_at: "2026-10-18T11:00:00Z" })),
     };
-    serve((path) => (path === "/api/projects/eva" ? new Response(JSON.stringify(odd), { status: 200 }) : undefined));
+    serve((path) => (path === "/api/workspaces/eva" ? new Response(JSON.stringify(odd), { status: 200 }) : undefined));
     render(<App />);
     await userEvent.click(await screen.findByRole("button", { name: /Eva/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not load this project");
@@ -144,7 +144,7 @@ describe("the UI enforces the API's rules too", () => {
   });
 
   it("says so when there are no projects", async () => {
-    serve((path) => (path === "/api/projects" ? new Response("[]", { status: 200 }) : undefined));
+    serve((path) => (path === "/api/workspaces" ? new Response("[]", { status: 200 }) : undefined));
     render(<App />);
     expect(await screen.findByText("No projects yet.")).toBeInTheDocument();
   });
@@ -215,7 +215,7 @@ describe("the chat with the local model connected", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((path: string, init?: RequestInit) => {
-        if (path === "/api/chat") {
+        if (path === "/api/workspaces/zaaheen/chat") {
           calls.push(init ?? {});
           return chat();
         }
@@ -241,7 +241,6 @@ describe("the chat with the local model connected", () => {
     expect(calls[0]?.method).toBe("POST");
     expect(calls[0]?.headers).toMatchObject({ "Content-Type": "application/json", "X-Yaqzan-Request": "1" });
     expect(JSON.parse(calls[0]?.body as string)).toEqual({
-      project_id: "zaaheen",
       model_id: "local-gemma",
       question: "How is revenue?",
     });

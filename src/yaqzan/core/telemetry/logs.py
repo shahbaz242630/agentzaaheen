@@ -46,6 +46,7 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "stage",
         "project",
         "project_id",
+        "workspace",
         "source",
         "kind",
         "tool",

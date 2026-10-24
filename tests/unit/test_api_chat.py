@@ -1,4 +1,7 @@
-"""The chat route: same-origin JSON only, one question at a time, answers from the cards (F05).
+"""The chat routes: same-origin JSON only, one question at a time, answers from the cards (F05).
+
+A workspace's chat lives at its own address and sees only that workspace (ADR-039);
+``/api/chat`` is the Board's, over every workspace's summary line.
 
 A fake backend stands in for the model; no server and no network.
 """
@@ -30,9 +33,11 @@ class FakeChat:
         self.reply = reply
         self.error = error
         self.asked: list[tuple[str, str]] = []
+        self.workspaces: list[str | None] = []
 
-    async def ask(self, question: str, facts: str) -> ChatReply:
+    async def ask(self, question: str, facts: str, workspace: str | None = None) -> ChatReply:
         self.asked.append((question, facts))
+        self.workspaces.append(workspace)
         if self.error is not None:
             raise self.error
         return ChatReply(self.reply)
@@ -42,12 +47,18 @@ def client(chat: FakeChat | None) -> TestClient:
     return TestClient(create_app(SamplePortfolio(NOW), chat=chat), base_url="http://127.0.0.1")
 
 
-def post(c: TestClient, body: object, headers: dict[str, str] | None = None) -> httpx.Response:
-    response: httpx.Response = c.post("/api/chat", json=body, headers=OURS if headers is None else headers)
+ZAAHEEN = "/api/workspaces/zaaheen/chat"
+BOARD = "/api/chat"
+
+
+def post(
+    c: TestClient, body: object, headers: dict[str, str] | None = None, path: str = ZAAHEEN
+) -> httpx.Response:
+    response: httpx.Response = c.post(path, json=body, headers=OURS if headers is None else headers)
     return response
 
 
-QUESTION = {"project_id": "zaaheen", "model_id": "local-gemma", "question": "How is revenue?"}
+QUESTION = {"model_id": "local-gemma", "question": "How is revenue?"}
 
 
 def test_answers_from_the_project_cards() -> None:
@@ -65,17 +76,20 @@ def test_answers_from_the_project_cards() -> None:
     assert "Project: Zaaheen" in facts
     assert "MRR: USD 1240.00" in facts
     assert "SAMPLE" in facts
+    assert "Sandoq Kin" not in facts  # another workspace's facts never reach this chat
+    assert chat.workspaces == ["zaaheen"]
     assert response.headers["cache-control"] == "no-store"
 
 
-def test_with_no_project_open_it_answers_from_the_project_list() -> None:
+def test_the_boards_chat_answers_from_every_workspaces_summary_line_only() -> None:
     chat = FakeChat()
-    response = post(client(chat), {**QUESTION, "project_id": None})
+    response = post(client(chat), QUESTION, path=BOARD)
     assert response.status_code == 200
     facts = chat.asked[0][1]
     assert "Project: Zaaheen" in facts
     assert "Project: Sandoq Kin" in facts
     assert "Card:" not in facts
+    assert chat.workspaces == [None]  # so no tool that reads one workspace's data
 
 
 def test_the_connected_model_is_the_only_one_marked_available() -> None:
@@ -102,10 +116,26 @@ def test_a_model_that_is_not_connected_is_refused() -> None:
     assert chat.asked == []
 
 
-def test_an_unknown_project_is_a_404() -> None:
-    response = post(client(FakeChat()), {**QUESTION, "project_id": "nope"})
+def test_an_unknown_workspace_is_a_404_and_asks_nothing() -> None:
+    chat = FakeChat()
+    response = post(client(chat), QUESTION, path="/api/workspaces/nope/chat")
     assert response.status_code == 404
-    assert response.json() == {"detail": "project.not_found"}
+    assert response.json() == {"detail": "workspace.not_found"}
+    assert chat.asked == []
+
+
+def test_a_question_cannot_name_its_own_workspace() -> None:
+    """Only the address chooses the workspace: a body that tries to is refused, not obeyed."""
+    chat = FakeChat()
+    for path in (ZAAHEEN, BOARD):
+        assert post(client(chat), {**QUESTION, "project_id": "sandoq-kin"}, path=path).status_code == 422
+    assert chat.asked == []
+
+
+def test_a_badly_formed_address_is_refused() -> None:
+    chat = FakeChat()
+    assert post(client(chat), QUESTION, path="/api/workspaces/Not_A_Slug/chat").status_code == 422
+    assert chat.asked == []
 
 
 @pytest.mark.parametrize(
@@ -114,7 +144,6 @@ def test_an_unknown_project_is_a_404() -> None:
         {**QUESTION, "question": ""},
         {**QUESTION, "question": "x" * 2001},
         {**QUESTION, "extra": "field"},
-        {**QUESTION, "project_id": "../etc"},
         {"question": "no model"},
     ],
 )
@@ -180,7 +209,7 @@ def test_one_question_at_a_time() -> None:
     started = asyncio.Event()
 
     class SlowChat(FakeChat):
-        async def ask(self, question: str, facts: str) -> ChatReply:
+        async def ask(self, question: str, facts: str, workspace: str | None = None) -> ChatReply:
             started.set()
             await release.wait()
             return ChatReply("done")

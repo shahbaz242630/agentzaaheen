@@ -158,18 +158,45 @@ class Database:
 
 
 class Scoped:
-    """One tenant (and maybe one workspace) behind the database walls. Always a transaction."""
+    """One tenant (and maybe one workspace) behind the database walls. Always a transaction.
+
+    It is the handle the repositories are built with: they take the tenant and
+    workspace from it, never from their callers' arguments, so code further in
+    cannot name another workspace (ADR-039). Only a door (an API route, a job's
+    start) makes one for a workspace.
+    """
 
     def __init__(self, db: Database, tenant_id: UUID, workspace_id: UUID | None) -> None:
         self._db = db
-        self._tenant = str(tenant_id)
-        self._workspace = "" if workspace_id is None else str(workspace_id)
+        self._tenant_id = tenant_id
+        self._workspace_id = workspace_id
+
+    @property
+    def tenant_id(self) -> UUID:
+        """The tenant every query works for."""
+        return self._tenant_id
+
+    @property
+    def workspace_id(self) -> UUID | None:
+        """The workspace every query works in; ``None`` for tenant-level work only."""
+        return self._workspace_id
+
+    def require_workspace(self) -> UUID:
+        """The workspace, for a repository of project-level rows; a tenant-only handle is refused."""
+        if self._workspace_id is None:
+            raise StoreError(StoreErrorCode.DENIED, "this needs a handle for one workspace")
+        return self._workspace_id
+
+    def within(self, workspace_id: UUID) -> Scoped:
+        """The same tenant, in one of its workspaces (for tenant-wide work, one workspace at a time)."""
+        return Scoped(self._db, self._tenant_id, workspace_id)
 
     @asynccontextmanager
     async def connection(self) -> AsyncIterator[Connection]:
         """Borrow one connection inside a transaction that names this tenant and workspace."""
+        workspace = "" if self._workspace_id is None else str(self._workspace_id)
         async with self._db.transaction() as conn:
-            await conn.execute(_SET_SCOPE, self._tenant, self._workspace)
+            await conn.execute(_SET_SCOPE, str(self._tenant_id), workspace)
             yield conn
 
     @asynccontextmanager

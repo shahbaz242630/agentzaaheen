@@ -28,6 +28,7 @@ from tests.integration.test_store_registry_switches import CHAIRMAN, request
 from tests.integration.test_store_revenue import AT, full_batch
 from yaqzan.core.policy import Ledger
 from yaqzan.core.store import (
+    AllSealedSecrets,
     KillSwitchRows,
     PasskeyRow,
     PasskeyRows,
@@ -75,13 +76,14 @@ async def _fill_every_table(url: str) -> None:
     """At least one row in every table, all in tenant ``TENANT``, workspace ``PROJECT``."""
     await add_workspaces(url, TENANT, PROJECT, OTHER_WORKSPACE)
     async with open_db(url) as db:
-        records = Records(db)
+        here = db.scoped(TENANT, PROJECT)
+        records = Records(here)
         await records.add_event(event())
         parent = run_record()
         await records.add_run(parent)
         await records.add_finding(finding(parent.id))
         await records.add_action(action(parent.id))
-        await SealedSecrets(db).put(
+        await SealedSecrets(here).put(
             SealedRow(
                 slot=SlotKey(TENANT, PROJECT, "paddle", "api_key", "production"),
                 format_version=1,
@@ -90,17 +92,16 @@ async def _fill_every_table(url: str) -> None:
                 ciphertext=b"c" * 29,
             )
         )
-        await RevenueRows(db).save_batch(TENANT, PROJECT, full_batch(), at=AT)
-        await KillSwitchRows(db).set(
-            TENANT, SwitchScope.ALL, "", engaged=False, changed_by=CHAIRMAN, changed_at=NOW
+        await RevenueRows(here).save_batch(full_batch(), at=AT)
+        await KillSwitchRows(db.scoped(TENANT)).set(
+            SwitchScope.ALL, "", engaged=False, changed_by=CHAIRMAN, changed_at=NOW
         )
         await Ledger(db, TENANT).record(draft(0))
-        registry = RegistrySwitchRows(db)
+        registry = RegistrySwitchRows(db.scoped(TENANT))
         asked = request()
-        await registry.add_request(TENANT, asked)
-        await registry.approve(TENANT, asked.id, by=CHAIRMAN, at=NOW, step_up_at=NOW)
-        await PasskeyRows(db).add_first(
-            TENANT,
+        await registry.add_request(asked)
+        await registry.approve(asked.id, by=CHAIRMAN, at=NOW, step_up_at=NOW)
+        await PasskeyRows(db.scoped(TENANT)).add_first(
             PasskeyRow(
                 credential_id=b"i" * 16,
                 public_key=b"k" * 64,
@@ -186,7 +187,7 @@ def test_a_row_cannot_be_written_into_another_workspace(test_db: ScratchDb) -> N
     run(add_workspaces(test_db.app_url, TENANT, PROJECT, OTHER_WORKSPACE))
 
     async def body() -> None:
-        async with open_db(test_db.app_url) as db, db.scoped(TENANT, PROJECT).connection() as conn:
+        async with open_db(test_db.app_url) as db, db.scoped(PROJECT).connection() as conn:
             await conn.execute(
                 "INSERT INTO yaqzan.source_syncs (tenant_id, project_id, source, last_attempt_at)"
                 " VALUES ($1, $2, 'paddle', now())",
@@ -219,7 +220,7 @@ def test_a_row_needs_a_workspace_that_exists(test_db: ScratchDb) -> None:
 
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            await RevenueRows(db).mark_attempt(TENANT, unknown, "paddle", at=NOW)
+            await RevenueRows(db.scoped(TENANT, unknown)).mark_attempt("paddle", at=NOW)
 
     with pytest.raises(StoreError) as caught:
         run(body())
@@ -250,7 +251,7 @@ def test_the_scope_ends_with_its_transaction(test_db: ScratchDb) -> None:
 
     async def body() -> int:
         async with open_db(test_db.app_url, max_size=1) as db:
-            async with db.scoped(TENANT, PROJECT).connection() as conn:
+            async with db.scoped(PROJECT).connection() as conn:
                 await conn.fetchval("SELECT count(*) FROM yaqzan.events")
             async with db.connection() as conn:  # the very same connection, no scope named
                 return int(await conn.fetchval("SELECT count(*) FROM yaqzan.events"))
@@ -276,11 +277,11 @@ def test_tenant_wide_key_reads_cover_every_workspace_and_only_this_tenant(test_d
 
     async def body() -> tuple[set[tuple[UUID, UUID]], set[tuple[UUID, UUID]]]:
         async with open_db(test_db.app_url) as db:
-            keys = SealedSecrets(db)
             for tenant, workspace in ((TENANT, PROJECT), (TENANT, OTHER_WORKSPACE), (OTHER_TENANT, PROJECT)):
-                await keys.put(sealed(tenant, workspace))
-            dated = {(d.slot.tenant_id, d.slot.project_id) for d in await keys.dates(TENANT)}
-            stale = {(r.slot.tenant_id, r.slot.project_id) for r in await keys.not_under_key(TENANT, "new")}
+                await SealedSecrets(db.scoped(tenant, workspace)).put(sealed(tenant, workspace))
+            keys = AllSealedSecrets(db.scoped(TENANT))
+            dated = {(d.slot.tenant_id, d.slot.project_id) for d in await keys.dates()}
+            stale = {(r.slot.tenant_id, r.slot.project_id) for r in await keys.not_under_key("new")}
             return dated, stale
 
     dated, stale = run(body())
@@ -293,6 +294,17 @@ def test_workspaces_list_only_their_own_tenant(test_db: ScratchDb) -> None:
 
     async def body() -> set[UUID]:
         async with open_db(test_db.app_url) as db:
-            return {w.workspace_id for w in await WorkspaceRows(db).workspaces(TENANT)}
+            return {w.workspace_id for w in await WorkspaceRows(db.scoped(TENANT)).workspaces()}
 
     assert run(body()) == {PROJECT, OTHER_WORKSPACE}
+
+
+def test_workspaces_are_listed_in_the_order_they_were_added(test_db: ScratchDb) -> None:
+    first, second, third = (UUID(f"00000000-0000-4000-8000-0000000000{n}") for n in ("c3", "a1", "b2"))
+    run(add_workspaces(test_db.app_url, TENANT, first, second, third))
+
+    async def body() -> list[UUID]:
+        async with open_db(test_db.app_url) as db:
+            return [w.workspace_id for w in await WorkspaceRows(db.scoped(TENANT)).workspaces()]
+
+    assert run(body()) == [first, second, third]

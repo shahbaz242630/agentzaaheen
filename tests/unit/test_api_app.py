@@ -22,21 +22,21 @@ def client(ui: Path) -> TestClient:
 
 
 def test_lists_projects(client: TestClient) -> None:
-    response = client.get("/api/projects")
+    response = client.get("/api/workspaces")
     assert response.status_code == 200
     assert [p["id"] for p in response.json()] == ["zaaheen", "sandoq-kin", "agent-x", "eva", "family-checkin"]
 
 
 def test_gets_one_project_with_its_cards(client: TestClient) -> None:
-    body = client.get("/api/projects/zaaheen").json()
+    body = client.get("/api/workspaces/zaaheen").json()
     assert body["project"]["name"] == "Zaaheen"
     assert {c["id"] for c in body["cards"]} >= {"paddle", "stripe", "clients", "support", "github"}
 
 
 def test_an_unknown_project_is_a_404_with_a_code(client: TestClient) -> None:
-    response = client.get("/api/projects/nope")
+    response = client.get("/api/workspaces/nope")
     assert response.status_code == 404
-    assert response.json() == {"detail": "project.not_found"}
+    assert response.json() == {"detail": "workspace.not_found"}
 
 
 def test_lists_models_with_a_local_default(client: TestClient) -> None:
@@ -46,7 +46,7 @@ def test_lists_models_with_a_local_default(client: TestClient) -> None:
     assert defaults[0]["where"] == "local"
 
 
-@pytest.mark.parametrize("path", ["/api/projects", "/"])
+@pytest.mark.parametrize("path", ["/api/workspaces", "/"])
 def test_every_response_carries_the_security_headers(client: TestClient, path: str) -> None:
     response = client.get(path)
     assert response.status_code == 200
@@ -59,7 +59,7 @@ def test_every_response_carries_the_security_headers(client: TestClient, path: s
 
 
 def test_api_answers_are_never_cached(client: TestClient) -> None:
-    assert client.get("/api/projects").headers["cache-control"] == "no-store"
+    assert client.get("/api/workspaces").headers["cache-control"] == "no-store"
     assert "cache-control" not in client.get("/").headers
 
 
@@ -71,12 +71,12 @@ def test_serves_the_web_ui(client: TestClient) -> None:
 
 @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
 def test_the_api_is_read_only(client: TestClient, method: str) -> None:
-    assert client.request(method, "/api/projects").status_code == 405
+    assert client.request(method, "/api/workspaces").status_code == 405
 
 
 def test_a_foreign_host_name_is_refused(ui: Path) -> None:
     rebinding = TestClient(create_app(SamplePortfolio(NOW), static_dir=ui), base_url="http://evil.example")
-    assert rebinding.get("/api/projects").status_code == 400
+    assert rebinding.get("/api/workspaces").status_code == 400
 
 
 def test_no_api_docs_are_published(client: TestClient) -> None:
@@ -91,5 +91,5 @@ def test_refuses_to_start_without_a_built_ui(tmp_path: Path) -> None:
 
 def test_serves_the_api_alone_without_a_ui() -> None:
     client = TestClient(create_app(SamplePortfolio(NOW)), base_url="http://localhost")
-    assert client.get("/api/projects").status_code == 200
+    assert client.get("/api/workspaces").status_code == 200
     assert client.get("/").status_code == 404

@@ -41,7 +41,14 @@ from yaqzan.core.store.registry_switches import (
     SwitchRow,
 )
 from yaqzan.core.store.revenue import MAX_ROWS, RevenueRows, SyncState
-from yaqzan.core.store.sealed import Access, CredentialDates, SealedRow, SealedSecrets, SlotKey
+from yaqzan.core.store.sealed import (
+    Access,
+    AllSealedSecrets,
+    CredentialDates,
+    SealedRow,
+    SealedSecrets,
+    SlotKey,
+)
 from yaqzan.core.store.switches import EngagedSwitch, KillSwitchRows, SwitchScope
 from yaqzan.core.store.workspaces import WorkspaceRow, WorkspaceRows
 
@@ -51,6 +58,7 @@ __all__ = [
     "MAX_ROWS",
     "MIGRATIONS",
     "Access",
+    "AllSealedSecrets",
     "AuditRow",
     "AuditRows",
     "CredentialDates",

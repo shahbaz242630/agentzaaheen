@@ -96,11 +96,11 @@ async def connect_as(
 async def add_workspaces(url: str, tenant_id: UUID, *workspace_ids: UUID) -> None:
     """Create the tenant and the workspaces a test saves project-level rows in."""
     async with open_db(url) as db:
-        rows = WorkspaceRows(db)
-        await rows.add_tenant(tenant_id, "Test tenant")
+        rows = WorkspaceRows(db.scoped(tenant_id))
+        await rows.add_tenant("Test tenant")
         for workspace_id in workspace_ids:
             slug = f"w-{workspace_id.hex}"
-            await rows.add(tenant_id, WorkspaceRow(workspace_id=workspace_id, slug=slug, name=slug))
+            await rows.add(WorkspaceRow(workspace_id=workspace_id, slug=slug, name=slug))
 
 
 async def _admin(server: Server, *statements: str) -> None:

@@ -23,9 +23,9 @@ def _workspace(test_db: ScratchDb) -> None:
 def _card_at(test_db: ScratchDb, looked_at: datetime) -> Card:
     async def body() -> Card:
         async with open_db(test_db.app_url) as db:
-            await sync_revenue(db, TENANT, PROJECT, fake(), now=world.NOW)
+            await sync_revenue(db.scoped(TENANT, PROJECT), fake(), now=world.NOW)
             snap = await revenue_snapshot(
-                db, TENANT, PROJECT, "paddle", now=looked_at, schedule=SCHEDULE, start=START, end=END
+                db.scoped(TENANT, PROJECT), "paddle", now=looked_at, schedule=SCHEDULE, start=START, end=END
             )
             return revenue_card(
                 snap,

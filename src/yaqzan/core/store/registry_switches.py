@@ -18,7 +18,7 @@ from uuid import UUID
 
 import asyncpg
 
-from yaqzan.core.store.db import Database, require_aware
+from yaqzan.core.store.db import Scoped, require_aware
 
 ItemKind = Literal["connector", "skill", "plugin"]
 
@@ -118,18 +118,18 @@ def _request(record: asyncpg.Record) -> RequestRow:
 class RegistrySwitchRows:
     """Repository for registry switches and requests."""
 
-    def __init__(self, db: Database) -> None:
-        self._db = db
+    def __init__(self, scope: Scoped) -> None:
+        self._scope = scope
+        self._tenant = scope.tenant_id
 
-    async def switches(self, tenant_id: UUID) -> list[SwitchRow]:
+    async def switches(self) -> list[SwitchRow]:
         """Every stored switch for this tenant (items with no row keep their default)."""
-        async with self._db.scoped(tenant_id).connection() as conn:
-            records = await conn.fetch(_SWITCHES, tenant_id)
+        async with self._scope.connection() as conn:
+            records = await conn.fetch(_SWITCHES, self._tenant)
         return [SwitchRow(**dict(r)) for r in records]
 
-    async def switch_off(  # noqa: PLR0913  # each argument is a separate column
+    async def switch_off(  # each argument is a separate column
         self,
-        tenant_id: UUID,
         kind: ItemKind,
         item_id: str,
         fingerprint: str,
@@ -139,31 +139,31 @@ class RegistrySwitchRows:
     ) -> None:
         """Store "off" for one item (always allowed: it only takes power away)."""
         require_aware(changed_at)
-        async with self._db.scoped(tenant_id).write("a Customize switch turned off") as conn:
-            await conn.execute(_SWITCH_OFF, tenant_id, kind, item_id, fingerprint, changed_by, changed_at)
+        async with self._scope.write("a Customize switch turned off") as conn:
+            await conn.execute(_SWITCH_OFF, self._tenant, kind, item_id, fingerprint, changed_by, changed_at)
 
-    async def pending(self, tenant_id: UUID) -> list[RequestRow]:
+    async def pending(self) -> list[RequestRow]:
         """Every request still waiting for a decision, oldest first."""
-        async with self._db.scoped(tenant_id).connection() as conn:
-            records = await conn.fetch(_PENDING, tenant_id)
+        async with self._scope.connection() as conn:
+            records = await conn.fetch(_PENDING, self._tenant)
         return [_request(r) for r in records]
 
-    async def get_request(self, tenant_id: UUID, request_id: UUID) -> RequestRow | None:
+    async def get_request(self, request_id: UUID) -> RequestRow | None:
         """One request, or None if it does not exist for this tenant."""
-        async with self._db.scoped(tenant_id).connection() as conn:
-            record = await conn.fetchrow(_GET_REQUEST, tenant_id, request_id)
+        async with self._scope.connection() as conn:
+            record = await conn.fetchrow(_GET_REQUEST, self._tenant, request_id)
         return None if record is None else _request(record)
 
-    async def add_request(self, tenant_id: UUID, request: RequestRow) -> bool:
+    async def add_request(self, request: RequestRow) -> bool:
         """File a pending request. Returns False if the item already has one waiting."""
         if request.status is not RequestStatus.PENDING:
             raise ValueError("a new request must be pending")
         require_aware(request.requested_at)
-        async with self._db.scoped(tenant_id).write("a request to switch an item on") as conn:
+        async with self._scope.write("a request to switch an item on") as conn:
             added = await conn.fetchval(
                 _ADD_REQUEST,
                 request.id,
-                tenant_id,
+                self._tenant,
                 request.kind,
                 request.item_id,
                 request.fingerprint,
@@ -172,22 +172,20 @@ class RegistrySwitchRows:
             )
         return added is not None
 
-    async def approve(
-        self, tenant_id: UUID, request_id: UUID, *, by: str, at: datetime, step_up_at: datetime
-    ) -> bool:
+    async def approve(self, request_id: UUID, *, by: str, at: datetime, step_up_at: datetime) -> bool:
         """Approve a pending request and switch its item on, in one transaction. False if not pending.
 
         The database refuses it without ``step_up_at`` or a person as ``by``, and the switch
         is written for exactly the files that were asked for.
         """
         require_aware(at, step_up_at)
-        async with self._db.scoped(tenant_id).write("an approved request and its switch") as conn:
-            asked = await conn.fetchrow(_APPROVE, tenant_id, request_id, by, at, step_up_at)
+        async with self._scope.write("an approved request and its switch") as conn:
+            asked = await conn.fetchrow(_APPROVE, self._tenant, request_id, by, at, step_up_at)
             if asked is None:
                 return False
             await conn.execute(
                 _SWITCH_ON,
-                tenant_id,
+                self._tenant,
                 asked["kind"],
                 asked["item_id"],
                 asked["fingerprint"],
@@ -197,14 +195,14 @@ class RegistrySwitchRows:
             )
         return True
 
-    async def refuse(self, tenant_id: UUID, request_id: UUID, *, by: str, at: datetime) -> bool:
+    async def refuse(self, request_id: UUID, *, by: str, at: datetime) -> bool:
         """Refuse a pending request. Returns False if it is unknown or already decided."""
         require_aware(at)
-        async with self._db.scoped(tenant_id).write("a refused request") as conn:
-            return await conn.fetchval(_REFUSE, tenant_id, request_id, by, at) is not None
+        async with self._scope.write("a refused request") as conn:
+            return await conn.fetchval(_REFUSE, self._tenant, request_id, by, at) is not None
 
-    async def withdraw(self, tenant_id: UUID, request_id: UUID, *, by: str, at: datetime) -> bool:
+    async def withdraw(self, request_id: UUID, *, by: str, at: datetime) -> bool:
         """Withdraw a pending request. Returns False if it is unknown or already decided."""
         require_aware(at)
-        async with self._db.scoped(tenant_id).write("a withdrawn request") as conn:
-            return await conn.fetchval(_WITHDRAW, tenant_id, request_id, by, at) is not None
+        async with self._scope.write("a withdrawn request") as conn:
+            return await conn.fetchval(_WITHDRAW, self._tenant, request_id, by, at) is not None

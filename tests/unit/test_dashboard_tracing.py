@@ -117,7 +117,7 @@ def test_the_dashboard_traces_while_it_serves_and_stops_after(
 
     def serve(app: FastAPI, _host: str, _port: int) -> None:
         headers.append(
-            TestClient(app, base_url="http://127.0.0.1").get("/api/projects").headers.get("traceparent")
+            TestClient(app, base_url="http://127.0.0.1").get("/api/workspaces").headers.get("traceparent")
         )
 
     assert dashboard.main(FULL, static_dir=tmp_path, serve=serve, environ=ENV) == 0
@@ -129,6 +129,6 @@ def test_the_dashboard_traces_while_it_serves_and_stops_after(
         for sc in r["scopeSpans"]
         for s in sc["spans"]
     }
-    assert {"dashboard start", "GET /api/projects"} <= names
+    assert {"dashboard start", "GET /api/workspaces"} <= names
     with span("after") as current:
         assert not current.is_recording()

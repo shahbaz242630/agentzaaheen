@@ -14,13 +14,18 @@ argument must be on the closed lists we gave the model: anything else is
 refused and the model is told the allowed values. Every result goes back
 wrapped in ``<tool_result>`` tags, marked trusted (our own skill text) or
 untrusted (anything from outside, such as a build log).
+
+A tool that reads one project's data says which workspace each choice belongs
+to (``workspace_of``). A chat inside a workspace is given only that
+workspace's choices; the Board's chat is given none of them (ADR-039: the
+Board reads summaries, never a workspace's raw data).
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 _BLOCK = re.compile(r"```\s*tool[ \t]*\n(.*?)```", re.DOTALL | re.IGNORECASE)
 _FIELD = re.compile(r"^\s*(name|tool|arg|argument)\s*[:=]\s*(.+?)\s*$", re.IGNORECASE)
@@ -31,7 +36,11 @@ MAX_RESULT_CHARS = 20_000
 
 @dataclass(frozen=True)
 class Tool:
-    """One read-only tool: its name, what it does, the only argument values allowed, and how to run it."""
+    """One read-only tool: its name, what it does, the only argument values allowed, and how to run it.
+
+    ``workspace_of`` maps a choice to the workspace (slug) whose data it reads;
+    ``None`` means the tool reads no workspace's data (e.g. our own skills).
+    """
 
     name: str
     description: str
@@ -39,6 +48,16 @@ class Tool:
     run: Callable[[str], Awaitable[str]]
     trusted: bool
     label: str
+    workspace_of: Callable[[str], str] | None = None
+
+    def for_workspace(self, workspace: str | None) -> Tool | None:
+        """This tool as one workspace's chat may use it (``None``: the Board), or ``None`` if not at all."""
+        if self.workspace_of is None:
+            return self
+        if workspace is None:
+            return None
+        mine = tuple(c for c in self.choices if self.workspace_of(c) == workspace)
+        return replace(self, choices=mine) if mine else None
 
 
 @dataclass(frozen=True)

@@ -141,7 +141,7 @@ def test_a_good_signature_approves_and_switches_on(test_db: ScratchDb) -> None:
 
     async def counter() -> int:
         async with open_db(test_db.app_url) as db:
-            row = await PasskeyRows(db).active(TENANT)
+            row = await PasskeyRows(db.scoped(TENANT)).active()
             assert row is not None
             return row.sign_count
 
@@ -264,12 +264,12 @@ def test_the_app_cannot_swap_a_stored_public_key(test_db: ScratchDb) -> None:
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
             row = PasskeyRow(b"i" * 16, b"k" * 64, 0, "user:chairman", NOW)
-            rows = PasskeyRows(db)
-            assert await rows.add_first(TENANT, row)
-            assert not await rows.add_first(TENANT, row)  # only the first
-            assert await rows.record_use(TENANT, b"i" * 16, 3, NOW)  # the counter moves forward
-            assert not await rows.record_use(TENANT, b"i" * 16, 2, NOW)  # never backwards
-            assert not await rows.record_use(TENANT, b"x" * 16, 9, NOW)  # an unknown passkey
+            rows = PasskeyRows(db.scoped(TENANT))
+            assert await rows.add_first(row)
+            assert not await rows.add_first(row)  # only the first
+            assert await rows.record_use(b"i" * 16, 3, NOW)  # the counter moves forward
+            assert not await rows.record_use(b"i" * 16, 2, NOW)  # never backwards
+            assert not await rows.record_use(b"x" * 16, 9, NOW)  # an unknown passkey
         conn = await connect_as(test_db.app_url, TENANT)
         try:
             with pytest.raises(asyncpg.InsufficientPrivilegeError):
@@ -325,16 +325,16 @@ def test_the_database_keeps_one_active_passkey_and_revoked_ones_stay_revoked(tes
 
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            rows = PasskeyRows(db)
-            assert await rows.add_first(TENANT, first)
-            assert not await rows.add_first(TENANT, second)  # one active only
-            assert await rows.replace(TENANT, second)
-            active = await rows.active(TENANT)
+            rows = PasskeyRows(db.scoped(TENANT))
+            assert await rows.add_first(first)
+            assert not await rows.add_first(second)  # one active only
+            assert await rows.replace(second)
+            active = await rows.active()
             assert active is not None
             assert active.credential_id == b"b" * 16
-            assert not await rows.record_use(TENANT, b"a" * 16, 5, NOW)  # the revoked one is dead
-            assert not await rows.replace(TENANT, second)  # the same credential again: nothing changes
-            assert (await rows.active(TENANT)) == active
+            assert not await rows.record_use(b"a" * 16, 5, NOW)  # the revoked one is dead
+            assert not await rows.replace(second)  # the same credential again: nothing changes
+            assert (await rows.active()) == active
         conn = await connect_as(test_db.app_url, TENANT)
         try:
             with pytest.raises(asyncpg.UniqueViolationError):
@@ -459,6 +459,6 @@ def test_the_store_does_not_approve_a_request_that_is_not_pending(test_db: Scrat
     async def use(_p: PasskeyApprovals, control: RegistryControl) -> bool:
         request_id = await asked(control)
         await control.withdraw(request_id, now=NOW, **ME)  # type: ignore[arg-type]
-        return await control._rows.approve(TENANT, request_id, by="user:chairman", at=NOW, step_up_at=NOW)
+        return await control._rows.approve(request_id, by="user:chairman", at=NOW, step_up_at=NOW)
 
     assert session(test_db, use) is False

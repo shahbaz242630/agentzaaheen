@@ -126,8 +126,8 @@ def test_event_round_trip_is_exact(test_db: ScratchDb) -> None:
 
     async def body() -> Event | None:
         async with open_db(test_db.app_url) as db:
-            assert await Records(db).add_event(original) is True
-            return await Records(db).get_event(TENANT, PROJECT, original.id)
+            assert await Records(db.scoped(TENANT, PROJECT)).add_event(original) is True
+            return await Records(db.scoped(TENANT, PROJECT)).get_event(original.id)
 
     assert run(body()) == original
 
@@ -135,10 +135,10 @@ def test_event_round_trip_is_exact(test_db: ScratchDb) -> None:
 def test_same_outside_event_is_stored_once(test_db: ScratchDb) -> None:
     async def body() -> tuple[bool, bool, int]:
         async with open_db(test_db.app_url) as db:
-            records = Records(db)
+            records = Records(db.scoped(TENANT, PROJECT))
             first = await records.add_event(event(1))
             again = await records.add_event(event(1))  # new id, same idempotency key
-            stored = await records.recent_events(TENANT, PROJECT)
+            stored = await records.recent_events()
             return first, again, len(stored)
 
     assert run(body()) == (True, False, 1)
@@ -147,13 +147,11 @@ def test_same_outside_event_is_stored_once(test_db: ScratchDb) -> None:
 def test_other_tenant_sees_nothing(test_db: ScratchDb) -> None:
     async def body() -> tuple[Event | None, list[Event]]:
         async with open_db(test_db.app_url) as db:
-            records = Records(db)
+            records = Records(db.scoped(TENANT, PROJECT))
             stored = event()
             await records.add_event(stored)
-            other = uuid4()
-            return await records.get_event(other, PROJECT, stored.id), await records.recent_events(
-                other, PROJECT
-            )
+            elsewhere = Records(db.scoped(uuid4(), PROJECT))
+            return await elsewhere.get_event(stored.id), await elsewhere.recent_events()
 
     assert run(body()) == (None, [])
 
@@ -161,12 +159,12 @@ def test_other_tenant_sees_nothing(test_db: ScratchDb) -> None:
 def test_recent_events_are_newest_first_and_bounded(test_db: ScratchDb) -> None:
     async def body() -> tuple[list[object], int, int]:
         async with open_db(test_db.app_url) as db:
-            records = Records(db)
+            records = Records(db.scoped(TENANT, PROJECT))
             for n in range(5):
                 await records.add_event(event(n))
-            newest = [e.payload["n"] for e in await records.recent_events(TENANT, PROJECT, limit=3)]
-            at_least_one = len(await records.recent_events(TENANT, PROJECT, limit=0))
-            capped = len(await records.recent_events(TENANT, PROJECT, limit=MAX_PAGE + 10))
+            newest = [e.payload["n"] for e in await records.recent_events(limit=3)]
+            at_least_one = len(await records.recent_events(limit=0))
+            capped = len(await records.recent_events(limit=MAX_PAGE + 10))
             return newest, at_least_one, capped
 
     assert run(body()) == ([4, 3, 2], 1, 5)
@@ -175,7 +173,7 @@ def test_recent_events_are_newest_first_and_bounded(test_db: ScratchDb) -> None:
 def test_run_finding_and_action_round_trip(test_db: ScratchDb) -> None:
     async def body() -> tuple[bool, bool, bool]:
         async with open_db(test_db.app_url) as db:
-            records = Records(db)
+            records = Records(db.scoped(TENANT, PROJECT))
             stored_run = run_record()
             await records.add_run(stored_run)
             stored_finding = finding(stored_run.id)
@@ -183,9 +181,9 @@ def test_run_finding_and_action_round_trip(test_db: ScratchDb) -> None:
             stored_action = action(stored_run.id)
             assert await records.add_action(stored_action) is True
             return (
-                await records.get_run(TENANT, PROJECT, stored_run.id) == stored_run,
-                await records.get_finding(TENANT, PROJECT, stored_finding.id) == stored_finding,
-                await records.get_action(TENANT, PROJECT, stored_action.id) == stored_action,
+                await records.get_run(stored_run.id) == stored_run,
+                await records.get_finding(stored_finding.id) == stored_finding,
+                await records.get_action(stored_action.id) == stored_action,
             )
 
     assert run(body()) == (True, True, True)
@@ -194,7 +192,7 @@ def test_run_finding_and_action_round_trip(test_db: ScratchDb) -> None:
 def test_run_without_model_and_collector_finding_round_trip(test_db: ScratchDb) -> None:
     async def body() -> tuple[bool, bool]:
         async with open_db(test_db.app_url) as db:
-            records = Records(db)
+            records = Records(db.scoped(TENANT, PROJECT))
             bare = run_record(
                 model=None, trigger_event_ids=(), outcome=RunOutcome.COULD_NOT_RUN, error_code="x.down"
             )
@@ -202,8 +200,8 @@ def test_run_without_model_and_collector_finding_round_trip(test_db: ScratchDb) 
             collected = finding(None)
             await records.add_finding(collected)
             return (
-                await records.get_run(TENANT, PROJECT, bare.id) == bare,
-                await records.get_finding(TENANT, PROJECT, collected.id) == collected,
+                await records.get_run(bare.id) == bare,
+                await records.get_finding(collected.id) == collected,
             )
 
     assert run(body()) == (True, True)
@@ -212,12 +210,12 @@ def test_run_without_model_and_collector_finding_round_trip(test_db: ScratchDb) 
 def test_approved_action_round_trip_keeps_the_approver(test_db: ScratchDb) -> None:
     async def body() -> bool:
         async with open_db(test_db.app_url) as db:
-            records = Records(db)
+            records = Records(db.scoped(TENANT, PROJECT))
             parent = run_record()
             await records.add_run(parent)
             approved = action(parent.id, status=ActionStatus.APPROVED, approved_by=uuid4(), approved_at=NOW)
             await records.add_action(approved)
-            return await records.get_action(TENANT, PROJECT, approved.id) == approved
+            return await records.get_action(approved.id) == approved
 
     assert run(body()) is True
 
@@ -225,7 +223,7 @@ def test_approved_action_round_trip_keeps_the_approver(test_db: ScratchDb) -> No
 def test_same_action_is_proposed_once(test_db: ScratchDb) -> None:
     async def body() -> tuple[bool, bool]:
         async with open_db(test_db.app_url) as db:
-            records = Records(db)
+            records = Records(db.scoped(TENANT, PROJECT))
             parent = run_record()
             await records.add_run(parent)
             return await records.add_action(action(parent.id)), await records.add_action(action(parent.id))
@@ -236,12 +234,12 @@ def test_same_action_is_proposed_once(test_db: ScratchDb) -> None:
 def test_missing_records_are_none(test_db: ScratchDb) -> None:
     async def body() -> list[object]:
         async with open_db(test_db.app_url) as db:
-            records = Records(db)
+            records = Records(db.scoped(TENANT, PROJECT))
             missing = uuid4()
             return [
-                await records.get_run(TENANT, PROJECT, missing),
-                await records.get_finding(TENANT, PROJECT, missing),
-                await records.get_action(TENANT, PROJECT, missing),
+                await records.get_run(missing),
+                await records.get_finding(missing),
+                await records.get_action(missing),
             ]
 
     assert run(body()) == [None, None, None]
@@ -250,7 +248,8 @@ def test_missing_records_are_none(test_db: ScratchDb) -> None:
 def test_naive_run_start_time_is_refused(test_db: ScratchDb) -> None:
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            await Records(db).add_run(run_record(started_at=datetime(2026, 10, 17, 9, 0)))  # noqa: DTZ001  # the point of the test
+            naive = datetime(2026, 10, 17, 9, 0)  # noqa: DTZ001  # the point of the test
+            await Records(db.scoped(TENANT, PROJECT)).add_run(run_record(started_at=naive))
 
     with pytest.raises(StoreError) as caught:
         run(body())
@@ -260,7 +259,7 @@ def test_naive_run_start_time_is_refused(test_db: ScratchDb) -> None:
 def test_action_for_an_unknown_run_is_rejected(test_db: ScratchDb) -> None:
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            await Records(db).add_action(action(uuid4()))
+            await Records(db.scoped(TENANT, PROJECT)).add_action(action(uuid4()))
 
     with pytest.raises(StoreError) as caught:
         run(body())
@@ -272,8 +271,8 @@ def test_duplicate_run_is_a_conflict_and_the_error_carries_no_values(test_db: Sc
 
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            await Records(db).add_run(stored)
-            await Records(db).add_run(stored)
+            await Records(db.scoped(TENANT, PROJECT)).add_run(stored)
+            await Records(db.scoped(TENANT, PROJECT)).add_run(stored)
 
     with pytest.raises(StoreError) as caught:
         run(body())
@@ -289,7 +288,7 @@ def test_database_rules_back_up_the_sdk_rules(test_db: ScratchDb) -> None:
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
             parent = run_record()
-            await Records(db).add_run(parent)
+            await Records(db.scoped(TENANT, PROJECT)).add_run(parent)
             async with db.scoped(TENANT, PROJECT).connection() as conn:
                 await conn.execute(
                     "INSERT INTO yaqzan.actions (id, tenant_id, project_id, run_id, tool, level, payload,"

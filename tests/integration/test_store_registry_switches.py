@@ -40,13 +40,11 @@ def request(item: str = "triage-failing-build", **extra: Any) -> RequestRow:
 def test_switch_off_is_stored_and_overwritten(test_db: ScratchDb) -> None:
     async def body() -> tuple[list[SwitchRow], list[SwitchRow]]:
         async with open_db(test_db.app_url) as db:
-            rows = RegistrySwitchRows(db)
-            await rows.switch_off(TENANT, "skill", "a-skill", FILES, changed_by=CHAIRMAN, changed_at=NOW)
+            rows = RegistrySwitchRows(db.scoped(TENANT))
+            await rows.switch_off("skill", "a-skill", FILES, changed_by=CHAIRMAN, changed_at=NOW)
             later = NOW + timedelta(minutes=1)
-            await rows.switch_off(
-                TENANT, "skill", "a-skill", CHANGED, changed_by="system:yaqzan", changed_at=later
-            )
-            return await rows.switches(TENANT), await rows.switches(OTHER)
+            await rows.switch_off("skill", "a-skill", CHANGED, changed_by="system:yaqzan", changed_at=later)
+            return await rows.switches(), await RegistrySwitchRows(db.scoped(OTHER)).switches()
 
     mine, theirs = run(body())
     assert theirs == []
@@ -60,11 +58,11 @@ def test_switch_off_is_stored_and_overwritten(test_db: ScratchDb) -> None:
 def test_one_pending_request_per_item(test_db: ScratchDb) -> None:
     async def body() -> tuple[bool, bool, bool, list[RequestRow]]:
         async with open_db(test_db.app_url) as db:
-            rows = RegistrySwitchRows(db)
-            first = await rows.add_request(TENANT, request())
-            second = await rows.add_request(TENANT, request())
-            other_item = await rows.add_request(TENANT, request("another"))
-            return first, second, other_item, await rows.pending(TENANT)
+            rows = RegistrySwitchRows(db.scoped(TENANT))
+            first = await rows.add_request(request())
+            second = await rows.add_request(request())
+            other_item = await rows.add_request(request("another"))
+            return first, second, other_item, await rows.pending()
 
     first, second, other_item, pending = run(body())
     assert (first, second, other_item) == (True, False, True)
@@ -77,12 +75,12 @@ def test_withdraw_once_then_a_new_request_may_be_filed(test_db: ScratchDb) -> No
 
     async def body() -> tuple[bool, bool, bool, RequestRow | None, list[RequestRow]]:
         async with open_db(test_db.app_url) as db:
-            rows = RegistrySwitchRows(db)
-            await rows.add_request(TENANT, filed)
-            first = await rows.withdraw(TENANT, filed.id, by=CHAIRMAN, at=NOW)
-            again = await rows.withdraw(TENANT, filed.id, by=CHAIRMAN, at=NOW)
-            refiled = await rows.add_request(TENANT, request())
-            return first, again, refiled, await rows.get_request(TENANT, filed.id), await rows.pending(TENANT)
+            rows = RegistrySwitchRows(db.scoped(TENANT))
+            await rows.add_request(filed)
+            first = await rows.withdraw(filed.id, by=CHAIRMAN, at=NOW)
+            again = await rows.withdraw(filed.id, by=CHAIRMAN, at=NOW)
+            refiled = await rows.add_request(request())
+            return first, again, refiled, await rows.get_request(filed.id), await rows.pending()
 
     first, again, refiled, stored, pending = run(body())
     assert (first, again, refiled) == (True, False, True)
@@ -94,10 +92,10 @@ def test_withdraw_once_then_a_new_request_may_be_filed(test_db: ScratchDb) -> No
 def test_only_a_pending_request_can_be_filed(test_db: ScratchDb) -> None:
     async def body() -> list[RequestRow]:
         async with open_db(test_db.app_url) as db:
-            rows = RegistrySwitchRows(db)
+            rows = RegistrySwitchRows(db.scoped(TENANT))
             with pytest.raises(ValueError, match="pending"):
-                await rows.add_request(TENANT, request(status=RequestStatus.APPROVED))
-            return await rows.pending(TENANT)
+                await rows.add_request(request(status=RequestStatus.APPROVED))
+            return await rows.pending()
 
     assert run(body()) == []
 
@@ -107,10 +105,11 @@ def test_requests_are_scoped_by_tenant(test_db: ScratchDb) -> None:
 
     async def body() -> tuple[RequestRow | None, bool]:
         async with open_db(test_db.app_url) as db:
-            rows = RegistrySwitchRows(db)
-            await rows.add_request(TENANT, filed)
-            found = await rows.get_request(OTHER, filed.id)
-            return found, await rows.withdraw(OTHER, filed.id, by=CHAIRMAN, at=NOW)
+            rows = RegistrySwitchRows(db.scoped(TENANT))
+            await rows.add_request(filed)
+            elsewhere = RegistrySwitchRows(db.scoped(OTHER))
+            found = await elsewhere.get_request(filed.id)
+            return found, await elsewhere.withdraw(filed.id, by=CHAIRMAN, at=NOW)
 
     assert run(body()) == (None, False)
 
@@ -146,7 +145,7 @@ def _approved(test_db: ScratchDb, item: str) -> UUID:
 def _file(test_db: ScratchDb, filed: RequestRow) -> None:
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            await RegistrySwitchRows(db).add_request(TENANT, filed)
+            await RegistrySwitchRows(db.scoped(TENANT)).add_request(filed)
 
     run(body())
 
@@ -173,7 +172,7 @@ def test_on_with_a_matching_approval_is_stored(test_db: ScratchDb) -> None:
 
     async def body() -> list[SwitchRow]:
         async with open_db(test_db.app_url) as db:
-            return await RegistrySwitchRows(db).switches(TENANT)
+            return await RegistrySwitchRows(db.scoped(TENANT)).switches()
 
     (row,) = run(body())
     assert (row.enabled, row.request_id) == (True, approved)

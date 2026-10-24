@@ -95,6 +95,7 @@ from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
 from yaqzan.core.api.registry import RegistryPage, registry_page, uses_from_cards
 from yaqzan.core.api.uptime import CARD_ID as UPTIME_CARD
+from yaqzan.core.api.workspaces import WorkspaceDirectory
 from yaqzan.core.auth import Site
 from yaqzan.core.llm_gateway import Tool
 from yaqzan.core.policy import Standing
@@ -324,7 +325,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         uptime = uptime_list(ns.uptime, projects)
         backends = supabase_list(ns.supabase, projects)
         fixes = fixes_list(ns.fixes, projects)
-        off = off_connectors(connected[1], registry) if connected else frozenset[str]()
+        off = off_connectors(connected.standing, registry) if connected else frozenset[str]()
         with span("dashboard start"):  # every start-up read in one trace
             portfolio, live = _real_data(ns, env, clock, transport, off=off, uptime=uptime, backends=backends)
     except (_NotStartedError, ListNotUsableError):
@@ -334,7 +335,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
     if connected is not None:
         code = secrets.token_hex(4) if ns.enrol_passkey else None
         switches = LaptopSwitches(
-            connected[0],
+            connected.url,
             registry,
             uses_from_cards(chosen.project, wiring_for(uptime, backends)),
             clock,
@@ -358,8 +359,16 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         if chat is None:
             return 1
     page = registry_for(chosen, registry=registry, uptime=uptime, backends=backends)
+    # The workspaces the door knows (ADR-039): the laptop database's, or the fixed five without it.
+    directory = WorkspaceDirectory(connected.workspaces if connected else laptop_db.LAPTOP_WORKSPACES)
     app = create_app(
-        chosen, static_dir=static_dir, allowed_hosts=LOCAL_HOSTS, chat=chat, registry=page, switches=switches
+        chosen,
+        static_dir=static_dir,
+        allowed_hosts=LOCAL_HOSTS,
+        chat=chat,
+        registry=page,
+        switches=switches,
+        workspaces=directory,
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:

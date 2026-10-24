@@ -180,10 +180,10 @@ async def set_up(admin: str, database: str = DATABASE) -> SecretStr:
     url = SecretStr(_url(admin, APP, app_password, database))
     app = await Database.open(DatabaseSettings(dsn=url))
     try:
-        workspaces = WorkspaceRows(app)
-        await workspaces.add_tenant(LAPTOP_TENANT, "Yaqzan")
+        workspaces = WorkspaceRows(app.scoped(LAPTOP_TENANT))
+        await workspaces.add_tenant("Yaqzan")
         for workspace in LAPTOP_WORKSPACES:
-            await workspaces.add(LAPTOP_TENANT, workspace)
+            await workspaces.add(workspace)
     finally:
         await app.close()
     return url

@@ -15,7 +15,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from uuid import UUID
 
 from yaqzan.core import metrics
 from yaqzan.core.metrics import CountAndAmounts, Freshness, Unknown
@@ -31,7 +30,7 @@ from yaqzan.core.sdk import (
     say,
     span,
 )
-from yaqzan.core.store import Database, RevenueRows, StoreError
+from yaqzan.core.store import RevenueRows, Scoped, StoreError
 
 CURSOR_OVERLAP = timedelta(hours=1)
 _CRASHED = "collect.crashed"
@@ -48,13 +47,14 @@ class SyncOutcome:
     refunds: int = 0
 
 
-async def sync_revenue(
-    db: Database, tenant_id: UUID, project_id: UUID, source: RevenueSource, *, now: datetime
-) -> SyncOutcome:
-    """Fetch from ``source``, save, and record the result in the source's sync state."""
-    attributes = {"yaqzan.source": source.source, "yaqzan.project": str(project_id)}
+async def sync_revenue(scope: Scoped, source: RevenueSource, *, now: datetime) -> SyncOutcome:
+    """Fetch from ``source``, save, and record the result in the source's sync state.
+
+    ``scope`` is the one workspace this sync works in, given by whoever started it.
+    """
+    attributes = {"yaqzan.source": source.source, "yaqzan.project": str(scope.require_workspace())}
     with span(f"sync revenue {source.source}", attributes=attributes) as current:
-        outcome = await _sync(db, tenant_id, project_id, source, now=now)
+        outcome = await _sync(scope, source, now=now)
         if outcome.error_code is not None:
             failed(current, outcome.error_code)
         else:
@@ -62,29 +62,27 @@ async def sync_revenue(
         return outcome
 
 
-async def _sync(
-    db: Database, tenant_id: UUID, project_id: UUID, source: RevenueSource, *, now: datetime
-) -> SyncOutcome:
-    rows = RevenueRows(db)
-    log = get_logger("yaqzan.collect", source=source.source, project_id=str(project_id))
-    state = await rows.sync_state(tenant_id, project_id, source.source)
+async def _sync(scope: Scoped, source: RevenueSource, *, now: datetime) -> SyncOutcome:
+    rows = RevenueRows(scope)
+    log = get_logger("yaqzan.collect", source=source.source, project_id=str(scope.workspace_id))
+    state = await rows.sync_state(source.source)
     since = None if state is None or state.cursor_at is None else state.cursor_at - CURSOR_OVERLAP
-    await rows.mark_attempt(tenant_id, project_id, source.source, at=now)
+    await rows.mark_attempt(source.source, at=now)
     stage = f"fetch from {source.source}"
     try:
         batch = await source.fetch(payments_since=since, now=now)
         if batch.source != source.source:
             raise SourceError(SourceErrorCode.BAD_RESPONSE, "the batch names another source")
         stage = "save to the database"
-        await rows.save_batch(tenant_id, project_id, batch, at=now)
+        await rows.save_batch(batch, at=now)
     except (SourceError, StoreError) as exc:
         code = exc.reason_code if isinstance(exc, SourceError) else exc.code.value
-        await rows.mark_failure(tenant_id, project_id, source.source, at=now, error_code=code)
+        await rows.mark_failure(source.source, at=now, error_code=code)
         say(log, "revenue_sync_failed", stage=stage, reason_code=code, source=source.source, **_where(exc))
         return SyncOutcome(ok=False, error_code=code)
     except Exception:
         # A bug, not an outage: record it so the tile goes grey, then fail loudly.
-        await rows.mark_failure(tenant_id, project_id, source.source, at=now, error_code=_CRASHED)
+        await rows.mark_failure(source.source, at=now, error_code=_CRASHED)
         say(log, "revenue_sync_crashed", stage=stage, reason_code=_CRASHED, source=source.source)
         raise
     counts = (len(batch.subscriptions), len(batch.payments), len(batch.refunds))
@@ -123,10 +121,8 @@ class RevenueSnapshot:
     cash_revenue_ex_tax: dict[str, int] | Unknown
 
 
-async def revenue_snapshot(  # noqa: PLR0913  # who, which source, when, and the period
-    db: Database,
-    tenant_id: UUID,
-    project_id: UUID,
+async def revenue_snapshot(  # noqa: PLR0913  # where, which source, when, and the period
+    scope: Scoped,
     source: str,
     *,
     now: datetime,
@@ -135,8 +131,8 @@ async def revenue_snapshot(  # noqa: PLR0913  # who, which source, when, and the
     end: datetime,
 ) -> RevenueSnapshot:
     """Numbers for ``[start, end)`` from stored rows. Not fresh = every number unknown, never 0."""
-    rows = RevenueRows(db)
-    state = await rows.sync_state(tenant_id, project_id, source)
+    rows = RevenueRows(scope)
+    state = await rows.sync_state(source)
     last_success = None if state is None else state.last_success_at
     if not metrics.freshness(last_success, schedule, now).usable:
         return snapshot_from_rows(
@@ -144,9 +140,9 @@ async def revenue_snapshot(  # noqa: PLR0913  # who, which source, when, and the
         )
     return snapshot_from_rows(
         source,
-        await rows.subscriptions(tenant_id, project_id, source),
-        await rows.payments(tenant_id, project_id, source, start, end),
-        await rows.refunds(tenant_id, project_id, source, start, end),
+        await rows.subscriptions(source),
+        await rows.payments(source, start, end),
+        await rows.refunds(source, start, end),
         now=now,
         last_success=last_success,
         schedule=schedule,

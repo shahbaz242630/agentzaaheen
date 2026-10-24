@@ -45,7 +45,7 @@ def fake() -> FakePaddleSource:
 
 async def snapshot(db: Database, now: datetime) -> RevenueSnapshot:
     return await revenue_snapshot(
-        db, TENANT, PROJECT, "paddle", now=now, schedule=SCHEDULE, start=START, end=END
+        db.scoped(TENANT, PROJECT), "paddle", now=now, schedule=SCHEDULE, start=START, end=END
     )
 
 
@@ -63,7 +63,7 @@ def assert_world_numbers(snap: RevenueSnapshot) -> None:
 def test_sync_then_snapshot_gives_the_metric_numbers(test_db: ScratchDb) -> None:
     async def body() -> tuple[SyncOutcome, RevenueSnapshot]:
         async with open_db(test_db.app_url) as db:
-            outcome = await sync_revenue(db, TENANT, PROJECT, fake(), now=world.NOW)
+            outcome = await sync_revenue(db.scoped(TENANT, PROJECT), fake(), now=world.NOW)
             return outcome, await snapshot(db, world.NOW + timedelta(minutes=5))
 
     outcome, snap = run(body())
@@ -84,7 +84,7 @@ def test_the_real_paddle_source_through_the_real_client_gives_the_same_numbers(t
             transport=httpx.MockTransport(paddle.serve),
         )
         async with open_db(test_db.app_url) as db, http:
-            outcome = await sync_revenue(db, TENANT, PROJECT, PaddleSource(http), now=world.NOW)
+            outcome = await sync_revenue(db.scoped(TENANT, PROJECT), PaddleSource(http), now=world.NOW)
             assert outcome.ok
             return await snapshot(db, world.NOW)
 
@@ -96,8 +96,8 @@ def test_the_next_sync_asks_only_from_just_before_the_cursor(test_db: ScratchDb)
 
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            await sync_revenue(db, TENANT, PROJECT, source, now=world.NOW)
-            await sync_revenue(db, TENANT, PROJECT, source, now=world.NOW + SCHEDULE)
+            await sync_revenue(db.scoped(TENANT, PROJECT), source, now=world.NOW)
+            await sync_revenue(db.scoped(TENANT, PROJECT), source, now=world.NOW + SCHEDULE)
 
     run(body())
     assert source.calls == [None, world.NOW - CURSOR_OVERLAP]
@@ -109,10 +109,10 @@ def test_a_failed_sync_records_why_and_keeps_the_last_success(test_db: ScratchDb
 
     async def body() -> tuple[SyncOutcome, SyncState | None, RevenueSnapshot]:
         async with open_db(test_db.app_url) as db:
-            await sync_revenue(db, TENANT, PROJECT, source, now=world.NOW)
+            await sync_revenue(db.scoped(TENANT, PROJECT), source, now=world.NOW)
             source.fail_with = SourceErrorCode.AUTH
-            outcome = await sync_revenue(db, TENANT, PROJECT, source, now=later)
-            state = await RevenueRows(db).sync_state(TENANT, PROJECT, "paddle")
+            outcome = await sync_revenue(db.scoped(TENANT, PROJECT), source, now=later)
+            state = await RevenueRows(db.scoped(TENANT, PROJECT)).sync_state("paddle")
             return outcome, state, await snapshot(db, later)
 
     outcome, state, snap = run(body())
@@ -136,8 +136,8 @@ def test_a_failure_is_logged_in_plain_english_with_the_precise_code(
             transport=httpx.MockTransport(lambda r: httpx.Response(401)),
         )
         async with open_db(test_db.app_url) as db, http:
-            outcome = await sync_revenue(db, TENANT, PROJECT, PaddleSource(http), now=world.NOW)
-            return outcome, await RevenueRows(db).sync_state(TENANT, PROJECT, "paddle")
+            outcome = await sync_revenue(db.scoped(TENANT, PROJECT), PaddleSource(http), now=world.NOW)
+            return outcome, await RevenueRows(db.scoped(TENANT, PROJECT)).sync_state("paddle")
 
     outcome, state = run(body())
     assert outcome == SyncOutcome(ok=False, error_code="net.auth")
@@ -161,7 +161,7 @@ def test_a_failure_is_logged_in_plain_english_with_the_precise_code(
 def test_stale_data_is_unknown_never_zero(test_db: ScratchDb) -> None:
     async def body() -> tuple[RevenueSnapshot, RevenueSnapshot]:
         async with open_db(test_db.app_url) as db:
-            await sync_revenue(db, TENANT, PROJECT, fake(), now=world.NOW)
+            await sync_revenue(db.scoped(TENANT, PROJECT), fake(), now=world.NOW)
             stale = await snapshot(db, world.NOW + 2 * SCHEDULE + timedelta(seconds=1))
             alert = await snapshot(db, world.NOW + 6 * SCHEDULE + timedelta(seconds=1))
             return stale, alert
@@ -206,7 +206,7 @@ class Crashing(FakePaddleSource):
 def test_a_batch_from_another_source_is_refused(test_db: ScratchDb) -> None:
     async def body() -> SyncOutcome:
         async with open_db(test_db.app_url) as db:
-            return await sync_revenue(db, TENANT, PROJECT, WrongSource(), now=world.NOW)
+            return await sync_revenue(db.scoped(TENANT, PROJECT), WrongSource(), now=world.NOW)
 
     assert run(body()) == SyncOutcome(ok=False, error_code="source.bad_response")
 
@@ -215,8 +215,8 @@ def test_a_crash_is_recorded_then_raised(test_db: ScratchDb) -> None:
     async def body() -> SyncState | None:
         async with open_db(test_db.app_url) as db:
             with pytest.raises(RuntimeError):
-                await sync_revenue(db, TENANT, PROJECT, Crashing(), now=world.NOW)
-            return await RevenueRows(db).sync_state(TENANT, PROJECT, "paddle")
+                await sync_revenue(db.scoped(TENANT, PROJECT), Crashing(), now=world.NOW)
+            return await RevenueRows(db.scoped(TENANT, PROJECT)).sync_state("paddle")
 
     state = run(body())
     assert state is not None
@@ -229,9 +229,9 @@ def test_each_sync_is_one_span_with_its_count_or_its_failure(test_db: ScratchDb)
 
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            await sync_revenue(db, TENANT, PROJECT, source, now=world.NOW)
+            await sync_revenue(db.scoped(TENANT, PROJECT), source, now=world.NOW)
             source.fail_with = SourceErrorCode.AUTH
-            await sync_revenue(db, TENANT, PROJECT, source, now=world.NOW + SCHEDULE)
+            await sync_revenue(db.scoped(TENANT, PROJECT), source, now=world.NOW + SCHEDULE)
 
     with recorded() as spans:
         run(body())
