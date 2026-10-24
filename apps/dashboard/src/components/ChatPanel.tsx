@@ -19,7 +19,7 @@ export const SUGGESTIONS = [
 // A model that is not connected answers honestly instead of pretending.
 export function notConnectedReply(model: ModelChoice | undefined, projectName: string | null): string {
   const who = model ? model.label : "The model";
-  const where = projectName === null ? "your projects" : projectName;
+  const where = projectName === null ? "all your workspaces" : projectName;
   return (
     `${who} is not connected yet, so I can't answer for real. ` +
     `Once it is, I'll answer from the audit log and the cards for ${where}, and anything I would do ` +
@@ -149,7 +149,7 @@ export function ChatPanel({ models, projectId, projectName }: Props) {
         {messages.length === 0 ? (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted">
-              Ask about {projectName ?? "your projects"} by typing. Voice comes after typing works.
+              Ask about {projectName ?? "all your workspaces (the Board)"} by typing. Voice comes after typing works.
             </p>
             <div className="flex flex-col items-start gap-2">
               {SUGGESTIONS.map((suggestion) => (
