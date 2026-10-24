@@ -24,6 +24,7 @@ from tests.fixtures.soft_authenticator import SoftAuthenticator
 from tests.integration.conftest import Server, run
 from tools import dashboard, dashboard_switches, laptop_db
 from yaqzan.core.api.app import REQUEST_HEADER
+from yaqzan.core.api.workspaces import WorkspaceDirectory
 from yaqzan.core.auth import Site
 from yaqzan.core.store import AuditRow, AuditRows, Database, DatabaseSettings, StoreError, StoreErrorCode
 
@@ -259,6 +260,9 @@ NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 # ---------------------------------------------------------------- Board inspection (ADR-039, amended 24 Oct)
 
 
+LAPTOP = WorkspaceDirectory(laptop_db.LAPTOP_WORKSPACES)
+
+
 def _switches(url: SecretStr) -> dashboard_switches.LaptopSwitches:
     return dashboard_switches.LaptopSwitches(
         url,
@@ -275,7 +279,7 @@ def test_a_board_inspection_is_written_to_the_audit_log(laptop_url: SecretStr) -
     async def body() -> list[AuditRow]:
         switches = _switches(laptop_url)
         try:
-            await switches.recorder(laptop_db.LAPTOP_WORKSPACES)("eva", "failed_build_log", "eva")
+            await switches.recorder(LAPTOP)("eva", "failed_build_log", "eva")
         finally:
             await switches.close()
         db = await Database.open(DatabaseSettings(dsn=laptop_url))
@@ -294,7 +298,7 @@ def test_a_look_at_an_unknown_workspace_raises_and_writes_nothing(laptop_url: Se
     async def body() -> None:
         switches = _switches(laptop_url)
         try:
-            await switches.recorder(laptop_db.LAPTOP_WORKSPACES)("nope", "failed_build_log", "nope")
+            await switches.recorder(LAPTOP)("nope", "failed_build_log", "nope")
         finally:
             await switches.close()
 

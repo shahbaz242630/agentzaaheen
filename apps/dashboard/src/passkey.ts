@@ -65,7 +65,8 @@ export async function approveWithPasskey(requestId: string): Promise<RegistryPag
 }
 
 // A change that may need the Chairman's passkey: try it; if the server says it is riskier
-// ("agents.needs_passkey"), have Windows Hello sign a challenge made for exactly this change, then send it again.
+// ("agents.needs_passkey", "workspaces.needs_passkey"), have Windows Hello sign a challenge made for
+// exactly this change, then send it again.
 export async function withPasskeyIfNeeded<T>(
   attempt: () => Promise<T>,
   options: () => Promise<Record<string, unknown>>,
@@ -74,7 +75,7 @@ export async function withPasskeyIfNeeded<T>(
   try {
     return await attempt();
   } catch (failure) {
-    if (!(failure instanceof ApiError) || failure.code !== "agents.needs_passkey") throw failure;
+    if (!(failure instanceof ApiError) || !failure.code?.endsWith(".needs_passkey")) throw failure;
   }
   ready();
   const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(

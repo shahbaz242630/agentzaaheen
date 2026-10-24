@@ -5,6 +5,7 @@ import type { Card, ProjectDetail, RegistryPage, Tone, Use } from "../api";
 import { AgentsPanel } from "./AgentsPanel";
 import { CardView } from "./CardView";
 import { HealthPill } from "./health";
+import { RemoveButton } from "./RemoveProject";
 
 export const TABS = ["overview", "agents", "alerts", "sources"] as const;
 export type Tab = (typeof TABS)[number];
@@ -20,10 +21,12 @@ interface Props {
   registry: RegistryPage | null | "failed";
   tab: Tab;
   onTab: (tab: Tab) => void;
+  // The project was archived or deleted for good: back to the Board, with what happened.
+  onRemoved: (message: string) => void;
 }
 
 // One workspace (ADR-039): everything on this page belongs to it only.
-export function WorkspaceView({ detail, registry, tab, onTab }: Props) {
+export function WorkspaceView({ detail, registry, tab, onTab, onRemoved }: Props) {
   const { project } = detail;
   const ids = useId();
   return (
@@ -34,6 +37,9 @@ export function WorkspaceView({ detail, registry, tab, onTab }: Props) {
             {project.name}
           </h1>
           <HealthPill health={project.health} />
+          <span className="ml-auto">
+            <RemoveButton slug={project.id} name={project.name} onRemoved={onRemoved} />
+          </span>
         </div>
         <p className="text-muted">{project.summary}</p>
         <p className="text-sm text-faint">Everything on this page belongs to {project.name} only.</p>

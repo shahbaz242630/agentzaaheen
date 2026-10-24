@@ -63,6 +63,11 @@ class Operation(StrEnum):
     ASSIGN_AGENT = "assign_agent"  # give a workspace an agent: it starts off, with no cap (ADR-039)
     LOWER_CAP = "lower_cap"  # a lower spending cap, for an agent or a workspace
     RAISE_CAP = "raise_cap"  # a higher (or first) spending cap: needs a fresh passkey
+    # Removing a project (ADR-039). Archiving stops everything but deletes the saved keys, which cannot be
+    # undone, so it needs a fresh passkey like the other two.
+    ARCHIVE_WORKSPACE = "archive_workspace"
+    RESTORE_WORKSPACE = "restore_workspace"
+    ERASE_WORKSPACE = "erase_workspace"  # delete an archived workspace's data for good
 
 
 REDUCES_RISK = frozenset(

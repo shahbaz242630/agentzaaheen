@@ -102,7 +102,6 @@ from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Registry, load_registry
 from yaqzan.core.registry.roles import RoleLibrary, load_roles
 from yaqzan.core.sdk import SiteRule, span
-from yaqzan.core.store import WorkspaceRow
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
@@ -357,6 +356,8 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
             print(f"dashboard: passkey set-up is open. The code to type on the Customize page is {code}")
     # The workspaces the door knows (ADR-039): the laptop database's, or the fixed five without it.
     known = connected.workspaces if connected else laptop_db.LAPTOP_WORKSPACES
+    # Read again whenever a workspace is archived or brought back.
+    directory = WorkspaceDirectory(known)
     chat: ChatBackend | None = None
     if ns.model_url:
         token = env.get(ns.github_token_env or "", "")
@@ -365,7 +366,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
             token,
             registry=registry,
             switches=switches,
-            workspaces=known,
+            workspaces=directory,
             clock=clock,
             transport=transport,
             fixes=fixes,
@@ -373,7 +374,6 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         if chat is None:
             return 1
     page = registry_for(chosen, registry=registry, uptime=uptime, backends=backends)
-    directory = WorkspaceDirectory(known)
     app = create_app(
         chosen,
         static_dir=static_dir,
@@ -383,6 +383,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         switches=switches,
         workspaces=directory,
         agents=switches,
+        removal=switches,
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
@@ -400,7 +401,7 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
     *,
     registry: Registry,
     switches: LaptopSwitches | None,
-    workspaces: Sequence[WorkspaceRow],
+    workspaces: WorkspaceDirectory,
     clock: Clock,
     transport: httpx.AsyncBaseTransport | None,
     fixes: Mapping[str, Project],

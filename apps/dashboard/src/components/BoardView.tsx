@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, type ProjectSummary, type RegistryPage, type WorkspaceAgents } from "../api";
 import { capWords, money } from "./AgentsPanel";
 import { HealthPill } from "./health";
+import { ArchivedProjects } from "./RemoveProject";
 
 // One line about a workspace's agents: honest when there are none, or when they can't be read.
 export function agentLine(found: WorkspaceAgents | "failed" | undefined): string {
@@ -20,12 +21,16 @@ interface Props {
   registry: RegistryPage | null;
   onOpen: (slug: string) => void;
   onCustomize: () => void;
+  // What just happened to a project that was removed, shown once at the top.
+  notice: string | null;
+  // A project was brought back: the workspace list must be read again.
+  onChanged: () => void;
 }
 
 const KIND_WORDS = { connector: "connector", skill: "skill", plugin: "plugin bundle" } as const;
 
 // The Board (ADR-039): every workspace's summary line and what needs the Chairman, never a workspace's raw data.
-export function BoardView({ workspaces, registry, onOpen, onCustomize }: Props) {
+export function BoardView({ workspaces, registry, onOpen, onCustomize, notice, onChanged }: Props) {
   const [agents, setAgents] = useState<Record<string, WorkspaceAgents | "failed">>({});
   useEffect(() => {
     let live = true;
@@ -56,6 +61,12 @@ export function BoardView({ workspaces, registry, onOpen, onCustomize }: Props) 
           You and the CEO. You see each workspace's summary line here, never its raw data.
         </p>
       </header>
+
+      {notice !== null && (
+        <p role="status" className="rounded-xl border border-line bg-raised px-4 py-2.5 text-sm text-ink">
+          {notice}
+        </p>
+      )}
 
       <section aria-labelledby="needs-you" className="rounded-2xl border border-line bg-panel p-5">
         <h2 id="needs-you" className="font-semibold text-ink">
@@ -135,6 +146,8 @@ export function BoardView({ workspaces, registry, onOpen, onCustomize }: Props) 
           </ul>
         )}
       </section>
+
+      <ArchivedProjects onChanged={onChanged} />
     </section>
   );
 }

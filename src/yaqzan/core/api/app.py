@@ -48,6 +48,7 @@ from yaqzan.core.api.registry import (
     RegistryPage,
     SignedAnswer,
 )
+from yaqzan.core.api.removal import WorkspaceRemoval, removal_routes
 from yaqzan.core.api.views import (
     ChatAnswer,
     ChatQuestion,
@@ -356,12 +357,14 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     switches: RegistrySwitches | None = None,
     workspaces: WorkspaceDirectory | None = None,
     agents: AgentSwitches | None = None,
+    removal: WorkspaceRemoval | None = None,
 ) -> FastAPI:
     """Build the app. ``static_dir`` is the built web UI; without it only the API is served.
 
     ``workspaces`` is the server's list of workspaces (from the database). Without
     it, each project of the portfolio is a workspace (sample data, no database).
     ``agents`` is the Agents tab (with a database); without it the tab is read-only and empty.
+    ``removal`` archives, brings back and deletes workspaces (with a database); without it, it is refused.
 
     Without ``chat`` the chat route answers ``chat.not_connected``. ``registry`` is
     what the Customize page shows (read once at start); without it the page is empty.
@@ -407,6 +410,7 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     _registry_routes(app, page, switches)
     _passkey_routes(app, switches)
     agent_routes(app, agents, _refuse_foreign)
+    removal_routes(app, removal, directory, _refuse_foreign)
 
     async def answer(question: ChatQuestion, facts: str, sample: bool, workspace: str | None) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:

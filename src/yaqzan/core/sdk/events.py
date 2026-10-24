@@ -93,6 +93,11 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="An agent change ({action}) by {actor} ended as {verdict}.",
         why="Someone gave a workspace an agent, or changed an agent's or a workspace's switch or cap.",
     ),
+    "workspace_lifecycle_decided": LogEvent(
+        "info",
+        what="Removing a project ({action}) by {actor} ended as {verdict}.",
+        why="Someone archived a workspace, brought one back, or deleted one for good.",
+    ),
     "agent_run_refused": LogEvent(
         "info",
         what="Agent {agent_id} was not allowed to run ({reason}).",
