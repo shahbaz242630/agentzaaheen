@@ -30,6 +30,11 @@ ZAAHEEN = UUID("00000000-0000-4000-8000-0000000000e3")
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 
 
+def _hello(n: int) -> datetime:
+    """The time of the n-th Windows Hello approval: each riskier change needs its own."""
+    return NOW - timedelta(seconds=60 - n)
+
+
 class _Me(TypedDict):
     role: Role
     channel: Channel
@@ -129,6 +134,28 @@ def test_an_old_step_up_does_not_count(test_db: ScratchDb, library: RoleLibrary)
     assert run(body()) is AgentVerdict.NOT_ALLOWED
 
 
+def test_one_approval_covers_one_change_and_a_reused_one_asks_again(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    async def body() -> list[AgentVerdict]:
+        _, agent = await _given(test_db.app_url, library)
+        async with open_db(test_db.app_url) as db:
+            rules = control(db, library)
+            return [
+                await rules.set_agent(EVA, agent, enabled=True, cap_minor=5, **ME, step_up_at=_hello(1)),
+                await rules.set_agent(EVA, agent, enabled=True, cap_minor=500, **ME, step_up_at=_hello(1)),
+                await rules.set_workspace(EVA, enabled=True, cap_minor=5, **ME, step_up_at=_hello(2)),
+                await rules.set_workspace(EVA, enabled=True, cap_minor=500, **ME, step_up_at=_hello(2)),
+            ]
+
+    assert run(body()) == [
+        AgentVerdict.DONE,
+        AgentVerdict.NEEDS_PASSKEY,
+        AgentVerdict.DONE,
+        AgentVerdict.NEEDS_PASSKEY,
+    ]
+
+
 def test_only_the_chairman_on_the_dashboard_may_switch_on(test_db: ScratchDb, library: RoleLibrary) -> None:
     async def body() -> list[AgentVerdict]:
         _, agent = await _given(test_db.app_url, library)
@@ -152,13 +179,13 @@ def test_the_jobs_door_says_yes_only_when_everything_is_on_and_nothing_is_used_u
             rules = control(db, library)
             seen: list[RunRefusal | None] = [(await rules.may_run(EVA, uuid4())).refusal]
             seen.append((await rules.may_run(EVA, agent)).refusal)  # workspace never switched on
-            await rules.set_workspace(EVA, enabled=True, cap_minor=None, **ME, step_up_at=NOW)
+            await rules.set_workspace(EVA, enabled=True, cap_minor=None, **ME, step_up_at=_hello(1))
             seen.append((await rules.may_run(EVA, agent)).refusal)  # agent off
-            await rules.set_agent(EVA, agent, enabled=True, cap_minor=None, **ME, step_up_at=NOW)
+            await rules.set_agent(EVA, agent, enabled=True, cap_minor=None, **ME, step_up_at=_hello(2))
             seen.append((await rules.may_run(EVA, agent)).refusal)  # no workspace cap
-            await rules.set_workspace(EVA, enabled=True, cap_minor=1000, **ME, step_up_at=NOW)
+            await rules.set_workspace(EVA, enabled=True, cap_minor=1000, **ME, step_up_at=_hello(3))
             seen.append((await rules.may_run(EVA, agent)).refusal)  # no agent cap
-            await rules.set_agent(EVA, agent, enabled=True, cap_minor=300, **ME, step_up_at=NOW)
+            await rules.set_agent(EVA, agent, enabled=True, cap_minor=300, **ME, step_up_at=_hello(4))
             permit = await rules.may_run(EVA, agent)
             seen.append(permit.refusal)
             assert permit.scope is not None
@@ -167,7 +194,7 @@ def test_the_jobs_door_says_yes_only_when_everything_is_on_and_nothing_is_used_u
             await records.add_run(run_record(project_id=EVA, tenant_id=TENANT, agent=str(agent),
                                              cost_minor_units=300, started_at=NOW))  # fmt: skip
             seen.append((await rules.may_run(EVA, agent)).refusal)  # agent cap used
-            await rules.set_agent(EVA, agent, enabled=True, cap_minor=5000, **ME, step_up_at=NOW)
+            await rules.set_agent(EVA, agent, enabled=True, cap_minor=5000, **ME, step_up_at=_hello(5))
             await records.add_run(run_record(project_id=EVA, tenant_id=TENANT, agent="another",
                                              cost_minor_units=700, started_at=NOW))  # fmt: skip
             seen.append((await rules.may_run(EVA, agent)).refusal)  # workspace cap used (300 + 700)

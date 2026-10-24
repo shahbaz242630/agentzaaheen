@@ -196,7 +196,8 @@ class AgentControl:
             riskier = (enabled and not agent.enabled) or _riskier_cap(agent.cap_minor, cap_minor)
             operation = Operation.RESUME if riskier else Operation.PAUSE_AGENT
             step = step_up_at if riskier else None
-            if riskier and step is None:
+            # One Windows Hello approval covers one change: a reused one asks again.
+            if riskier and (step is None or step == agent.step_up_at):
                 verdict = AgentVerdict.NEEDS_PASSKEY
             elif not authorize(role, operation, channel, step_up_at=step, now=now).allowed:
                 verdict = AgentVerdict.NOT_ALLOWED
@@ -228,13 +229,13 @@ class AgentControl:
             was_on, old_cap = (before.enabled, before.cap_minor) if before else (False, None)
             riskier = (enabled and not was_on) or _riskier_cap(old_cap, cap_minor)
             operation = Operation.RESUME if riskier else Operation.FREEZE_PROJECT
+            kept = before.step_up_at if before else None
             step = step_up_at if riskier else None
-            if riskier and step is None:
+            if riskier and (step is None or step == kept):
                 verdict = AgentVerdict.NEEDS_PASSKEY
             elif not authorize(role, operation, channel, step_up_at=step, now=now).allowed:
                 verdict = AgentVerdict.NOT_ALLOWED
             else:
-                kept = before.step_up_at if before else None
                 settings = WorkspaceSettings(
                     enabled, cap_minor, _ACTORS[role], now, step if riskier else kept
                 )
