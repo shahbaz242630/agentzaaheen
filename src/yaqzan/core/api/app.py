@@ -41,6 +41,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from yaqzan.core.api.adding import WorkspaceAdding, adding_routes
 from yaqzan.core.api.agents import AgentSwitches, agent_routes
 from yaqzan.core.api.facts import portfolio_facts, project_facts, uses_sample
+from yaqzan.core.api.profile import WorkspaceProfiles, profile_routes
 from yaqzan.core.api.registry import (
     EnrolAnswer,
     EnrolCode,
@@ -361,6 +362,7 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     agents: AgentSwitches | None = None,
     removal: WorkspaceRemoval | None = None,
     adding: WorkspaceAdding | None = None,
+    profiles: WorkspaceProfiles | None = None,
     on_close: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
     """Build the app. ``static_dir`` is the built web UI; without it only the API is served.
@@ -370,6 +372,8 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     ``agents`` is the Agents tab (with a database); without it the tab is read-only and empty.
     ``removal`` archives, brings back and deletes workspaces (with a database); without it, it is refused.
     ``adding`` adds a project from the Board (with a database); without it, it is refused.
+    ``profiles`` reads what each workspace is built with (with a GitHub token); without it,
+    the panel says GitHub is not connected.
     ``on_close`` runs when the server stops (the laptop database's pool is closed there).
 
     Without ``chat`` the chat route answers ``chat.not_connected``. ``registry`` is
@@ -425,6 +429,7 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     agent_routes(app, agents, _refuse_foreign)
     removal_routes(app, removal, directory, _refuse_foreign)
     adding_routes(app, adding, directory, _refuse_foreign)
+    profile_routes(app, profiles)
 
     async def answer(question: ChatQuestion, facts: str, sample: bool, workspace: str | None) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:

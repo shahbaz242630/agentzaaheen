@@ -3,6 +3,7 @@ import { useId } from "react";
 
 import type { Card, ProjectDetail, RegistryPage, Tone, Use } from "../api";
 import { AgentsPanel } from "./AgentsPanel";
+import { BuiltWith } from "./BuiltWith";
 import { CardView } from "./CardView";
 import { HealthPill } from "./health";
 import { RemoveButton } from "./RemoveProject";
@@ -68,7 +69,7 @@ export function WorkspaceView({ detail, registry, tab, onTab, onRemoved }: Props
       </div>
 
       <div role="tabpanel" id={`${ids}-panel`} aria-labelledby={`${ids}-${tab}`}>
-        {tab === "overview" && <Overview detail={detail} />}
+        {tab === "overview" && <Overview detail={detail} registry={registry} />}
         {tab === "agents" && <AgentsPanel slug={project.id} name={project.name} />}
         {tab === "alerts" && <Alerts cards={detail.cards} />}
         {tab === "sources" && <Sources slug={project.id} registry={registry} />}
@@ -77,7 +78,7 @@ export function WorkspaceView({ detail, registry, tab, onTab, onRemoved }: Props
   );
 }
 
-function Overview({ detail }: { detail: ProjectDetail }) {
+function Overview({ detail, registry }: { detail: ProjectDetail; registry: RegistryPage | null | "failed" }) {
   const { project, cards } = detail;
   return (
     <div className="flex flex-col gap-4">
@@ -92,6 +93,8 @@ function Overview({ detail }: { detail: ProjectDetail }) {
             : "Cards marked Sample use made-up numbers. The others are real."}
         </p>
       )}
+      {/* Keyed by workspace, so another workspace never shows this one's profile while loading. */}
+      <BuiltWith key={project.id} slug={project.id} registry={registry} />
       <div className="grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] items-start gap-4">
         {cards.map((card) => (
           <CardView key={card.id} card={card} />

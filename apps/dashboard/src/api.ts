@@ -229,6 +229,49 @@ export const RepoList = z.strictObject({
 export type RepoList = z.infer<typeof RepoList>;
 export const AddedProject = z.strictObject({ slug: item, name: z.string() });
 
+// What a workspace is built with (F17 slice 5b-1). Mirrors src/yaqzan/core/api/profile.py.
+export const ProviderCategory = z.enum([
+  "code",
+  "hosting",
+  "stores",
+  "payments",
+  "data",
+  "monitoring",
+  "messages",
+  "ai",
+  "sign_in",
+]);
+export type ProviderCategory = z.infer<typeof ProviderCategory>;
+export const Profile = z
+  .strictObject({
+    state: z.enum(["ready", "no_repo", "not_connected", "failed"]),
+    repo: repoName.nullable(),
+    branch: z.string().nullable(),
+    languages: z.array(
+      z.strictObject({
+        name: z.string().max(60),
+        bytes: z.int().nonnegative(),
+        share_bp: z.int().min(0).max(10_000),
+      }),
+    ),
+    providers: z.array(
+      z.strictObject({
+        id: item,
+        name: z.string().max(60),
+        category: ProviderCategory,
+        evidence: z.array(z.string()).min(1).max(3),
+      }),
+    ),
+    changed_at: time.nullable(),
+    checked_at: time.nullable(),
+    reason: z.string().nullable(),
+  })
+  .refine(
+    ({ languages }) => languages.length === 0 || languages.reduce((sum, l) => sum + l.share_bp, 0) === 10_000,
+    { message: "language shares must add up to 100%" },
+  );
+export type Profile = z.infer<typeof Profile>;
+
 // The Chairman's passkey (ADR-SEC-007): whether it exists, and whether it may be set up on this run.
 export const PasskeyStatus = z.strictObject({ enrolled: z.boolean(), enrolment_open: z.boolean() });
 export type PasskeyStatus = z.infer<typeof PasskeyStatus>;
@@ -331,6 +374,7 @@ export const api = {
   // Adding a project: no Windows Hello (nothing in a new project runs or spends).
   repos: () => getJson("/api/github/repos", RepoList),
   addProject: (name: string, repo: string | null) => postJson("/api/workspaces", { name, repo }, AddedProject),
+  profile: (slug: string) => getJson(`${workspacePath(slug)}/profile`, Profile),
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),

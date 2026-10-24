@@ -58,14 +58,15 @@ class LaptopAdding:
         return await self._switches.active()
 
     async def _names(self) -> list[str]:
-        return await _with_github(self._token, self._transport, lambda http: GitHubRepos(http).names())
+        return await with_github(self._token, self._transport, lambda http: GitHubRepos(http).names())
 
 
-async def _with_github[T](
+async def with_github[T](
     token: SecretStr | None,
     transport: httpx.AsyncBaseTransport | None,
     use: Callable[[JsonClient], Awaitable[T]],
 ) -> T:
+    """Run ``use`` with a read-only GitHub client that carries the token (never logged)."""
     if token is None:  # pragma: no cover  # callers check ``connected`` first
         raise RuntimeError("no GitHub token was given")
     async with JsonClient(
