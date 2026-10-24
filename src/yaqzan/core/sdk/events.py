@@ -267,6 +267,18 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         why="It broke a registry rule ({code}).",
         next="Fix the item's files, or remove it; everything else loaded normally.",
     ),
+    # ---- what a workspace is built with (languages and providers, F17 slice 5b-1)
+    "profile_read": LogEvent(
+        "info",
+        what="Read what the {workspace} workspace is built with: {entries} providers found.",
+        why="Its repository changed since the last look, or this was the first look since the start.",
+    ),
+    "profile_failed": LogEvent(
+        "warning",
+        what="Could not read what the {workspace} workspace is built with: {said}",
+        explains="code",
+        vendor="source",
+    ),
     # ---- revenue sync
     "revenue_synced": LogEvent(
         "info",

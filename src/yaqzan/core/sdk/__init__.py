@@ -9,7 +9,8 @@ What it does:
     reason code into plain English (:func:`explain`), the uptime shapes
     (an address's rule, its status and timing, never its page) and the
     backend health shapes (codes and numbers only), the repository bundle
-    the scout reads (paths and untrusted file text, secret files never), and spans: :func:`span`
+    the scout reads (paths and untrusted file text, secret files never), what a
+    project is built with (languages, and providers code found), and spans: :func:`span`
     opens one, :func:`traceparent` names the current one, and every log line
     inside a span carries its IDs (ADR-032); :func:`install_log_sink` lets
     telemetry ship each redacted line.
@@ -88,6 +89,17 @@ from yaqzan.core.sdk.repo_files import (
     is_secret_path,
     pick_files,
 )
+from yaqzan.core.sdk.repo_profile import (
+    MAX_LANGUAGES,
+    MAX_MANIFEST_BYTES,
+    PROVIDERS,
+    Language,
+    Provider,
+    ProviderCategory,
+    RepoProfile,
+    detect,
+    pick_manifests,
+)
 from yaqzan.core.sdk.revenue import (
     BillingCycle,
     Interval,
@@ -133,11 +145,14 @@ __all__ = [
     "LOG_EVENTS",
     "MAX_FILE_BYTES",
     "MAX_FILE_CHARS",
+    "MAX_LANGUAGES",
     "MAX_LOG_CHARS",
     "MAX_LOG_LINES",
+    "MAX_MANIFEST_BYTES",
     "MAX_PATHS",
     "MAX_TOTAL_CHARS",
     "PROJECT_REF",
+    "PROVIDERS",
     "REDACTED",
     "REPO_PATTERN",
     "SDK_VERSION",
@@ -162,18 +177,22 @@ __all__ = [
     "Interval",
     "JsonGetter",
     "JsonReader",
+    "Language",
     "LogEvent",
     "LogSink",
     "ModelInfo",
     "Payment",
     "PaymentStatus",
     "ProjectState",
+    "Provider",
+    "ProviderCategory",
     "Refund",
     "RefundKind",
     "RefundStatus",
     "RepoBundle",
     "RepoFile",
     "RepoHealth",
+    "RepoProfile",
     "RepoSource",
     "RevenueBatch",
     "RevenueSource",
@@ -197,6 +216,7 @@ __all__ = [
     "clean_log",
     "combine_trust",
     "contains_sensitive",
+    "detect",
     "elapsed_ms",
     "error_type",
     "event",
@@ -215,6 +235,7 @@ __all__ = [
     "max_data_class",
     "note",
     "pick_files",
+    "pick_manifests",
     "redact",
     "redact_text",
     "say",

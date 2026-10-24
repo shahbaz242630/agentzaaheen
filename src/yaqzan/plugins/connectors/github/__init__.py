@@ -10,12 +10,15 @@ What it does:
     redacted excerpt that is always untrusted; ``FakeGitHubBuildLog`` stands
     in for it. ``GitHubFiles`` reads, for the scout (ADR-039), the main
     branch's paths (secret files left out) and a few files' text, always
-    untrusted; ``GitHubRepos`` lists the repositories the token covers.
+    untrusted; ``GitHubRepos`` lists the repositories the token covers;
+    ``GitHubProfile`` reads a project's languages and the providers code
+    finds in it (F17 slice 5b-1).
 
 Public interface:
     ``GitHubSource``, ``FakeGitHubSource``, ``GitHubBuildLog``,
-    ``FakeGitHubBuildLog``, ``GitHubFiles``, ``GitHubRepos``, ``BASE_URL``, ``ALLOWED_HOSTS``, ``LOG_HOST``,
-    ``API_HEADERS``, ``SOURCE``. Manifest: ``plugin.yaml`` next to this file.
+    ``FakeGitHubBuildLog``, ``GitHubFiles``, ``GitHubProfile``, ``Head``, ``GitHubRepos``,
+    ``BASE_URL``, ``ALLOWED_HOSTS``, ``LOG_HOST``, ``API_HEADERS``, ``SOURCE``.
+    Manifest: ``plugin.yaml`` next to this file.
 
 How to test:
     ``uv run pytest tests/unit/test_github_mapping.py tests/contract/test_repo_source_contract.py``
@@ -33,7 +36,7 @@ Must never:
 
 from yaqzan.plugins.connectors.github.adapter import ALLOWED_HOSTS, API_HEADERS, BASE_URL, GitHubSource
 from yaqzan.plugins.connectors.github.fake import FakeGitHubBuildLog, FakeGitHubSource
-from yaqzan.plugins.connectors.github.files import GitHubFiles, GitHubRepos
+from yaqzan.plugins.connectors.github.files import GitHubFiles, GitHubProfile, GitHubRepos, Head
 from yaqzan.plugins.connectors.github.logs import LOG_HOST, GitHubBuildLog
 from yaqzan.plugins.connectors.github.mapping import SOURCE
 
@@ -47,6 +50,8 @@ __all__ = [
     "FakeGitHubSource",
     "GitHubBuildLog",
     "GitHubFiles",
+    "GitHubProfile",
     "GitHubRepos",
     "GitHubSource",
+    "Head",
 ]

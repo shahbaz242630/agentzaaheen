@@ -936,8 +936,8 @@
         "id": "github",
         "name": "GitHub",
         "category": "Code",
-        "description": "Open issues, open pull requests and the main branch's latest build as counts; a failed build's log only when triage asks, and the scout's file list and a few files (both untrusted).",
-        "version": "0.3.0",
+        "description": "Issue, pull request and build counts; a failed build's log on demand; the scout's files (untrusted); and a project's languages and providers, found by code.",
+        "version": "0.4.0",
         "level": "read",
         "hosts": [
           "api.github.com",
@@ -951,12 +951,13 @@
           "GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
           "GET /repos/{owner}/{repo}/git/trees/{branch}",
           "GET /repos/{owner}/{repo}/contents/{path}",
-          "GET /user/repos"
+          "GET /user/repos",
+          "GET /repos/{owner}/{repo}/languages"
         ],
         "key_slots": [
           "token"
         ],
-        "fingerprint": "2ca5b56a23f7bfbf6c6277d989c070496f4e745dcadf9a94e1ce454bcf788d63",
+        "fingerprint": "23c9266ff116d923d5f8ec8efe03ec772a8ab4228e2816180101a6e86e38f926",
         "uses": [
           {
             "project_id": "zaaheen",

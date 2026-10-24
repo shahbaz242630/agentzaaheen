@@ -16,6 +16,9 @@ repository once (GET only: open issues, open pull requests and the newest
 build on the main branch, counts only) and shows them on its Code card. The
 token comes from the named environment variable and is never printed. A
 repository that cannot be read shows why on its card; the others still show.
+Each workspace page's "Built with" panel also reads, with the same token, the
+repository's languages and the providers code finds in it, again each time the
+page opens if the repository changed (``tools.dashboard_profile``).
 
 With ``--model-url URL`` the chat on the right answers for real, from the
 cards on screen, using the model server at that address (the local model
@@ -78,6 +81,7 @@ from pydantic import SecretStr
 from tools import laptop_db
 from tools.chat_tools import Switched, model_chat, tools_for
 from tools.dashboard_adding import LaptopAdding
+from tools.dashboard_profile import LaptopProfiles, Repos
 from tools.dashboard_sources import (
     GITHUB_REPOS,
     Clock,
@@ -355,12 +359,12 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         )
         if code is not None:
             print(f"dashboard: passkey set-up is open. The code to type on the Customize page is {code}")
-    # Adding a project lists the repositories the GitHub token covers (unless GitHub is switched off).
-    adding = None
-    if switches is not None:
-        github_token = (env.get(ns.github_token_env or "", "") if "github" not in off else "").strip()
-        usable = SecretStr(github_token) if github_token and usable_secret(github_token) else None
-        adding = LaptopAdding(switches, usable, transport)
+    # Adding a project lists the repositories the GitHub token covers (unless GitHub is switched off),
+    # and each workspace page shows what its repository is built with.
+    github_token = (env.get(ns.github_token_env or "", "") if "github" not in off else "").strip()
+    usable = SecretStr(github_token) if github_token and usable_secret(github_token) else None
+    adding = LaptopAdding(switches, usable, transport) if switches is not None else None
+    profiles = LaptopProfiles(usable, _repos_of(switches), clock, transport)
     # The workspaces the door knows (ADR-039): the laptop database's, or the fixed five without it.
     known = connected.workspaces if connected else laptop_db.LAPTOP_WORKSPACES
     # Read again whenever a workspace is archived or brought back.
@@ -392,6 +396,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         agents=switches,
         removal=switches,
         adding=adding,
+        profiles=profiles,
         on_close=switches.close if switches is not None else None,
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
@@ -402,6 +407,17 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
     print(f"dashboard: open http://localhost:{ns.port} ({what}; press Ctrl+C to stop)")
     (serve or _serve)(app, HOST, ns.port)
     return 0
+
+
+def _repos_of(switches: LaptopSwitches | None) -> Repos:
+    """Where each workspace's repository is read from: the laptop database, or the fixed list without it."""
+    if switches is not None:
+        return switches.repos_in_use
+
+    async def fixed() -> Mapping[str, str]:
+        return laptop_db.LAPTOP_REPOS
+
+    return fixed
 
 
 def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, and the outside world
