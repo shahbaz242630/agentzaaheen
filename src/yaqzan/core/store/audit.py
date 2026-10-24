@@ -76,7 +76,7 @@ class AuditRows:
 
     async def append(self, tenant_id: UUID, build: Callable[[AuditRow | None], AuditRow]) -> AuditRow:
         """Lock the tenant's chain, pass the head to ``build``, insert what it returns."""
-        async with self._db.write("an audit log entry", atomic=True) as conn:
+        async with self._db.scoped(tenant_id).write("an audit log entry") as conn:
             await conn.execute(_LOCK, tenant_id)
             head = _row(await conn.fetchrow(_HEAD, tenant_id))
             row = build(head)
@@ -88,13 +88,13 @@ class AuditRows:
 
     async def head(self, tenant_id: UUID) -> AuditRow | None:
         """The newest row of a tenant's chain, or None if it is empty."""
-        async with self._db.connection() as conn:
+        async with self._db.scoped(tenant_id).connection() as conn:
             return _row(await conn.fetchrow(_HEAD, tenant_id))
 
     async def all_rows(self, tenant_id: UUID) -> list[AuditRow]:
         """Every row of a tenant's chain, oldest first, read page by page."""
         rows: list[AuditRow] = []
-        async with self._db.connection() as conn:
+        async with self._db.scoped(tenant_id).connection() as conn:
             while True:
                 after = rows[-1].seq if rows else 0
                 page = await conn.fetch(_PAGE, tenant_id, after, PAGE_SIZE)

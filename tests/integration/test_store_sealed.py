@@ -4,14 +4,22 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
 from pydantic import SecretStr
 
-from tests.integration.conftest import ScratchDb, open_db, run
+from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from yaqzan.core.store import SealedRow, SealedSecrets, SlotKey
 from yaqzan.core.vault import CredentialSlot, Keyring, MasterKey, SealedSecret, open_secret, rewrap, seal
 
 TENANT = uuid4()
 PROJECT = uuid4()
+
+
+@pytest.fixture(autouse=True)
+def _workspace(test_db: ScratchDb) -> None:
+    run(add_workspaces(test_db.app_url, TENANT, PROJECT))
+
+
 PLAINTEXT = "-".join(["plain", "credential", "value", "for", "tests"])  # fake, built at runtime
 
 
@@ -69,7 +77,7 @@ def test_plaintext_never_reaches_the_table(test_db: ScratchDb) -> None:
     async def body() -> bytes:
         async with open_db(test_db.app_url) as db:
             await SealedSecrets(db).put(row_of(slot(), seal(SecretStr(PLAINTEXT), slot(), ring)))
-            async with db.connection() as conn:
+            async with db.scoped(TENANT, PROJECT).connection() as conn:
                 dump = await conn.fetchval(
                     "SELECT string_agg(t::text, '|')::bytea FROM yaqzan.sealed_secrets t"
                 )

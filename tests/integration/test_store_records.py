@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from tests.integration.conftest import ScratchDb, open_db, run
+from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from yaqzan.core.sdk import (
     Action,
     ActionLevel,
@@ -29,6 +29,11 @@ from yaqzan.core.store import MAX_PAGE, Records, StoreError, StoreErrorCode
 NOW = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 TENANT = UUID("00000000-0000-4000-8000-000000000001")
 PROJECT = UUID("00000000-0000-4000-8000-0000000000aa")
+
+
+@pytest.fixture(autouse=True)
+def _workspace(test_db: ScratchDb) -> None:
+    run(add_workspaces(test_db.app_url, TENANT, PROJECT))
 
 
 def event(n: int = 0, **overrides: Any) -> Event:
@@ -122,7 +127,7 @@ def test_event_round_trip_is_exact(test_db: ScratchDb) -> None:
     async def body() -> Event | None:
         async with open_db(test_db.app_url) as db:
             assert await Records(db).add_event(original) is True
-            return await Records(db).get_event(TENANT, original.id)
+            return await Records(db).get_event(TENANT, PROJECT, original.id)
 
     assert run(body()) == original
 
@@ -146,7 +151,9 @@ def test_other_tenant_sees_nothing(test_db: ScratchDb) -> None:
             stored = event()
             await records.add_event(stored)
             other = uuid4()
-            return await records.get_event(other, stored.id), await records.recent_events(other, PROJECT)
+            return await records.get_event(other, PROJECT, stored.id), await records.recent_events(
+                other, PROJECT
+            )
 
     assert run(body()) == (None, [])
 
@@ -176,9 +183,9 @@ def test_run_finding_and_action_round_trip(test_db: ScratchDb) -> None:
             stored_action = action(stored_run.id)
             assert await records.add_action(stored_action) is True
             return (
-                await records.get_run(TENANT, stored_run.id) == stored_run,
-                await records.get_finding(TENANT, stored_finding.id) == stored_finding,
-                await records.get_action(TENANT, stored_action.id) == stored_action,
+                await records.get_run(TENANT, PROJECT, stored_run.id) == stored_run,
+                await records.get_finding(TENANT, PROJECT, stored_finding.id) == stored_finding,
+                await records.get_action(TENANT, PROJECT, stored_action.id) == stored_action,
             )
 
     assert run(body()) == (True, True, True)
@@ -195,8 +202,8 @@ def test_run_without_model_and_collector_finding_round_trip(test_db: ScratchDb) 
             collected = finding(None)
             await records.add_finding(collected)
             return (
-                await records.get_run(TENANT, bare.id) == bare,
-                await records.get_finding(TENANT, collected.id) == collected,
+                await records.get_run(TENANT, PROJECT, bare.id) == bare,
+                await records.get_finding(TENANT, PROJECT, collected.id) == collected,
             )
 
     assert run(body()) == (True, True)
@@ -210,7 +217,7 @@ def test_approved_action_round_trip_keeps_the_approver(test_db: ScratchDb) -> No
             await records.add_run(parent)
             approved = action(parent.id, status=ActionStatus.APPROVED, approved_by=uuid4(), approved_at=NOW)
             await records.add_action(approved)
-            return await records.get_action(TENANT, approved.id) == approved
+            return await records.get_action(TENANT, PROJECT, approved.id) == approved
 
     assert run(body()) is True
 
@@ -232,9 +239,9 @@ def test_missing_records_are_none(test_db: ScratchDb) -> None:
             records = Records(db)
             missing = uuid4()
             return [
-                await records.get_run(TENANT, missing),
-                await records.get_finding(TENANT, missing),
-                await records.get_action(TENANT, missing),
+                await records.get_run(TENANT, PROJECT, missing),
+                await records.get_finding(TENANT, PROJECT, missing),
+                await records.get_action(TENANT, PROJECT, missing),
             ]
 
     assert run(body()) == [None, None, None]
@@ -283,7 +290,7 @@ def test_database_rules_back_up_the_sdk_rules(test_db: ScratchDb) -> None:
         async with open_db(test_db.app_url) as db:
             parent = run_record()
             await Records(db).add_run(parent)
-            async with db.connection() as conn:
+            async with db.scoped(TENANT, PROJECT).connection() as conn:
                 await conn.execute(
                     "INSERT INTO yaqzan.actions (id, tenant_id, project_id, run_id, tool, level, payload,"
                     " target_kind, target_ref, data_classes, leak_check_passed, idempotency_key, status)"

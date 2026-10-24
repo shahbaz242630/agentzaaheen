@@ -5,6 +5,10 @@ The server comes from ``YAQZAN_TEST_DATABASE_URL`` or the running dev container
 into a template database by a non-superuser owner; each test then gets its own
 fresh copy of that template, so tests never see each other's rows.
 
+Every tenant table sits behind a database wall (ADR-039): a project-level row
+needs its workspace first (:func:`add_workspaces`), and a raw connection must
+name its tenant (:func:`connect_as`).
+
 Without a server these tests skip locally. CI sets ``YAQZAN_REQUIRE_DB=1``,
 which turns "could not run" into a failure instead of a silent pass.
 """
@@ -19,14 +23,14 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import asyncpg
 import pytest
 from pydantic import SecretStr
 
 from tools import dev_db
-from yaqzan.core.store import Database, DatabaseSettings, migrate
+from yaqzan.core.store import Database, DatabaseSettings, WorkspaceRow, WorkspaceRows, migrate
 
 OWNER = "yaqzan_owner_test"
 APP = "yaqzan_app_test"
@@ -75,6 +79,28 @@ async def open_db(url: str, max_size: int = 10) -> AsyncIterator[Database]:
         yield db
     finally:
         await db.close()
+
+
+_SET_SESSION = "SELECT set_config('app.tenant_id', $1, false), set_config('app.workspace_id', $2, false)"
+
+
+async def connect_as(
+    url: str, tenant_id: UUID, workspace_id: UUID | None = None
+) -> asyncpg.Connection[asyncpg.Record]:
+    """A raw connection that names its tenant (and workspace) for its whole life, for hand-written SQL."""
+    conn = await asyncpg.connect(url)
+    await conn.execute(_SET_SESSION, str(tenant_id), "" if workspace_id is None else str(workspace_id))
+    return conn
+
+
+async def add_workspaces(url: str, tenant_id: UUID, *workspace_ids: UUID) -> None:
+    """Create the tenant and the workspaces a test saves project-level rows in."""
+    async with open_db(url) as db:
+        rows = WorkspaceRows(db)
+        await rows.add_tenant(tenant_id, "Test tenant")
+        for workspace_id in workspace_ids:
+            slug = f"w-{workspace_id.hex}"
+            await rows.add(tenant_id, WorkspaceRow(workspace_id=workspace_id, slug=slug, name=slug))
 
 
 async def _admin(server: Server, *statements: str) -> None:

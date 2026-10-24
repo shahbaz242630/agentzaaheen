@@ -8,13 +8,20 @@ from uuid import UUID, uuid4
 import pytest
 
 from tests.fixtures import paddle_world as world
-from tests.integration.conftest import ScratchDb, open_db, run
+from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from yaqzan.core.sdk import Payment, PaymentStatus, RevenueBatch, SubscriptionStatus
 from yaqzan.core.store import RevenueRows, StoreError, StoreErrorCode, SyncState
 from yaqzan.core.store import revenue as revenue_module
 
 TENANT = UUID("00000000-0000-4000-8000-000000000001")
 PROJECT = UUID("00000000-0000-4000-8000-0000000000aa")
+
+
+@pytest.fixture(autouse=True)
+def _workspace(test_db: ScratchDb) -> None:
+    run(add_workspaces(test_db.app_url, TENANT, PROJECT))
+
+
 START = datetime(2026, 10, 1, tzinfo=UTC)
 END = datetime(2026, 11, 1, tzinfo=UTC)
 AT = world.NOW

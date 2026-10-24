@@ -127,7 +127,7 @@ class RevenueRows:
     ) -> None:
         """Upsert everything in ``batch`` and mark the sync successful, all in one transaction."""
         require_aware(at)
-        async with self._db.write("a revenue batch", atomic=True) as conn:
+        async with self._db.scoped(tenant_id, project_id).write("a revenue batch") as conn:
             await self._write(conn, tenant_id, project_id, batch, at)
             await conn.execute(_MARK_SUCCESS, tenant_id, project_id, batch.source, at, batch.fetched_at)
 
@@ -160,7 +160,7 @@ class RevenueRows:
     async def mark_attempt(self, tenant_id: UUID, project_id: UUID, source: str, *, at: datetime) -> None:
         """Record that a sync started."""
         require_aware(at)
-        async with self._db.write("a revenue sync attempt") as conn:
+        async with self._db.scoped(tenant_id, project_id).write("a revenue sync attempt") as conn:
             await conn.execute(_MARK_ATTEMPT, tenant_id, project_id, source, at)
 
     async def mark_failure(
@@ -168,18 +168,18 @@ class RevenueRows:
     ) -> None:
         """Record that a sync failed and why. The last success (and so freshness) is untouched."""
         require_aware(at)
-        async with self._db.write("a failed revenue sync") as conn:
+        async with self._db.scoped(tenant_id, project_id).write("a failed revenue sync") as conn:
             await conn.execute(_MARK_FAILURE, tenant_id, project_id, source, at, error_code)
 
     async def sync_state(self, tenant_id: UUID, project_id: UUID, source: str) -> SyncState | None:
         """The collector's state, or None if it has never run for this project."""
-        async with self._db.connection() as conn:
+        async with self._db.scoped(tenant_id, project_id).connection() as conn:
             row = await conn.fetchrow(_SYNC_STATE, tenant_id, project_id, source)
         return None if row is None else SyncState(**dict(row))
 
     async def subscriptions(self, tenant_id: UUID, project_id: UUID, source: str) -> list[Subscription]:
         """Every stored subscription from ``source`` for this project."""
-        async with self._db.connection() as conn:
+        async with self._db.scoped(tenant_id, project_id).connection() as conn:
             rows = _bounded(await conn.fetch(_SUBSCRIPTIONS, tenant_id, project_id, source, MAX_ROWS + 1))
         out: list[Subscription] = []
         for row in rows:
@@ -193,7 +193,7 @@ class RevenueRows:
     ) -> list[Payment]:
         """Stored payment attempts from ``source`` that happened in ``[start, end)``."""
         require_aware(start, end)
-        async with self._db.connection() as conn:
+        async with self._db.scoped(tenant_id, project_id).connection() as conn:
             rows = _bounded(
                 await conn.fetch(_PAYMENTS, tenant_id, project_id, source, start, end, MAX_ROWS + 1)
             )
@@ -204,7 +204,7 @@ class RevenueRows:
     ) -> list[Refund]:
         """Stored refunds and chargebacks from ``source`` created in ``[start, end)``."""
         require_aware(start, end)
-        async with self._db.connection() as conn:
+        async with self._db.scoped(tenant_id, project_id).connection() as conn:
             rows = _bounded(
                 await conn.fetch(_REFUNDS, tenant_id, project_id, source, start, end, MAX_ROWS + 1)
             )

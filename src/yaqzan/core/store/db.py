@@ -6,6 +6,11 @@ changed ``search_path`` cannot redirect a query. Each borrowed connection is
 one client span (no SQL text, no values: ADR-032). Every write goes through
 :meth:`Database.write`, which logs one plain-English line naming the kind of
 record (our own words, never its contents) and whether it was saved (ADR-034).
+
+Every table holding tenant data sits behind a database wall (row-level
+security, ADR-039). Repositories borrow connections through
+:meth:`Database.scoped`, which names the tenant (and workspace) for the whole
+transaction; a query that names none is refused by Postgres itself.
 """
 
 from __future__ import annotations
@@ -13,8 +18,9 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import datetime
+from uuid import UUID
 
 import asyncpg
 from asyncpg.pool import PoolConnectionProxy
@@ -27,6 +33,8 @@ type Connection = PoolConnectionProxy[asyncpg.Record]
 
 _UNAVAILABLE_CLASSES = ("08", "28", "53", "57")  # connection, auth, resources, shutdown
 _DB = {"db.system.name": "postgresql"}
+# ``true``: the setting lasts only until this transaction ends, so it never leaks to the next borrower.
+_SET_SCOPE = "SELECT set_config('app.tenant_id', $1, true), set_config('app.workspace_id', $2, true)"
 
 
 class DatabaseSettings(BaseModel):
@@ -137,11 +145,47 @@ class Database:
         ``record`` is our own words for the kind of row ("a revenue batch"), never its values.
         ``atomic`` borrows it inside a transaction: all of it commits, or none of it.
         """
-        log, started = get_logger("yaqzan.store"), time.monotonic()
-        try:
-            async with self.transaction() if atomic else self.connection() as conn:
-                yield conn
-        except StoreError as exc:
-            say(log, "store_write_failed", record=record, code=exc.code.value)
-            raise
-        say(log, "store_saved", record=record, duration_ms=elapsed_ms(started))
+        async with _logged(record, self.transaction() if atomic else self.connection()) as conn:
+            yield conn
+
+    def scoped(self, tenant_id: UUID, workspace_id: UUID | None = None) -> Scoped:
+        """Connections that work for one tenant and, if given, one of its workspaces (ADR-039).
+
+        Without ``workspace_id`` only tenant-level tables can be read; project-level
+        tables refuse the query.
+        """
+        return Scoped(self, tenant_id, workspace_id)
+
+
+class Scoped:
+    """One tenant (and maybe one workspace) behind the database walls. Always a transaction."""
+
+    def __init__(self, db: Database, tenant_id: UUID, workspace_id: UUID | None) -> None:
+        self._db = db
+        self._tenant = str(tenant_id)
+        self._workspace = "" if workspace_id is None else str(workspace_id)
+
+    @asynccontextmanager
+    async def connection(self) -> AsyncIterator[Connection]:
+        """Borrow one connection inside a transaction that names this tenant and workspace."""
+        async with self._db.transaction() as conn:
+            await conn.execute(_SET_SCOPE, self._tenant, self._workspace)
+            yield conn
+
+    @asynccontextmanager
+    async def write(self, record: str) -> AsyncIterator[Connection]:
+        """Like :meth:`Database.write`, inside the walls: all of it commits, or none of it."""
+        async with _logged(record, self.connection()) as conn:
+            yield conn
+
+
+@asynccontextmanager
+async def _logged(record: str, borrow: AbstractAsyncContextManager[Connection]) -> AsyncIterator[Connection]:
+    log, started = get_logger("yaqzan.store"), time.monotonic()
+    try:
+        async with borrow as conn:
+            yield conn
+    except StoreError as exc:
+        say(log, "store_write_failed", record=record, code=exc.code.value)
+        raise
+    say(log, "store_saved", record=record, duration_ms=elapsed_ms(started))

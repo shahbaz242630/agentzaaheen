@@ -123,7 +123,7 @@ class RegistrySwitchRows:
 
     async def switches(self, tenant_id: UUID) -> list[SwitchRow]:
         """Every stored switch for this tenant (items with no row keep their default)."""
-        async with self._db.connection() as conn:
+        async with self._db.scoped(tenant_id).connection() as conn:
             records = await conn.fetch(_SWITCHES, tenant_id)
         return [SwitchRow(**dict(r)) for r in records]
 
@@ -139,18 +139,18 @@ class RegistrySwitchRows:
     ) -> None:
         """Store "off" for one item (always allowed: it only takes power away)."""
         require_aware(changed_at)
-        async with self._db.write("a Customize switch turned off") as conn:
+        async with self._db.scoped(tenant_id).write("a Customize switch turned off") as conn:
             await conn.execute(_SWITCH_OFF, tenant_id, kind, item_id, fingerprint, changed_by, changed_at)
 
     async def pending(self, tenant_id: UUID) -> list[RequestRow]:
         """Every request still waiting for a decision, oldest first."""
-        async with self._db.connection() as conn:
+        async with self._db.scoped(tenant_id).connection() as conn:
             records = await conn.fetch(_PENDING, tenant_id)
         return [_request(r) for r in records]
 
     async def get_request(self, tenant_id: UUID, request_id: UUID) -> RequestRow | None:
         """One request, or None if it does not exist for this tenant."""
-        async with self._db.connection() as conn:
+        async with self._db.scoped(tenant_id).connection() as conn:
             record = await conn.fetchrow(_GET_REQUEST, tenant_id, request_id)
         return None if record is None else _request(record)
 
@@ -159,7 +159,7 @@ class RegistrySwitchRows:
         if request.status is not RequestStatus.PENDING:
             raise ValueError("a new request must be pending")
         require_aware(request.requested_at)
-        async with self._db.write("a request to switch an item on") as conn:
+        async with self._db.scoped(tenant_id).write("a request to switch an item on") as conn:
             added = await conn.fetchval(
                 _ADD_REQUEST,
                 request.id,
@@ -181,7 +181,7 @@ class RegistrySwitchRows:
         is written for exactly the files that were asked for.
         """
         require_aware(at, step_up_at)
-        async with self._db.write("an approved request and its switch", atomic=True) as conn:
+        async with self._db.scoped(tenant_id).write("an approved request and its switch") as conn:
             asked = await conn.fetchrow(_APPROVE, tenant_id, request_id, by, at, step_up_at)
             if asked is None:
                 return False
@@ -200,11 +200,11 @@ class RegistrySwitchRows:
     async def refuse(self, tenant_id: UUID, request_id: UUID, *, by: str, at: datetime) -> bool:
         """Refuse a pending request. Returns False if it is unknown or already decided."""
         require_aware(at)
-        async with self._db.write("a refused request") as conn:
+        async with self._db.scoped(tenant_id).write("a refused request") as conn:
             return await conn.fetchval(_REFUSE, tenant_id, request_id, by, at) is not None
 
     async def withdraw(self, tenant_id: UUID, request_id: UUID, *, by: str, at: datetime) -> bool:
         """Withdraw a pending request. Returns False if it is unknown or already decided."""
         require_aware(at)
-        async with self._db.write("a withdrawn request") as conn:
+        async with self._db.scoped(tenant_id).write("a withdrawn request") as conn:
             return await conn.fetchval(_WITHDRAW, tenant_id, request_id, by, at) is not None

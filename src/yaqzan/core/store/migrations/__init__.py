@@ -18,6 +18,7 @@ from yaqzan.core.store.migrations import (
     m0003_key_expiry,
     m0004_registry_switches,
     m0005_passkeys,
+    m0006_workspaces,
 )
 
 
@@ -41,6 +42,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(3, m0003_key_expiry.NAME, m0003_key_expiry.SQL),
     Migration(4, m0004_registry_switches.NAME, m0004_registry_switches.SQL),
     Migration(5, m0005_passkeys.NAME, m0005_passkeys.SQL),
+    Migration(6, m0006_workspaces.NAME, m0006_workspaces.SQL),
 )
 LATEST_VERSION = MIGRATIONS[-1].version
 

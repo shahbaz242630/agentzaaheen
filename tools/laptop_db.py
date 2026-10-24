@@ -21,7 +21,10 @@ Safety, the same as the dev database:
 ``yaqzan`` database (:func:`set_up`): an owner role that applies the migrations, and a login
 role for the dashboard that is a member of the least-privilege ``yaqzan_app``
 role. Their passwords are derived from the container's own password, so
-nothing new is stored anywhere.
+nothing new is stored anywhere. It also makes sure the laptop's one tenant
+and its five workspaces exist, one per project (ADR-039): :data:`LAPTOP_TENANT`
+and :data:`LAPTOP_WORKSPACES`. Their ids are derived from fixed names, so they
+are the same on every run.
 """
 
 from __future__ import annotations
@@ -33,12 +36,13 @@ import sys
 import time
 from collections.abc import Sequence
 from urllib.parse import urlsplit
+from uuid import UUID, uuid5
 
 import asyncpg
 from pydantic import SecretStr
 
 from tools import dev_db
-from yaqzan.core.store import Database, DatabaseSettings, migrate
+from yaqzan.core.store import Database, DatabaseSettings, WorkspaceRow, WorkspaceRows, migrate
 
 NAME = "yaqzan-laptop-db"
 LABEL_VALUE = "laptop-db"
@@ -50,6 +54,19 @@ APP = "yaqzan_dashboard"
 EXIT_OK = dev_db.EXIT_OK
 EXIT_ERROR = dev_db.EXIT_ERROR
 EXIT_LOW_MEMORY = dev_db.EXIT_LOW_MEMORY
+
+_NAMESPACE = UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8")  # the URL namespace
+LAPTOP_TENANT = uuid5(_NAMESPACE, "yaqzan:laptop")
+LAPTOP_WORKSPACES = tuple(
+    WorkspaceRow(workspace_id=uuid5(_NAMESPACE, f"yaqzan:laptop:workspace:{slug}"), slug=slug, name=name)
+    for slug, name in (
+        ("zaaheen", "Zaaheen"),
+        ("sandoq-kin", "Sandoq Kin"),
+        ("agent-x", "Agent X"),
+        ("eva", "Eva"),
+        ("family-checkin", "Family Check-in"),
+    )
+)
 
 
 def _ours(run: dev_db.Runner) -> str:
@@ -134,10 +151,10 @@ async def prepare(run: dev_db.Runner = dev_db.run_docker) -> SecretStr | None:
 
 
 async def set_up(admin: str, database: str = DATABASE) -> SecretStr:
-    """Set up the roles and ``database`` if missing and apply migrations; return the dashboard's URL.
+    """Set up the roles, ``database``, migrations and workspaces if missing; return the dashboard's URL.
 
     Safe to run every time: roles get their (derived) passwords again, and
-    migrations already applied are skipped.
+    migrations and workspaces already there are skipped.
     """
     admin_password = urlsplit(admin).password or ""
     owner_password = derived_password(admin_password, OWNER)
@@ -160,7 +177,16 @@ async def set_up(admin: str, database: str = DATABASE) -> SecretStr:
         await conn.execute(f"GRANT yaqzan_app TO {APP}")
     finally:
         await conn.close()
-    return SecretStr(_url(admin, APP, app_password, database))
+    url = SecretStr(_url(admin, APP, app_password, database))
+    app = await Database.open(DatabaseSettings(dsn=url))
+    try:
+        workspaces = WorkspaceRows(app)
+        await workspaces.add_tenant(LAPTOP_TENANT, "Yaqzan")
+        for workspace in LAPTOP_WORKSPACES:
+            await workspaces.add(LAPTOP_TENANT, workspace)
+    finally:
+        await app.close()
+    return url
 
 
 def main(argv: Sequence[str] | None = None) -> int:
