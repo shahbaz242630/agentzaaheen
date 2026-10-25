@@ -19,6 +19,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from uuid import UUID
 
@@ -35,6 +36,18 @@ _UNAVAILABLE_CLASSES = ("08", "28", "53", "57")  # connection, auth, resources, 
 _DB = {"db.system.name": "postgresql"}
 # ``true``: the setting lasts only until this transaction ends, so it never leaks to the next borrower.
 _SET_SCOPE = "SELECT set_config('app.tenant_id', $1, true), set_config('app.workspace_id', $2, true)"
+# Set by :func:`written` when the write going on found nothing to change, so its log line says so.
+_NOTHING_WRITTEN: ContextVar[bool] = ContextVar("yaqzan_store_nothing_written", default=False)
+
+
+def written(row: object) -> bool:
+    """True if a write's ``RETURNING`` gave a row; if not, its log line says nothing needed writing.
+
+    Call it inside the write's ``async with`` block, with what ``fetchval``/``fetchrow`` returned.
+    """
+    if row is None:
+        _NOTHING_WRITTEN.set(True)
+    return row is not None
 
 
 class DatabaseSettings(BaseModel):
@@ -209,10 +222,17 @@ class Scoped:
 @asynccontextmanager
 async def _logged(record: str, borrow: AbstractAsyncContextManager[Connection]) -> AsyncIterator[Connection]:
     log, started = get_logger("yaqzan.store"), time.monotonic()
+    nothing = _NOTHING_WRITTEN.set(False)
     try:
         async with borrow as conn:
             yield conn
     except StoreError as exc:
         say(log, "store_write_failed", record=record, code=exc.code.value)
         raise
-    say(log, "store_saved", record=record, duration_ms=elapsed_ms(started))
+    else:
+        if _NOTHING_WRITTEN.get():
+            say(log, "store_unchanged", record=record, duration_ms=elapsed_ms(started))
+        else:
+            say(log, "store_saved", record=record, duration_ms=elapsed_ms(started))
+    finally:
+        _NOTHING_WRITTEN.reset(nothing)

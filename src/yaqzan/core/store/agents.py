@@ -20,7 +20,7 @@ from uuid import UUID
 
 import asyncpg
 
-from yaqzan.core.store.db import Scoped, require_aware
+from yaqzan.core.store.db import Scoped, require_aware, written
 
 Permission = Literal["read", "draft", "act"]
 
@@ -28,6 +28,7 @@ _ADD_VERSION = """
 INSERT INTO yaqzan.role_versions (tenant_id, role_id, version, files, permission, stored_at)
 VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (tenant_id, role_id, version) DO NOTHING
+RETURNING role_id
 """
 _GET_VERSION = """
 SELECT role_id, version, files, permission, stored_at FROM yaqzan.role_versions
@@ -153,7 +154,7 @@ class RoleVersionRows:
         """Store a role version once; storing the same fingerprint again changes nothing."""
         require_aware(version.stored_at)
         async with self._scope.write("a frozen role version") as conn:
-            await conn.execute(
+            stored = await conn.fetchval(
                 _ADD_VERSION,
                 self._tenant,
                 version.role_id,
@@ -162,6 +163,7 @@ class RoleVersionRows:
                 version.permission,
                 version.stored_at,
             )
+            written(stored)
 
     async def get(self, role_id: str, version: str) -> RoleVersion | None:
         """One stored role version, or None."""
@@ -191,7 +193,7 @@ class AgentRows:
                 agent.by,
                 agent.at,
             )
-            return added is not None
+            return written(added)
 
     async def agents(self) -> list[AgentRow]:
         """Every agent of the workspace, oldest first."""
@@ -218,7 +220,7 @@ class AgentRows:
                 change.at,
                 change.step_up_at,
             )
-            return changed is not None
+            return written(changed)
 
     async def settings(self) -> WorkspaceSettings | None:
         """The workspace's switch and cap, or None if never set (off, no cap)."""
