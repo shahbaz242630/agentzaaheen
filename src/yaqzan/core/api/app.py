@@ -41,6 +41,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from yaqzan.core.api.adding import WorkspaceAdding, adding_routes
 from yaqzan.core.api.agents import AgentSwitches, agent_routes
 from yaqzan.core.api.facts import portfolio_facts, project_facts, uses_sample
+from yaqzan.core.api.logs import LogReader, log_routes
 from yaqzan.core.api.profile import WorkspaceProfiles, profile_routes
 from yaqzan.core.api.registry import (
     EnrolAnswer,
@@ -352,7 +353,7 @@ def _route_template(request: Request) -> str:
     return template if isinstance(template, str) and template else "unmatched"
 
 
-def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of the dashboard
+def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional part of the dashboard
     portfolio: Portfolio,
     *,
     static_dir: Path | None = None,
@@ -367,6 +368,7 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     profiles: WorkspaceProfiles | None = None,
     scout: WorkspaceScout | None = None,
     summaries: WorkspaceSummaries | None = None,
+    logs: LogReader | None = None,
     on_start: Callable[[], Awaitable[None]] | None = None,
     on_close: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
@@ -381,6 +383,8 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     the panel says GitHub is not connected. ``scout`` reads a workspace's repository on the local
     model and advises which agents it needs (with a database, a token and a model).
     ``summaries`` keeps each workspace's daily summary and the Board's briefings (with a database).
+    ``logs`` reads the kept log files for the Logs page (with ``--log-dir``); without it the page says
+    no logs are kept.
     ``on_start`` runs once the server is up, inside its event loop (the morning job starts there);
     ``on_close`` runs when the server stops (the laptop database's pool is closed there).
 
@@ -442,6 +446,7 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     profile_routes(app, profiles)
     scout_routes(app, scout, _refuse_foreign)
     summary_routes(app, summaries, _refuse_foreign)
+    log_routes(app, logs)
 
     async def answer(question: ChatQuestion, facts: str, sample: bool, workspace: str | None) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:

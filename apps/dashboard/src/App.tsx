@@ -1,18 +1,23 @@
-import { LayoutGrid, SlidersHorizontal } from "lucide-react";
+import { LayoutGrid, ScrollText, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { api, type ModelChoice, type ProjectDetail, type ProjectSummary, type RegistryPage } from "./api";
 import { BoardView } from "./components/BoardView";
 import { ChatPanel } from "./components/ChatPanel";
 import { CustomizeView } from "./components/CustomizeView";
+import { LogsView } from "./components/LogsView";
 import { ProjectList } from "./components/ProjectList";
 import { type Tab, WorkspaceView } from "./components/WorkspaceView";
 
 type Load<T> = { state: "loading" } | { state: "ready"; data: T } | { state: "failed" };
 
-// What the centre shows: the Board (home), one workspace and its tab, or the Customize page.
+// What the centre shows: the Board (home), one workspace and its tab, the Logs page or the Customize page.
 // ``scout``: a project just added, so its Agents tab asks the scout straight away.
-type View = { kind: "board" } | { kind: "workspace"; slug: string; tab: Tab; scout?: boolean } | { kind: "customize" };
+type View =
+  | { kind: "board" }
+  | { kind: "workspace"; slug: string; tab: Tab; scout?: boolean }
+  | { kind: "logs" }
+  | { kind: "customize" };
 
 const NAV_BUTTON = [
   "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left font-medium transition-colors",
@@ -161,10 +166,21 @@ export function App() {
           <button
             type="button"
             onClick={() => {
+              open({ kind: "logs" });
+            }}
+            aria-current={view.kind === "logs" ? "page" : undefined}
+            className={`${NAV_BUTTON} mt-auto ${view.kind === "logs" ? "bg-brand-soft text-brand-ink" : "text-ink hover:bg-raised"}`}
+          >
+            <ScrollText className="size-4" aria-hidden="true" />
+            Logs
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               open({ kind: "customize" });
             }}
             aria-current={view.kind === "customize" ? "page" : undefined}
-            className={`${NAV_BUTTON} mt-auto ${view.kind === "customize" ? "bg-brand-soft text-brand-ink" : "text-ink hover:bg-raised"}`}
+            className={`${NAV_BUTTON} ${view.kind === "customize" ? "bg-brand-soft text-brand-ink" : "text-ink hover:bg-raised"}`}
           >
             <SlidersHorizontal className="size-4" aria-hidden="true" />
             Customize
@@ -197,6 +213,7 @@ export function App() {
               }}
             />
           )}
+          {view.kind === "logs" && <LogsView workspaces={workspaces.state === "ready" ? workspaces.data : []} />}
           {view.kind === "customize" && (
             <>
               {registry.state === "loading" && <p className="text-muted">Loading…</p>}

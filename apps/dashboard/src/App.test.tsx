@@ -18,6 +18,7 @@ function answer(path: string): unknown {
   if (path === "/api/summaries") return { connected: false, workspaces: {} };
   if (path === "/api/briefings") return { connected: false, briefings: [] };
   if (path.endsWith("/summaries")) return { connected: false, days: [] };
+  if (path.startsWith("/api/logs?")) return { kept: false, lines: [], more: false, cut: false };
   const id = decodeURIComponent(path.replace("/api/workspaces/", ""));
   return (sample.details as Record<string, unknown>)[id];
 }
@@ -409,6 +410,15 @@ describe("the Board and the workspace pages (ADR-039)", () => {
     expect(await within(needs).findByText(/switch on the skill “triage-failing-build”/)).toBeInTheDocument();
     await userEvent.click(within(needs).getByRole("button", { name: "Review" }));
     expect(screen.getByRole("button", { name: "Customize" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("opens the Logs page from the left column, with the projects to filter by", async () => {
+    render(<App />);
+    await screen.findAllByText("Zaaheen");
+    await userEvent.click(screen.getByRole("button", { name: "Logs" }));
+    expect(screen.getByRole("button", { name: "Logs" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByText(/Logs are not kept yet/)).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Project")).getByRole("option", { name: "Zaaheen" })).toBeInTheDocument();
   });
 
   it("says plainly what is not set up yet, never made-up agents or summaries", async () => {
