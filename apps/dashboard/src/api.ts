@@ -312,6 +312,82 @@ export const ScoutView = z
   });
 export type ScoutView = z.infer<typeof ScoutView>;
 
+// The daily summaries and the Board's briefings, written by code (F17 slice 6). Mirrors
+// src/yaqzan/core/api/summary.py and summaries.py.
+const day = z.iso.date();
+export const Unread = z.strictObject({ title: z.string(), reason: code });
+export const SourceFact = z.strictObject({
+  card: z.string(),
+  title: z.string(),
+  metrics: z.array(Metric),
+  flagged: z.array(Entry),
+});
+export const Change = z.strictObject({ title: z.string(), label: z.string(), before: Value, after: Value });
+export const DailySummary = z.strictObject({
+  version: z.literal(1),
+  workspace: z.string(),
+  name: z.string(),
+  day,
+  made_at: time,
+  window_start: time,
+  health: Health,
+  unread: z.array(Unread),
+  sources: z.array(SourceFact),
+  sample_left_out: z.array(z.string()),
+  changes: z.array(Change),
+  compared_with: day.nullable(),
+  alerts: z
+    .strictObject({ opened: z.int().nonnegative(), closed: z.int().nonnegative(), counted_since: time })
+    .nullable(),
+  agents: z
+    .strictObject({
+      agents: z.int().nonnegative(),
+      on: z.int().nonnegative(),
+      workspace_on: z.boolean(),
+      spent_minor: z.int().nonnegative(),
+      cap_minor: z.int().nonnegative().nullable(),
+    })
+    .nullable(),
+  scout: z
+    .strictObject({
+      state: z.enum(["running", "done", "failed"]),
+      at: time,
+      recommended: z.array(z.string()),
+      reason: code.nullable(),
+    })
+    .nullable(),
+});
+export type DailySummary = z.infer<typeof DailySummary>;
+export const SummaryLine = z.strictObject({ day, made_at: time, health: Health, line: z.string().nullable() });
+export type SummaryLine = z.infer<typeof SummaryLine>;
+export const BoardSummaries = z.strictObject({
+  connected: z.boolean(),
+  workspaces: z.record(z.string(), SummaryLine),
+});
+export type BoardSummaries = z.infer<typeof BoardSummaries>;
+export const SummaryDay = z.strictObject({
+  day,
+  made_at: time,
+  line: z.string().nullable(),
+  summary: DailySummary.nullable(),
+});
+export type SummaryDay = z.infer<typeof SummaryDay>;
+export const WorkspaceSummaries = z.strictObject({ connected: z.boolean(), days: z.array(SummaryDay) });
+export type WorkspaceSummaries = z.infer<typeof WorkspaceSummaries>;
+export const Briefing = z.strictObject({
+  day,
+  made_at: time,
+  title: z.string(),
+  message: z.string(),
+  state: z.enum(["waiting", "sent", "not_sent"]),
+  sent_at: time.nullable(),
+  reason: code.nullable(),
+});
+export type Briefing = z.infer<typeof Briefing>;
+export const Briefings = z.strictObject({ connected: z.boolean(), briefings: z.array(Briefing) });
+export type Briefings = z.infer<typeof Briefings>;
+const Made = z.strictObject({ made: z.int().nonnegative(), failed: z.int().nonnegative() });
+
 // The Chairman's passkey (ADR-SEC-007): whether it exists, and whether it may be set up on this run.
 export const PasskeyStatus = z.strictObject({ enrolled: z.boolean(), enrolment_open: z.boolean() });
 export type PasskeyStatus = z.infer<typeof PasskeyStatus>;
@@ -418,6 +494,11 @@ export const api = {
   // The scout only reads and advises, so asking needs no Windows Hello.
   scout: (slug: string) => getJson(`${workspacePath(slug)}/scout`, ScoutView),
   askScout: (slug: string) => postJson(`${workspacePath(slug)}/scout`, {}, ScoutView),
+  // Daily summaries: read-only, and "make now" only reads and saves (nothing is sent).
+  summaries: () => getJson("/api/summaries", BoardSummaries),
+  workspaceSummaries: (slug: string) => getJson(`${workspacePath(slug)}/summaries`, WorkspaceSummaries),
+  briefings: () => getJson("/api/briefings", Briefings),
+  makeSummaries: () => postJson("/api/summaries/make", {}, Made),
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),

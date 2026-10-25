@@ -7,6 +7,7 @@ import { BuiltWith } from "./BuiltWith";
 import { CardView } from "./CardView";
 import { HealthPill } from "./health";
 import { RemoveButton } from "./RemoveProject";
+import { DailySummaryPanel } from "./Summaries";
 
 export const TABS = ["overview", "agents", "alerts", "sources"] as const;
 export type Tab = (typeof TABS)[number];
@@ -95,7 +96,8 @@ function Overview({ detail, registry }: { detail: ProjectDetail; registry: Regis
             : "Cards marked Sample use made-up numbers. The others are real."}
         </p>
       )}
-      {/* Keyed by workspace, so another workspace never shows this one's profile while loading. */}
+      {/* Keyed by workspace, so another workspace never shows this one's summary or profile while loading. */}
+      <DailySummaryPanel key={`summary-${project.id}`} slug={project.id} />
       <BuiltWith key={project.id} slug={project.id} registry={registry} />
       <div className="grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] items-start gap-4">
         {cards.map((card) => (

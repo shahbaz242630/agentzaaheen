@@ -14,6 +14,10 @@ function answer(path: string): unknown {
   if (path === "/api/registry") return sample.registry;
   if (path === "/api/roles") return [];
   if (path.endsWith("/agents")) return NO_AGENTS;
+  // Sample mode has no database: summaries are "not set up yet" everywhere.
+  if (path === "/api/summaries") return { connected: false, workspaces: {} };
+  if (path === "/api/briefings") return { connected: false, briefings: [] };
+  if (path.endsWith("/summaries")) return { connected: false, days: [] };
   const id = decodeURIComponent(path.replace("/api/workspaces/", ""));
   return (sample.details as Record<string, unknown>)[id];
 }
@@ -412,6 +416,26 @@ describe("the Board and the workspace pages (ADR-039)", () => {
     const cards = await screen.findByRole("region", { name: "Workspaces" });
     expect(await within(cards).findAllByText("Agents: none yet")).toHaveLength(sample.projects.length);
     expect(within(cards).getAllByText("Daily summary: not set up yet")).toHaveLength(sample.projects.length);
+  });
+
+  it("shows each workspace's summary line on its Board card, and the summary on its Overview", async () => {
+    const line = { day: "2026-10-25", made_at: "2026-10-25T01:00:00Z", health: "warn", line: "Needs a look." };
+    const lines = { connected: true, workspaces: { zaaheen: line } };
+    const days = { connected: true, days: [{ day: "2026-10-25", made_at: line.made_at, line: "Needs a look.", summary: null }] };
+    serve((path) => {
+      if (path === "/api/summaries") return new Response(JSON.stringify(lines), { status: 200 });
+      if (path === "/api/workspaces/zaaheen/summaries") return new Response(JSON.stringify(days), { status: 200 });
+      return undefined;
+    });
+    render(<App />);
+    const cards = await screen.findByRole("region", { name: "Workspaces" });
+    expect(await within(cards).findByText("Sun 25 Oct: Needs a look.")).toBeInTheDocument();
+    expect(within(cards).getAllByText("Daily summary: none yet (made at 05:00)")).toHaveLength(
+      sample.projects.length - 1,
+    );
+    await openWorkspace("Zaaheen");
+    const summary = await screen.findByRole("region", { name: "Daily summary" });
+    expect(await within(summary).findByRole("alert")).toHaveTextContent("could not be read");
   });
 
   it("has tabs: the cards, no agents yet, the open alerts, and the connected sources", async () => {

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 
-import { api, type ProjectSummary, type RegistryPage, type WorkspaceAgents } from "../api";
+import { api, type BoardSummaries, type ProjectSummary, type RegistryPage, type WorkspaceAgents } from "../api";
 import { AddProject } from "./AddProject";
 import { capWords, money } from "./AgentsPanel";
 import { HealthPill } from "./health";
 import { ArchivedProjects } from "./RemoveProject";
+import { boardLine, BriefingsPanel } from "./Summaries";
 
 // One line about a workspace's agents: honest when there are none, or when they can't be read.
 export function agentLine(found: WorkspaceAgents | "failed" | undefined): string {
@@ -51,6 +52,22 @@ export function BoardView({ workspaces, registry, onOpen, onCustomize, notice, o
       live = false;
     };
   }, [workspaces]);
+  const [summaries, setSummaries] = useState<BoardSummaries | "failed" | undefined>(undefined);
+  const [made, setMade] = useState(0); // read the lines again after "make now"
+  useEffect(() => {
+    let live = true;
+    api.summaries().then(
+      (data) => {
+        if (live) setSummaries(data);
+      },
+      () => {
+        if (live) setSummaries("failed");
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [workspaces, made]);
   const waiting = workspaces.filter((w) => w.escalations > 0);
   const requests = registry?.requests ?? [];
   const nothing = waiting.length === 0 && requests.length === 0;
@@ -139,7 +156,7 @@ export function BoardView({ workspaces, registry, onOpen, onCustomize, notice, o
                   </span>
                   <span className="text-sm text-muted">{w.summary}</span>
                   <span className="text-sm text-muted">{agentLine(agents[w.id])}</span>
-                  <span className="text-sm text-muted">Daily summary: not set up yet</span>
+                  <span className="text-sm text-muted">{boardLine(summaries, w.id)}</span>
                   <span className="border-t border-line pt-3 text-sm text-muted">
                     {w.escalations === 0 ? "Nothing waiting for you" : `${w.escalations} waiting for you`}
                     {w.sample ? " · sample data" : ""}
@@ -150,6 +167,12 @@ export function BoardView({ workspaces, registry, onOpen, onCustomize, notice, o
           </ul>
         )}
       </section>
+
+      <BriefingsPanel
+        onMade={() => {
+          setMade((n) => n + 1);
+        }}
+      />
 
       <ArchivedProjects onChanged={onChanged} />
     </section>
