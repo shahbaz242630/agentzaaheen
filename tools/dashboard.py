@@ -50,7 +50,9 @@ each workspace also gets a daily summary at 05:00, written by code, and the
 Board's briefing goes to the phone at 07:00 (with ``--ntfy-topic-env``), both
 in ``--briefing-zone`` (default Asia/Dubai) (``tools.dashboard_summaries``).
 With ``--briefing-ping-env NAME`` each sent briefing pings that Healthchecks
-check, which alerts the phone when no briefing arrives.
+check, which alerts the phone when no briefing arrives. With ``--log-dir DIR``
+every log line (redacted, as on screen) is also kept in DIR, one file a day,
+for 30 days (ADR-034; on the laptop: ``~/AppData/Local/Yaqzan/logs``).
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
@@ -64,6 +66,7 @@ Usage:
     uv run python -m tools.dashboard --uptime projects/uptime.yaml --ntfy-topic-env YAQZAN_NTFY_TOPIC
     uv run python -m tools.dashboard --supabase projects/supabase.yaml
     uv run python -m tools.dashboard --model-url http://127.0.0.1:8766 --fixes projects/fixes.yaml
+    uv run python -m tools.dashboard --log-dir ~/AppData/Local/Yaqzan/logs   # keep 30 days of logs
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
 
@@ -78,6 +81,7 @@ import zoneinfo
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 import httpx
 import uvicorn
@@ -118,6 +122,7 @@ from yaqzan.core.registry.roles import RoleLibrary, load_roles
 from yaqzan.core.scheduler import DEFAULT_ZONE
 from yaqzan.core.sdk import SiteRule, span
 from yaqzan.core.store import ScoutRun, WorkspaceRow
+from yaqzan.core.telemetry import LogFile
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
@@ -275,9 +280,14 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
     if done is not None:
         return done
     env = os.environ if environ is None else environ
+    log_file = _log_file(ns.log_dir)
+    if log_file is False:
+        return 1
     try:
         tracing = tracing_from(ns, env)
     except TracingNotStartedError:
+        if log_file is not None:
+            log_file.stop()
         return 1
     try:
         return _start(
@@ -286,6 +296,21 @@ def main(  # noqa: PLR0913  # the real world (files, server, env, network, clock
     finally:
         if tracing is not None:
             tracing.shutdown()
+        if log_file is not None:
+            log_file.stop()
+
+
+def _log_file(folder: Path | None) -> LogFile | Literal[False] | None:
+    """The started 30-day log file; ``None`` if not asked for; ``False`` once it said why it cannot start."""
+    if folder is None:
+        return None
+    try:
+        log_file = LogFile(folder.expanduser()).start()
+    except OSError as exc:
+        print(f"dashboard: cannot keep log files in {folder} ({type(exc).__name__}); pick another --log-dir.")
+        return False
+    print(f"dashboard: log lines are kept in {log_file.folder} for 30 days.")
+    return log_file
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -325,6 +350,9 @@ def _parser() -> argparse.ArgumentParser:
         "--briefing-zone",
         default=DEFAULT_ZONE,
         help="the time zone of the 05:00 summaries and the 07:00 briefing (needs --switches)",
+    )
+    parser.add_argument(
+        "--log-dir", type=Path, help="also keep every log line in this folder, one file a day, for 30 days"
     )
     add_tracing_options(parser)
     return parser

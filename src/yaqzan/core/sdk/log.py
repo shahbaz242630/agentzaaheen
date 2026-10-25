@@ -18,9 +18,10 @@ Inside a recorded span every line also carries ``trace_id`` and ``span_id``, so
 a log line leads straight to its trace (ADR-032, R2). They are added after
 redaction: they are IDs we made, and redaction must not mangle them.
 
-When telemetry is on, :func:`install_sink` hands every finished (redacted) line
-to a sink as well, which ships an allow-listed part of it to the log store. A
-sink that fails is ignored: shipping must never break logging.
+Every finished (redacted) line can go to two sinks as well, each set with
+:func:`install_sink`: ``"ship"`` (when telemetry is on, it sends an allow-listed
+part of the line to the log store) and ``"file"`` (the local 30-day log file,
+ADR-034). A sink that fails is ignored: neither may ever break logging.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ import contextlib
 import re
 import sys
 from collections.abc import Callable, Mapping
-from typing import Any, TextIO
+from typing import Any, Literal, TextIO
 
 import structlog
 from pydantic import SecretBytes, SecretStr
@@ -180,21 +181,22 @@ def _trace_processor(_logger: object, _method: str, event_dict: dict[str, Any]) 
 
 
 type LogSink = Callable[[Mapping[str, object]], None]
+type SinkSlot = Literal["ship", "file"]
+
+_SINKS: dict[SinkSlot, LogSink] = {}
 
 
-class _Sink:
-    current: LogSink | None = None
-
-
-def install_sink(sink: LogSink | None) -> None:
-    """Hand every redacted log line to ``sink`` as well; ``None`` stops it."""
-    _Sink.current = sink
+def install_sink(sink: LogSink | None, slot: SinkSlot = "ship") -> None:
+    """Hand every redacted log line to ``sink`` as well, in ``slot``; ``None`` empties the slot."""
+    if sink is None:
+        _SINKS.pop(slot, None)
+    else:
+        _SINKS[slot] = sink
 
 
 def _sink_processor(_logger: object, _method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
-    sink = _Sink.current
-    if sink is not None:
-        with contextlib.suppress(Exception):  # shipping must never break logging
+    for sink in tuple(_SINKS.values()):
+        with contextlib.suppress(Exception):  # shipping and keeping must never break logging
             sink(dict(event_dict))
     return event_dict
 
