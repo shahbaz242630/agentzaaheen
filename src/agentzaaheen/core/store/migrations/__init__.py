@@ -34,6 +34,7 @@ from agentzaaheen.core.store.migrations import (
     m0012_model_calls,
     m0013_customer_name_prints,
     m0014_model_call_misses,
+    m0015_model_call_tokens,
 )
 
 
@@ -66,6 +67,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(12, m0012_model_calls.NAME, m0012_model_calls.SQL),
     Migration(13, m0013_customer_name_prints.NAME, m0013_customer_name_prints.SQL),
     Migration(14, m0014_model_call_misses.NAME, m0014_model_call_misses.SQL),
+    Migration(15, m0015_model_call_tokens.NAME, m0015_model_call_tokens.SQL),
 )
 LATEST_VERSION = MIGRATIONS[-1].version
 

@@ -67,7 +67,7 @@ from agentzaaheen.core.llm_gateway.cloud_check import (
     prints_of,
 )
 from agentzaaheen.core.llm_gateway.model_map import MODELS, Usage
-from agentzaaheen.core.llm_gateway.report import claude_lines
+from agentzaaheen.core.llm_gateway.report import ThinkingEstimate, claude_lines, thinking_estimate
 from agentzaaheen.core.llm_gateway.route import (
     Clearance,
     FixedNames,
@@ -120,6 +120,7 @@ __all__ = [
     "StoreBook",
     "StoreMisses",
     "StoreNames",
+    "ThinkingEstimate",
     "Tool",
     "Usage",
     "Use",
@@ -129,4 +130,5 @@ __all__ = [
     "month_bounds",
     "part_from",
     "prints_of",
+    "thinking_estimate",
 ]

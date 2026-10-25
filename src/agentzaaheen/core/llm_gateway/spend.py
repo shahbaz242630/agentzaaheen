@@ -29,7 +29,7 @@ from typing import Protocol
 
 from agentzaaheen.core.llm_gateway.model_map import MILLION, usd
 from agentzaaheen.core.sdk import get_logger, say
-from agentzaaheen.core.store import ModelCalls
+from agentzaaheen.core.store import CallTokens, ModelCalls
 
 
 class Use(StrEnum):
@@ -54,8 +54,10 @@ class SpendBook(Protocol):
         """What ``use`` has spent in ``month`` (``"2026-10"``)."""
         ...
 
-    async def add(self, use: Use, model: str, micro: int, at: datetime) -> None:
-        """Add one call's cost to ``use``, at the moment ``at``."""
+    async def add(
+        self, use: Use, model: str, micro: int, at: datetime, tokens: CallTokens | None = None
+    ) -> None:
+        """Add one call's cost to ``use``, at the moment ``at`` (with its token counts, when known)."""
         ...
 
 
@@ -69,7 +71,14 @@ class MemoryBook:
         """What ``use`` has spent in ``month``."""
         return self._amounts.get((use, month), 0)
 
-    async def add(self, use: Use, model: str, micro: int, at: datetime) -> None:  # noqa: ARG002  # the model is only kept in the database
+    async def add(  # the model and counts are only kept in the database
+        self,
+        use: Use,
+        model: str,  # noqa: ARG002
+        micro: int,
+        at: datetime,
+        tokens: CallTokens | None = None,  # noqa: ARG002
+    ) -> None:
         """Add one call's cost."""
         month = month_of(at)
         self._amounts[use, month] = self._amounts.get((use, month), 0) + micro
@@ -86,9 +95,11 @@ class StoreBook:
         start, end = month_bounds(month)
         return await self._calls.spent(use.value, start=start, end=end)
 
-    async def add(self, use: Use, model: str, micro: int, at: datetime) -> None:
-        """Save one call's cost as its own row."""
-        await self._calls.add(use.value, model, micro, at=at)
+    async def add(
+        self, use: Use, model: str, micro: int, at: datetime, tokens: CallTokens | None = None
+    ) -> None:
+        """Save one call's cost, and its counts when known, as its own row."""
+        await self._calls.add(use.value, model, micro, at=at, tokens=tokens)
 
 
 @dataclass(frozen=True)
@@ -155,13 +166,13 @@ class SpendLedger:
             return SpendCheck("total_stop_reached", TOTAL, total, self._total)
         return SpendCheck(None, use.value, spent, self._caps[use])
 
-    async def record(self, use: Use, model: str, micro: int) -> None:
+    async def record(self, use: Use, model: str, micro: int, tokens: CallTokens | None = None) -> None:
         """Add one call's real cost, and say so; say it too if that call crossed an 80% line."""
         now = self._clock()
         month = month_of(now)
         before = await self._book.spent(use, month)
         total_before = await self._total_spent(month)
-        await self._book.add(use, model, micro, now)
+        await self._book.add(use, model, micro, now, tokens)
         after = before + micro
         say(
             self._log,

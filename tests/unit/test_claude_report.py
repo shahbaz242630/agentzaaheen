@@ -6,9 +6,9 @@ import asyncio
 from datetime import UTC, date, datetime
 
 from agentzaaheen.core.api.summary import briefing
-from agentzaaheen.core.llm_gateway import claude_lines
+from agentzaaheen.core.llm_gateway import ThinkingEstimate, claude_lines, thinking_estimate
 from agentzaaheen.core.llm_gateway.spend import SpendNotice
-from agentzaaheen.core.store import MissRow, StoreError, StoreErrorCode
+from agentzaaheen.core.store import CallRow, CallTokens, MissRow, StoreError, StoreErrorCode
 from tools.dashboard_summaries import LaptopSummaries
 
 AT = datetime(2026, 10, 25, 2, 0, tzinfo=UTC)
@@ -86,3 +86,31 @@ def test_claude_lines_that_cannot_be_read_are_said_not_left_out() -> None:
     assert asyncio.run(job._claude_lines()) == (
         "Claude runs could not be read (store.unavailable); see the dashboard.",
     )
+
+
+def call(out: int, chars: int) -> CallRow:
+    return CallRow(AT, "heads", "claude-opus-5-5", 1, CallTokens(1_000, out, 0, 0, chars))
+
+
+def test_no_opus_calls_yet_gives_no_estimate() -> None:
+    assert thinking_estimate([]) is None
+
+
+def test_thinking_is_output_minus_the_visible_answer_and_priced_as_opus_output() -> None:
+    # 1,200 and 800 output tokens; 800 and 400 characters (200 and 100 tokens) visible.
+    estimate = thinking_estimate([call(1_200, 800), call(800, 400)])
+    assert estimate == ThinkingEstimate(
+        calls=2,
+        avg_output_tokens=1_000,
+        avg_visible_tokens=150,
+        avg_thinking_tokens=850,
+        avg_thinking_micro=17_000,
+    )  # 850 tokens x USD 20 a million = USD 0.017
+    assert not estimate.enough
+
+
+def test_twenty_calls_are_enough_and_thinking_is_never_negative() -> None:
+    estimate = thinking_estimate([call(10, 4_000)] * 20)  # a long visible answer, little output
+    assert estimate is not None
+    assert estimate.enough
+    assert (estimate.avg_thinking_tokens, estimate.avg_thinking_micro) == (0, 0)

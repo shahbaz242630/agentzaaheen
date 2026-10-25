@@ -27,7 +27,7 @@ from agentzaaheen.core.llm_gateway import (
 )
 from agentzaaheen.core.net import ClaudeReply, NetError, NetErrorCode
 from agentzaaheen.core.sdk import DataClass, ModelLevel, install_log_sink
-from agentzaaheen.core.store import MissRow, StoreError, StoreErrorCode
+from agentzaaheen.core.store import CallTokens, MissRow, StoreError, StoreErrorCode
 from tests.fixtures.name_prints import PRINTER
 
 OCT = datetime(2026, 10, 25, 9, 0, tzinfo=UTC)
@@ -228,3 +228,29 @@ def test_a_miss_that_cannot_be_written_is_said_and_the_answer_still_comes_back(
     assert ask(asker).outcome == "model.unreachable"
     assert lines[-1]["event"] == "model_miss_not_recorded"
     assert lines[-1]["code"] == "store.unavailable"
+
+
+class CountingBook(MemoryBook):
+    """The spend book in memory, remembering the counts each call was saved with."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.tokens: list[CallTokens | None] = []
+
+    async def add(
+        self, use: Use, model: str, micro: int, at: datetime, tokens: CallTokens | None = None
+    ) -> None:
+        self.tokens.append(tokens)
+        await super().add(use, model, micro, at, tokens)
+
+
+def test_an_answered_call_keeps_its_counts_and_the_answers_length() -> None:
+    book = CountingBook()
+    ledger = SpendLedger(book, clock=lambda: OCT)
+    gate = ModelGate(ledger, FixedNames(KnownNames.of(["Fatima Al Mansoori"], PRINTER)))
+    cached = ClaudeReply("Fix it.", "end_turn", 20_000, 3_000, 900, 300, 100)  # both kinds of cache write
+    asker = CloudAsk(gate, FakeDoor(cached), MemoryMisses(), clock=lambda: OCT)
+    assert ask(asker).outcome == "answered"
+    assert book.tokens == [
+        CallTokens(tokens_in=20_000, tokens_out=3_000, cache_read=900, cache_write=400, answer_chars=7)
+    ]
