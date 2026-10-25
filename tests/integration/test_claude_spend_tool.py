@@ -54,3 +54,30 @@ def test_without_the_laptop_database_it_says_how_to_start_it(capsys: pytest.Capt
 
     assert claude_spend.main([], prepare=stopped) == 1
     assert "Start it: python -m tools.laptop_db up" in capsys.readouterr().out
+
+
+def test_a_quiet_month_says_so_and_twenty_opus_calls_are_enough_to_decide(
+    test_db: ScratchDb, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run(add_workspaces(test_db.app_url, LAPTOP_TENANT))
+
+    async def the_test_db() -> SecretStr | None:
+        return SecretStr(test_db.app_url)
+
+    assert claude_spend.main([], prepare=the_test_db, clock=lambda: NOW) == 0
+    quiet = capsys.readouterr().out
+    assert "Last day: every Claude run ran; every cap is under 80%." in quiet
+    assert "Opus thinking: no Opus call with counts yet." in quiet
+
+    async def twenty() -> None:
+        async with open_db(test_db.app_url) as db:
+            calls = ModelCalls(db.scoped(LAPTOP_TENANT))
+            counts = CallTokens(500, 400, cache_read=0, cache_write=0, answer_chars=400)
+            for minute in range(20):
+                await calls.add("heads", OPUS, 1, at=NOW - timedelta(minutes=minute), tokens=counts)
+
+    run(twenty())
+    assert claude_spend.main([], prepare=the_test_db, clock=lambda: NOW) == 0
+    decided = capsys.readouterr().out
+    assert "first 20 of 20 calls" in decided
+    assert "Not enough calls" not in decided
