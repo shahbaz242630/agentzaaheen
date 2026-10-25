@@ -203,6 +203,16 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="A phone alert was sent ({bytes} bytes, priority {priority}).",
         why="Something changed that the Chairman asked to hear about.",
     ),
+    "heartbeat_sent": LogEvent(
+        "info",
+        what="Told Healthchecks the {source} job ran.",
+        why="Healthchecks alerts the Chairman's phone if this ping stops arriving.",
+    ),
+    "heartbeat_failed": LogEvent(
+        "warning",
+        what="Could not tell Healthchecks the {source} job ran (http {http_status}).",
+        explains="code",
+    ),
     # ---- alerts
     "alert_sent": LogEvent(
         "info",

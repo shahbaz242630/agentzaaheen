@@ -49,6 +49,8 @@ and sent to the trace store (``tools.dashboard_tracing``, ADR-032). With
 each workspace also gets a daily summary at 05:00, written by code, and the
 Board's briefing goes to the phone at 07:00 (with ``--ntfy-topic-env``), both
 in ``--briefing-zone`` (default Asia/Dubai) (``tools.dashboard_summaries``).
+With ``--briefing-ping-env NAME`` each sent briefing pings that Healthchecks
+check, which alerts the phone when no briefing arrives.
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
@@ -109,7 +111,7 @@ from yaqzan.core.api.uptime import CARD_ID as UPTIME_CARD
 from yaqzan.core.api.workspaces import WorkspaceDirectory
 from yaqzan.core.auth import Site
 from yaqzan.core.llm_gateway import Tool
-from yaqzan.core.net import ModelClient, NetError
+from yaqzan.core.net import HEALTHCHECKS_PING_HOST, ModelClient, NetError, NetPolicy, check_ping_url
 from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Registry, load_registry
 from yaqzan.core.registry.roles import RoleLibrary, load_roles
@@ -314,6 +316,10 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=ROLES_ROOT,
         help="the role library for the Agents tab (needs --switches)",
+    )
+    parser.add_argument(
+        "--briefing-ping-env",
+        help="env var holding the Healthchecks ping address told after each sent briefing (needs --switches)",
     )
     parser.add_argument(
         "--briefing-zone",
@@ -547,8 +553,27 @@ def _summaries(  # noqa: PLR0913  # the options, the database, the facts' source
         alerts=alerts,
         watched=watched,
         topic=topic,
+        ping=_briefing_ping(env, ns.briefing_ping_env, topic),
         transport=transport,
     )
+
+
+def _briefing_ping(env: Mapping[str, str], ping_env: str | None, topic: SecretStr | None) -> SecretStr | None:
+    """The briefing's Healthchecks ping address, if set and usable (said on the console, never shown)."""
+    if not ping_env:
+        return None
+    raw = env.get(ping_env, "").strip()
+    if not raw:
+        print(f"dashboard: {ping_env} is not set, so Healthchecks will not hear about the briefing.")
+        return None
+    try:
+        check_ping_url(SecretStr(raw), NetPolicy(allowed_hosts=frozenset({HEALTHCHECKS_PING_HOST})))
+    except NetError:
+        print(f"dashboard: {ping_env} is not a Healthchecks ping address (https://hc-ping.com/<uuid>).")
+        return None
+    if topic is None:
+        print("dashboard: the briefing is not sent to the phone, so Healthchecks will alert every morning.")
+    return SecretStr(raw)
 
 
 def _repos_of(switches: LaptopSwitches | None) -> Repos:

@@ -10,7 +10,9 @@ checks once a minute what is due in the Chairman's time zone
    an archived workspace is left out.
 2. **07:00, brief:** one Board message is built from today's summaries, saved,
    then sent to the Chairman's phone through ntfy. If it cannot be sent, why
-   is saved and it is tried again every 15 minutes that day.
+   is saved and it is tried again every 15 minutes that day. Once it is
+   sent, the briefing's Healthchecks check is pinged (``--briefing-ping-env``),
+   so a briefing that never arrives (the laptop was off) alerts the phone too.
 
 A dashboard started later the same day catches up once, and says it is late.
 Nothing here asks a model, switches anything on or spends.
@@ -42,7 +44,7 @@ from yaqzan.core.api.summary import (
 )
 from yaqzan.core.api.workspaces import WorkspaceDirectory
 from yaqzan.core.llm_gateway.scout import ScoutReport
-from yaqzan.core.net import PushClient
+from yaqzan.core.net import HeartbeatClient, PushClient
 from yaqzan.core.notify import Alert
 from yaqzan.core.policy import SummaryControl
 from yaqzan.core.scheduler import Plan, local_day, plan, window_start
@@ -105,6 +107,7 @@ class LaptopSummaries:
         alerts: AlertLog | None = None,
         watched: frozenset[str] = frozenset(),
         topic: SecretStr | None = None,
+        ping: SecretStr | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         check_every_s: float = CHECK_EVERY_S,
     ) -> None:
@@ -118,6 +121,7 @@ class LaptopSummaries:
         self._alerts = alerts
         self._watched = watched
         self._topic = topic
+        self._ping = ping
         self._transport = transport
         self._check_every_s = check_every_s
         self._gathered: date | None = None
@@ -304,6 +308,17 @@ class LaptopSummaries:
             self._next_try = self._clock() + RETRY_AFTER
             return
         await control.briefing_sent(due.day)
+        await self._heartbeat()
+
+    async def _heartbeat(self) -> None:
+        """Tell Healthchecks today's briefing went out; a failure is logged once and left to its alert."""
+        if self._ping is None:
+            return
+        try:
+            async with HeartbeatClient(self._ping, transport=self._transport) as beat:
+                await beat.ping("briefing")
+        except SourceError:
+            return  # the client said why; never retried: a missing ping makes Healthchecks alert the phone
 
 
 async def _has_day(control: SummaryControl, workspace: WorkspaceRow, day: date) -> bool:

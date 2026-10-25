@@ -15,13 +15,15 @@ What it does:
     :class:`PushClient` posts one short alert to the Chairman's secret ntfy
     topic (ADR-031), the core's only outbound message. :class:`OtlpSender`
     posts finished spans to the trace store's OTLP gateway (ADR-032), never
-    retried, dropped on failure.
+    retried, dropped on failure. :class:`HeartbeatClient` makes one GET to a
+    Healthchecks ping address, so a job that stops running raises an alert.
 
 Public interface:
     ``JsonClient``, ``NetPolicy``, ``DownloadPolicy``, ``NetError``, ``NetErrorCode``,
     ``check_base_url``, ``check_path``, ``ModelClient``, ``check_model_url``,
     ``StatusProbe``, ``check_probe_url``, ``PushClient``, ``NTFY_HOST``,
-    ``OtlpSender``, ``check_otlp_endpoint``.
+    ``OtlpSender``, ``check_otlp_endpoint``, ``HeartbeatClient``,
+    ``HEALTHCHECKS_PING_HOST``, ``check_ping_url``.
     A ``JsonClient`` satisfies the SDK's ``JsonGetter`` protocol, which is all
     a connector ever sees.
 
@@ -39,14 +41,17 @@ Must never:
 
 from yaqzan.core.net.client import DownloadPolicy, JsonClient, NetPolicy, check_base_url, check_path
 from yaqzan.core.net.errors import NetError, NetErrorCode
+from yaqzan.core.net.heartbeat import HEALTHCHECKS_PING_HOST, HeartbeatClient, check_ping_url
 from yaqzan.core.net.model import ModelClient, check_model_url
 from yaqzan.core.net.otlp import OtlpSender, check_otlp_endpoint
 from yaqzan.core.net.probe import StatusProbe, check_probe_url
 from yaqzan.core.net.push import NTFY_HOST, PushClient
 
 __all__ = [
+    "HEALTHCHECKS_PING_HOST",
     "NTFY_HOST",
     "DownloadPolicy",
+    "HeartbeatClient",
     "JsonClient",
     "ModelClient",
     "NetError",
@@ -59,5 +64,6 @@ __all__ = [
     "check_model_url",
     "check_otlp_endpoint",
     "check_path",
+    "check_ping_url",
     "check_probe_url",
 ]
