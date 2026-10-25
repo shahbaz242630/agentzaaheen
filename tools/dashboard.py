@@ -45,7 +45,10 @@ Chairman's phone (ADR-031). With ``--otel-token-env NAME --otel-endpoint URL
 --otel-user ID`` every API request, outside call and database use is traced
 and sent to the trace store (``tools.dashboard_tracing``, ADR-032). With
 ``--fixes FILE`` the chat can read each project part's fix guide
-(``tools.fix_guides``, the local ``projects/fixes.yaml``).
+(``tools.fix_guides``, the local ``projects/fixes.yaml``). With ``--switches``
+each workspace also gets a daily summary at 05:00, written by code, and the
+Board's briefing goes to the phone at 07:00 (with ``--ntfy-topic-env``), both
+in ``--briefing-zone`` (default Asia/Dubai) (``tools.dashboard_summaries``).
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
@@ -69,6 +72,7 @@ import json
 import os
 import secrets
 import sys
+import zoneinfo
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -92,10 +96,11 @@ from tools.dashboard_sources import (
     usable_secret,
     utc_now,
 )
+from tools.dashboard_summaries import AlertLog, LaptopSummaries
 from tools.dashboard_supabase import SupabaseProject, supabase_list, supabase_portfolio
 from tools.dashboard_switches import LaptopSwitches, Prepare, connect, off_connectors
 from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options, tracing_from
-from tools.dashboard_uptime import start_watch, uptime_list, uptime_portfolio
+from tools.dashboard_uptime import ntfy_topic, start_watch, uptime_list, uptime_portfolio
 from tools.fix_guides import Project, fixes_list
 from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from yaqzan.core.api.code import CARD_ID as CODE_CARD
@@ -108,7 +113,9 @@ from yaqzan.core.net import ModelClient, NetError
 from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Registry, load_registry
 from yaqzan.core.registry.roles import RoleLibrary, load_roles
+from yaqzan.core.scheduler import DEFAULT_ZONE
 from yaqzan.core.sdk import SiteRule, span
+from yaqzan.core.store import ScoutRun, WorkspaceRow
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
@@ -198,6 +205,7 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
     off: frozenset[str] = frozenset(),
     uptime: UptimeRules | None = None,
     backends: SupabaseList | None = None,
+    alerts: AlertLog | None = None,
 ) -> tuple[Portfolio | None, list[str]]:
     """The portfolio with every requested real source laid over the sample, and what is real.
 
@@ -228,7 +236,15 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
     if uptime and "uptime" not in off:
         base = portfolio or SamplePortfolio(clock())
         names = {p.id: p.name for p in base.projects()}
-        watcher = start_watch(uptime, names, env, ns.ntfy_topic_env, clock=clock, transport=transport)
+        watcher = start_watch(
+            uptime,
+            names,
+            env,
+            ns.ntfy_topic_env,
+            clock=clock,
+            transport=transport,
+            on_alerts=alerts.add if alerts is not None else None,
+        )
         if watcher is None:
             raise _NotStartedError
         portfolio = uptime_portfolio(base, watcher, clock=clock)
@@ -299,6 +315,11 @@ def _parser() -> argparse.ArgumentParser:
         default=ROLES_ROOT,
         help="the role library for the Agents tab (needs --switches)",
     )
+    parser.add_argument(
+        "--briefing-zone",
+        default=DEFAULT_ZONE,
+        help="the time zone of the 05:00 summaries and the 07:00 briefing (needs --switches)",
+    )
     add_tracing_options(parser)
     return parser
 
@@ -315,6 +336,11 @@ def _preflight(ns: argparse.Namespace, static_dir: Path) -> int | None:
         return 1
     if not (static_dir / "index.html").is_file():
         print("dashboard: the web UI is not built yet. Run: cd apps/dashboard && npm ci && npm run build")
+        return 1
+    try:
+        zoneinfo.ZoneInfo(ns.briefing_zone)
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+        print(f"dashboard: {ns.briefing_zone!r} is not a time zone Yaqzan knows (try Asia/Dubai).")
         return 1
     if ns.enrol_passkey and not ns.switches:
         print("dashboard: --enrol-passkey needs --switches (the passkey is kept in the laptop database).")
@@ -343,8 +369,11 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         backends = supabase_list(ns.supabase, projects)
         fixes = fixes_list(ns.fixes, projects)
         off = off_connectors(connected.standing, registry) if connected else frozenset[str]()
+        alerts = AlertLog(clock)  # the phone alerts, counted for the daily summaries
         with span("dashboard start"):  # every start-up read in one trace
-            portfolio, live = _real_data(ns, env, clock, transport, off=off, uptime=uptime, backends=backends)
+            portfolio, live = _real_data(
+                ns, env, clock, transport, off=off, uptime=uptime, backends=backends, alerts=alerts
+            )
     except (_NotStartedError, ListNotUsableError):
         return 1
     chosen = portfolio or SamplePortfolio(clock())
@@ -397,6 +426,17 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         )
         if chat is None:
             return 1
+    summaries = _summaries(
+        ns,
+        env,
+        switches,
+        portfolio=chosen,
+        directory=directory,
+        alerts=alerts,
+        watched=frozenset(uptime) if uptime and "uptime" not in off else frozenset(),
+        clock=clock,
+        transport=transport,
+    )
     page = registry_for(chosen, registry=registry, uptime=uptime, backends=backends)
     app = create_app(
         chosen,
@@ -411,13 +451,17 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         adding=adding,
         profiles=profiles,
         scout=scout,
-        on_close=_closer(switches, scout),
+        summaries=summaries,
+        on_start=summaries.start if summaries is not None else None,
+        on_close=_closer(switches, scout, summaries),
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
         what += "; chat connected to the local model"
     if switches is not None:
         what += "; switches remembered in the laptop database"
+    if summaries is not None:
+        what += f"; daily summaries at 05:00 and the briefing at 07:00 ({ns.briefing_zone})"
     print(f"dashboard: open http://localhost:{ns.port} ({what}; press Ctrl+C to stop)")
     (serve or _serve)(app, HOST, ns.port)
     return 0
@@ -454,18 +498,57 @@ def _scout(  # noqa: PLR0913  # the model, the database, GitHub, the roles, more
 
 
 def _closer(
-    switches: LaptopSwitches | None, scout: LaptopScout | None
+    switches: LaptopSwitches | None, scout: LaptopScout | None, summaries: LaptopSummaries | None = None
 ) -> Callable[[], Awaitable[None]] | None:
-    """What to close when the server stops: the scout's runs first, then the database."""
+    """What to close when the server stops: the morning job and the scout's runs, then the database."""
     if switches is None:
         return None
 
     async def close() -> None:
+        if summaries is not None:
+            await summaries.close()
         if scout is not None:
             await scout.close()
         await switches.close()
 
     return close
+
+
+def _summaries(  # noqa: PLR0913  # the options, the database, the facts' sources, the outside world
+    ns: argparse.Namespace,
+    env: Mapping[str, str],
+    switches: LaptopSwitches | None,
+    *,
+    portfolio: Portfolio,
+    directory: WorkspaceDirectory,
+    alerts: AlertLog,
+    watched: frozenset[str],
+    clock: Clock,
+    transport: httpx.AsyncBaseTransport | None,
+) -> LaptopSummaries | None:
+    """The daily summaries and the morning briefing, if there is a database to keep them in."""
+    if switches is None:
+        return None
+    topic = ntfy_topic(env, ns.ntfy_topic_env) if ns.ntfy_topic_env else None
+    if topic is None:
+        print("dashboard: no ntfy topic, so the morning briefing is kept on the dashboard only.")
+
+    async def scout_of(workspace: WorkspaceRow) -> ScoutRun | None:
+        return await (await switches.scout_control()).latest(workspace)
+
+    return LaptopSummaries(
+        control=switches.summary_control,
+        portfolio=portfolio,
+        directory=directory,
+        clock=clock,
+        zone=zoneinfo.ZoneInfo(ns.briefing_zone),
+        agents=switches.view,
+        scout=scout_of,
+        alerts=alerts,
+        watched=watched,
+        topic=topic,
+        transport=transport,
+    )
 
 
 def _repos_of(switches: LaptopSwitches | None) -> Repos:

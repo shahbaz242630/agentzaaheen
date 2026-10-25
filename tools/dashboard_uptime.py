@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Mapping, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -107,8 +107,10 @@ class UptimeLive:
         transport: httpx.AsyncBaseTransport | None = None,
         topic: SecretStr | None = None,
         interval_s: float = RECHECK.total_seconds(),
+        on_alerts: Callable[[Sequence[Alert]], None] | None = None,
     ) -> None:
         self._rules = dict(rules)
+        self._on_alerts = on_alerts  # the daily summaries count them (F17 slice 6)
         self._clock = clock
         self._transport = transport
         self._topic = topic
@@ -125,6 +127,8 @@ class UptimeLive:
             self.latest = {**self.latest, **reports}
             alerts = self._watch.observe(reports)
             current.set_attribute("yaqzan.count", len(alerts))
+            if alerts and self._on_alerts is not None:
+                self._on_alerts(alerts)
             if alerts and self._topic is not None:
                 async with PushClient(self._topic, transport=self._transport) as pusher:
                     await deliver(alerts, pusher)
@@ -182,20 +186,28 @@ def start_watch(  # noqa: PLR0913  # the list, the names, where the topic is, an
     *,
     clock: Clock,
     transport: httpx.AsyncBaseTransport | None = None,
+    on_alerts: Callable[[Sequence[Alert]], None] | None = None,
 ) -> UptimeLive | None:
     """The watcher after its first round; with ``topic_env``, alerts go to the phone (None if unusable)."""
     topic: SecretStr | None = None
     if topic_env:
-        raw = env.get(topic_env, "").strip()
-        if not raw or not raw.isascii() or not raw.isprintable() or " " in raw:
+        topic = ntfy_topic(env, topic_env)
+        if topic is None:
             print(f"dashboard: {topic_env} is not set (or not usable), so no alerts can be sent.")
             return None
-        topic = SecretStr(raw)
-    watcher = UptimeLive(rules, names, clock=clock, transport=transport, topic=topic)
+    watcher = UptimeLive(rules, names, clock=clock, transport=transport, topic=topic, on_alerts=on_alerts)
     asyncio.run(watcher.round())
     if topic is not None:
         print("dashboard: uptime alerts go to your phone via ntfy (after 2 failed checks in a row).")
     return watcher
+
+
+def ntfy_topic(env: Mapping[str, str], topic_env: str) -> SecretStr | None:
+    """The secret ntfy topic in the named environment variable, or ``None`` if it is not set or not usable."""
+    raw = env.get(topic_env, "").strip()
+    if not raw or not raw.isascii() or not raw.isprintable() or " " in raw:
+        return None
+    return SecretStr(raw)
 
 
 def uptime_list(path: Path | None, projects: Collection[str]) -> dict[str, tuple[SiteRule, ...]]:

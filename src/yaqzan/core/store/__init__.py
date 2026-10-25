@@ -7,7 +7,8 @@ What it does:
     and requests (ADR-030), the passkey (ADR-SEC-007), the revenue mirror
     (subscriptions, payments, refunds), each collector's sync state, the
     tenants and workspaces (archived, brought back or deleted for good, and the
-    GitHub repository each reads, and the scout's runs and checked advice),
+    GitHub repository each reads, the scout's runs and checked advice, and each
+    workspace's daily summaries with the Board's morning briefings),
     and each workspace's agents, switch and cap with
     the frozen role versions they run (ADR-039). Every table has a ``tenant_id`` and sits
     behind a database wall (row-level security, forced): each transaction
@@ -63,6 +64,7 @@ from yaqzan.core.store.sealed import (
     SealedSecrets,
     SlotKey,
 )
+from yaqzan.core.store.summaries import BriefingRow, Briefings, BriefingState, DailySummaries, SummaryRow
 from yaqzan.core.store.switches import EngagedSwitch, KillSwitchRows, SwitchScope
 from yaqzan.core.store.workspaces import (
     Archived,
@@ -87,7 +89,11 @@ __all__ = [
     "Archived",
     "AuditRow",
     "AuditRows",
+    "BriefingRow",
+    "BriefingState",
+    "Briefings",
     "CredentialDates",
+    "DailySummaries",
     "Database",
     "DatabaseSettings",
     "EngagedSwitch",
@@ -114,6 +120,7 @@ __all__ = [
     "StateChange",
     "StoreError",
     "StoreErrorCode",
+    "SummaryRow",
     "SwitchRow",
     "SwitchScope",
     "SyncState",

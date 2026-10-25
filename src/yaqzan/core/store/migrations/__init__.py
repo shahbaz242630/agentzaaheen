@@ -23,6 +23,7 @@ from yaqzan.core.store.migrations import (
     m0008_workspace_archive,
     m0009_workspace_sources,
     m0010_scout_runs,
+    m0011_daily_summaries,
 )
 
 
@@ -51,6 +52,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(8, m0008_workspace_archive.NAME, m0008_workspace_archive.SQL),
     Migration(9, m0009_workspace_sources.NAME, m0009_workspace_sources.SQL),
     Migration(10, m0010_scout_runs.NAME, m0010_scout_runs.SQL),
+    Migration(11, m0011_daily_summaries.NAME, m0011_daily_summaries.SQL),
 )
 LATEST_VERSION = MIGRATIONS[-1].version
 

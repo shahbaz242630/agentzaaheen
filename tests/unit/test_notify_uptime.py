@@ -133,6 +133,38 @@ def test_odd_messages_are_refused_before_sending(title: str, message: str, prior
     assert caught.value.net_code is NetErrorCode.BLOCKED
 
 
+def test_the_briefing_goes_as_one_post_of_several_lines() -> None:
+    seen: list[httpx.Request] = []
+
+    def serve(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200)
+
+    asyncio.run(push(serve).send_lines("Yaqzan briefing, Sun 25 Oct", ["2 projects.", "Details here."]))
+    (request,) = seen
+    assert request.headers["Title"] == "Yaqzan briefing, Sun 25 Oct"
+    assert request.content == b"2 projects.\nDetails here."
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        [],
+        ["a line", ""],
+        ["one line\nhides two"],
+        ["a tab\tis not printable"],
+        ["x" * 1000] * 4,  # over the limit together
+    ],
+)
+def test_odd_briefings_are_refused_before_sending(lines: list[str]) -> None:
+    def serve(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("nothing may be sent")
+
+    with pytest.raises(NetError) as caught:
+        asyncio.run(push(serve).send_lines("Yaqzan briefing", lines))
+    assert caught.value.net_code is NetErrorCode.BLOCKED
+
+
 @pytest.mark.parametrize("topic", ["short", "has space in it here", "a/b/c/d/e/f/g/h/i/j", "x" * 80])
 def test_an_odd_topic_is_refused(topic: str) -> None:
     with pytest.raises(NetError):

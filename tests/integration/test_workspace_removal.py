@@ -34,6 +34,7 @@ from yaqzan.core.registry.roles import RoleLibrary, load_roles
 from yaqzan.core.store import (
     AgentRows,
     AuditRows,
+    DailySummaries,
     Database,
     Records,
     SealedRow,
@@ -51,7 +52,7 @@ NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 PROJECT_TABLES = (
     "events", "runs", "findings", "actions", "sealed_secrets", "revenue_subscriptions",
     "revenue_payments", "revenue_refunds", "source_syncs", "workspace_settings", "agents",
-    "workspace_sources", "scout_runs",
+    "workspace_sources", "scout_runs", "daily_summaries",
 )  # fmt: skip
 
 
@@ -101,6 +102,7 @@ async def _busy(db: Database, library: RoleLibrary, workspace: UUID) -> UUID:
     await WorkspaceSources(db.scoped(TENANT, workspace)).connect_github(
         f"owner/busy-{workspace.hex[-4:]}", by="user:chairman", at=NOW
     )
+    await DailySummaries(db.scoped(TENANT, workspace)).put(NOW.date(), {"busy": True}, made_at=NOW)
     await Records(db.scoped(TENANT, workspace)).add_run(
         run_record(
             project_id=workspace, tenant_id=TENANT, agent=str(agent), cost_minor_units=10, started_at=NOW
@@ -154,6 +156,7 @@ def test_archiving_switches_everything_off_deletes_the_keys_and_keeps_the_histor
         assert counts["sealed_secrets"] == 0
         assert counts["runs"] == 1  # the history is kept
         assert counts["workspace_sources"] == 1  # still its repository: bringing it back needs no new link
+        assert counts["daily_summaries"] == 1  # its summaries are kept too
         assert (await _counts(test_db.admin_url, ZAAHEEN))["sealed_secrets"] == 1
 
     run(body())
@@ -170,6 +173,8 @@ def test_nothing_new_lands_in_an_archived_workspace(test_db: ScratchDb, library:
                 )
             with pytest.raises(StoreError):
                 await SealedSecrets(db.scoped(TENANT, EVA)).put(_key(EVA))
+            with pytest.raises(StoreError):  # nor a daily summary, new or made again
+                await DailySummaries(db.scoped(TENANT, EVA)).put(NOW.date(), {"late": True}, made_at=NOW)
             with pytest.raises(StoreError):
                 await agents(db, library).set_agent(
                     EVA, agent, enabled=True, cap_minor=5, **ME, step_up_at=_hello(4)

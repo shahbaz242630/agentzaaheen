@@ -46,7 +46,7 @@ DOORS: list[tuple[str, Path, str, set[str]]] = [
         "ModelClient.chat",
         {"model_answered", "model_call_failed"},
     ),
-    ("outside calls: the phone", SRC / "core/net/push.py", "PushClient.send", {"push_sent", "push_failed"}),
+    ("outside calls: the phone", SRC / "core/net/push.py", "PushClient._post", {"push_sent", "push_failed"}),
     # The log store: only failures, because a line for each send would itself be sent (a loop).
     ("outside calls: the log store", SRC / "core/net/otlp.py", "OtlpSender._post", {"telemetry_dropped"}),
     # ``Database.write`` and ``Scoped.write`` (inside the walls, ADR-039) both log through ``_logged``.

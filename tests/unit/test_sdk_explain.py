@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from tools.dashboard_summaries import NO_TOPIC, UNMAKEABLE
 from yaqzan.core.broker import BrokerErrorCode
 from yaqzan.core.metrics import Freshness, KeyHealth
 from yaqzan.core.net import NetErrorCode
@@ -17,6 +18,7 @@ RAISED = sorted(
     | {h.code for h in KeyHealth if h.severity is not None}
     | {f"freshness.{f.value}" for f in Freshness if not f.usable}
     | {_CRASHED, "policy.bad_switch_row"}
+    | {NO_TOPIC, UNMAKEABLE, "scout.unreadable"}  # the daily summaries (F17 slice 6)
 )
 
 

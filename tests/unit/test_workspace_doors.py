@@ -29,6 +29,8 @@ DOORS = {
     "src/yaqzan/core/policy/workspaces.py",
     # The scout: the workspace comes from the API door's address; its runs are saved behind its wall.
     "src/yaqzan/core/policy/scout.py",
+    # Daily summaries: the workspace comes from the server's own list (the morning job) or the API door.
+    "src/yaqzan/core/policy/summaries.py",
     # The laptop set-up: its own five fixed workspaces, one at a time, to save each one's repository once.
     "tools/laptop_db.py",
 }

@@ -348,3 +348,26 @@ def test_the_agents_tab_and_removal_reach_the_laptop_database(laptop_url: Secret
         LifecycleVerdict.NEEDS_PASSKEY,
         LifecycleVerdict.NEEDS_PASSKEY,
     ]
+
+
+def test_the_daily_summaries_reach_the_laptop_database(
+    ui: Path, laptop_url: SecretStr, capsys: pytest.CaptureFixture[str]
+) -> None:
+    early = datetime(2026, 10, 25, 0, 0, tzinfo=UTC)  # 04:00 in Dubai: nothing is due yet
+    with TestClient(start(ui, laptop_url, clock=lambda: early), base_url="http://127.0.0.1") as client:
+        assert client.get("/api/summaries").json() == {"connected": True, "workspaces": {}}
+        made = client.post("/api/summaries/make", json={}, headers=OURS)
+        assert made.json() == {"made": len(laptop_db.LAPTOP_WORKSPACES), "failed": 0}
+        lines = client.get("/api/summaries").json()["workspaces"]
+        assert set(lines) == {w.slug for w in laptop_db.LAPTOP_WORKSPACES}
+        (day,) = client.get("/api/workspaces/eva/summaries").json()["days"]
+        assert day["summary"]["sample_left_out"]  # sample cards are named, never counted
+        assert client.get("/api/briefings").json() == {"connected": True, "briefings": []}
+    said = capsys.readouterr().out
+    assert "no ntfy topic, so the morning briefing is kept on the dashboard only" in said
+    assert "daily summaries at 05:00 and the briefing at 07:00 (Asia/Dubai)" in said
+
+
+def test_an_unknown_briefing_zone_is_refused(ui: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert dashboard.main(["--briefing-zone", "Mars/Olympus"], static_dir=ui, serve=lambda *_: None) == 1
+    assert "'Mars/Olympus' is not a time zone Yaqzan knows" in capsys.readouterr().out

@@ -65,6 +65,7 @@ from yaqzan.core.policy.ledger import Ledger, load_kill_switches
 from yaqzan.core.policy.passkey_approvals import PasskeyApprovals
 from yaqzan.core.policy.registry_control import OUTSIDE_KINDS, Pending, RegistryControl, Standing, Verdict
 from yaqzan.core.policy.scout import STALE_AFTER, ScoutControl, ScoutVerdict
+from yaqzan.core.policy.summaries import SummaryControl
 from yaqzan.core.policy.workspaces import Added, LifecycleVerdict, Removal, WorkspaceControl, slug_of
 
 __all__ = [
@@ -107,6 +108,7 @@ __all__ = [
     "ScoutControl",
     "ScoutVerdict",
     "Standing",
+    "SummaryControl",
     "Target",
     "ToolCall",
     "Verdict",

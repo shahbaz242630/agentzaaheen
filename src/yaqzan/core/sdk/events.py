@@ -300,6 +300,38 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="The scout could not finish the {workspace} workspace (stage {stage}): {said}",
         explains="code",
     ),
+    # ---- daily summaries and the morning briefing (F17 slice 6): written by code, read-only
+    "summary_saved": LogEvent(
+        "info",
+        what="Saved today's summary for the {workspace} workspace.",
+        why="The morning job ran, or the Chairman asked for today's summaries again.",
+    ),
+    "summary_failed": LogEvent(
+        "warning",
+        what="Could not make today's summary for the {workspace} workspace: {said}",
+        explains="code",
+    ),
+    "summaries_made": LogEvent(
+        "info",
+        what="Made {entries} workspace summaries for today ({failing} could not be made).",
+        why="It was past the gathering time in the Chairman's time zone, or he asked for them again.",
+    ),
+    "briefing_sent": LogEvent(
+        "info",
+        what="The Board's morning briefing was sent to the Chairman's phone.",
+        why="It was past the briefing time in the Chairman's time zone and today's had not gone yet.",
+    ),
+    "briefing_not_sent": LogEvent(
+        "warning",
+        what="The Board's morning briefing could not be sent: {said}",
+        explains="code",
+    ),
+    "briefing_job_failed": LogEvent(
+        "warning",
+        what="The morning summaries job could not finish this check.",
+        why="It stopped with an unexpected {kind} error.",
+        next=f"It checks again in a minute. {_SEE_DASHBOARD}",
+    ),
     # ---- revenue sync
     "revenue_synced": LogEvent(
         "info",
