@@ -34,7 +34,9 @@ OPS = PromptPart(
     DataClass.INTERNAL,
 )
 NO_NAMES = KnownNames([])
-CUSTOMERS = KnownNames(["Fatima Al Mansoori", "Zoë O'Brien", "Renée Dubois", "محمد علي", "Jo", "Ali"])
+CUSTOMERS = KnownNames(
+    ["Fatima Al Mansoori", "Zoë O'Brien", "Renée Dubois", "محمد علي", "Jo", "Ali", "Grace", "Mark", "سارة"]
+)
 
 
 def test_our_own_ops_text_with_dates_amounts_and_ids_may_go() -> None:
@@ -58,11 +60,48 @@ def test_a_name_in_a_part_tagged_customer_data_refuses_the_whole_call() -> None:
         "Zoe O Brien wrote in.",  # accents and the apostrophe do not matter
         "Renee Dubois wrote in.",  # an accent inside a word does not split it
         "زارنا محمد علي أمس",  # Arabic script
-        "Ali renewed.",  # a short single-word name still counts at 3 letters
     ],
 )
 def test_one_of_our_customers_names_refuses_a_part_tagged_wrongly(text: str) -> None:
     assert customer_data_in([OPS, PromptPart(text, DataClass.INTERNAL)], CUSTOMERS) is Found.KNOWN_NAME
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Ali renewed.",  # a short one-word name still counts at 3 letters
+        "We heard from Grace today.",
+        "Mark asked for an invoice.",
+        "GRACE wrote in capitals.",
+        "زارتنا سارة أمس",  # a script with no capitals: always written like a name
+        "Grace periods are 7 days.",  # at the start of a sentence it is still refused, on the safe side
+    ],
+)
+def test_a_one_word_name_written_like_a_name_refuses(text: str) -> None:
+    assert customer_data_in([OPS, PromptPart(text, DataClass.INTERNAL)], CUSTOMERS) is Found.KNOWN_SINGLE_NAME
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Accounts get a 7-day grace period.",
+        "Please mark this finding as read.",
+        "The ali-baba test fixture ran.",
+    ],
+)
+def test_a_one_word_name_used_as_an_ordinary_word_may_go(text: str) -> None:
+    assert customer_data_in([OPS, PromptPart(text, DataClass.INTERNAL)], CUSTOMERS) is None
+
+
+def test_a_full_name_is_refused_in_any_case_even_lower_case() -> None:
+    lower = PromptPart("fatima al mansoori asked again.", DataClass.INTERNAL)
+    assert customer_data_in([lower], CUSTOMERS) is Found.KNOWN_NAME
+
+
+def test_part_of_a_full_name_alone_is_not_a_match() -> None:
+    assert (
+        customer_data_in([PromptPart("Renée from support replied.", DataClass.INTERNAL)], CUSTOMERS) is None
+    )
 
 
 @pytest.mark.parametrize(

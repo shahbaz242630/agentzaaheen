@@ -9,7 +9,11 @@ class. Four nets, in order, and any one refuses the whole call:
    caller thinks; a finding keeps its own tag.
 2. **Our own customers' names** (the Chairman's point, 25 Oct 2026: a name
    cannot be found by pattern). Every name we hold is matched as whole words,
-   ignoring case and accents. Without a name list, no cloud call may go.
+   ignoring accents. A full name matches in any case. A one-word name
+   ("Grace", "Mark") matches only when written like a name, with a capital
+   (or in a script with no capitals, such as Arabic), so "a 7-day grace
+   period" is not refused; "Grace periods..." at the start of a sentence
+   still is, on the safe side. Without a name list, no cloud call may go.
 3. **The second net:** things that look like a customer's details (an email,
    a phone number, a card number, a payment provider's customer or
    subscription ID), so a part tagged wrongly is still caught.
@@ -39,7 +43,8 @@ class Found(StrEnum):
 
     TAGGED = "tagged_customer_data"
     NO_NAME_LIST = "no_name_list"
-    KNOWN_NAME = "known_customer_name"
+    KNOWN_NAME = "known_customer_name"  # a full name, two words or more
+    KNOWN_SINGLE_NAME = "known_customer_single_name"  # a one-word name, written with a capital
     EMAIL = "email"
     PHONE = "phone"
     CARD = "card"
@@ -56,14 +61,14 @@ class PromptPart:
 
 
 def part_from(record: Subscription | Payment | Refund | Finding) -> PromptPart:
-    """A record as a prompt part, tagged at the source: customer references make it is customer data."""
+    """A record as a prompt part, tagged at the source: customer references make it customer data."""
     if isinstance(record, Finding):
         return PromptPart(f"{record.title}\n{record.body}", record.data_class)
     return PromptPart(record.model_dump_json(), DataClass.CUSTOMER_PII)
 
 
 class KnownNames:
-    """Our own customers' names, each kept as its words (case and accents ignored)."""
+    """Our own customers' names, each kept as its words (case and accents ignored when stored)."""
 
     def __init__(self, names: Iterable[str]) -> None:
         kept = {
@@ -73,22 +78,30 @@ class KnownNames:
             and len(words) <= MAX_NAME_WORDS
             and len("".join(words)) >= MIN_NAME_CHARS
         }
-        self._names = frozenset(kept)
-        self._first = frozenset(words[0] for words in kept)
-        self._longest = max((len(words) for words in kept), default=0)
+        self._full = frozenset(words for words in kept if len(words) > 1)
+        self._single = frozenset(words[0] for words in kept if len(words) == 1)
+        self._first = frozenset(words[0] for words in self._full)
+        self._longest = max((len(words) for words in self._full), default=0)
 
     def __len__(self) -> int:
-        return len(self._names)
+        return len(self._full) + len(self._single)
+
+    def match_in(self, text: str) -> Found | None:
+        """Which kind of our customers' names ``text`` holds, if any."""
+        tokens = _tokens(text)
+        words = tuple(word for word, _ in tokens)
+        for i, (word, written_as_name) in enumerate(tokens):
+            if word in self._first and any(
+                words[i : i + n] in self._full for n in range(2, self._longest + 1)
+            ):
+                return Found.KNOWN_NAME
+            if written_as_name and word in self._single:
+                return Found.KNOWN_SINGLE_NAME
+        return None
 
     def found_in(self, text: str) -> bool:
-        """True if ``text`` holds any of the names as whole words."""
-        words = _words(text)
-        for i, word in enumerate(words):
-            if word in self._first and any(
-                words[i : i + n] in self._names for n in range(1, self._longest + 1)
-            ):
-                return True
-        return False
+        """True if ``text`` holds any of the names."""
+        return self.match_in(text) is not None
 
 
 def customer_data_in(parts: Sequence[PromptPart], names: KnownNames | None) -> Found | None:
@@ -99,8 +112,10 @@ def customer_data_in(parts: Sequence[PromptPart], names: KnownNames | None) -> F
         return Found.TOO_LONG
     if names is None:
         return Found.NO_NAME_LIST
-    if any(names.found_in(part.text) for part in parts):
-        return Found.KNOWN_NAME
+    for part in parts:
+        named = names.match_in(part.text)
+        if named is not None:
+            return named
     for part in parts:
         found = _second_net(part.text)
         if found is not None:
@@ -121,10 +136,22 @@ _CUSTOMER_ID = re.compile(
 _LETTERS = re.compile(r"[^\W\d_]+")  # runs of letters in any script (Latin, Arabic, ...)
 
 
+def _plain(text: str) -> str:
+    """``text`` with accents removed ("Zoë" becomes "Zoe"), keeping its case."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+
+
 def _words(text: str) -> tuple[str, ...]:
     """Lower-case words with accents removed, so "Zoë O'Brien" and "zoe o brien" match."""
-    plain = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
-    return tuple(_LETTERS.findall(plain.casefold()))
+    return tuple(_LETTERS.findall(_plain(text).casefold()))
+
+
+def _tokens(text: str) -> list[tuple[str, bool]]:
+    """Each word lower-cased, and whether it was written like a name (a capital, or a script without case)."""
+    return [
+        (word.casefold(), word[0].isupper() or word[0].lower() == word[0].upper())
+        for word in _LETTERS.findall(_plain(text))
+    ]
 
 
 def _second_net(text: str) -> Found | None:

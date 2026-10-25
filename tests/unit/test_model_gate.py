@@ -49,7 +49,7 @@ class Clock:
         return self.now
 
 
-NAMES = FixedNames(KnownNames(["Fatima Al Mansoori"]))
+NAMES = FixedNames(KnownNames(["Fatima Al Mansoori", "Grace"]))
 
 
 def gate(clock: Clock | None = None, book: MemoryBook | None = None) -> tuple[ModelGate, SpendLedger]:
@@ -162,6 +162,18 @@ def test_one_of_our_customers_names_refuses_a_cloud_call(lines: list[dict[str, o
     assert clear(g, parts=(*OPS, named)).refusal is Refusal.CUSTOMER_DATA
     assert lines[-1]["reason"] == "known_customer_name"
     assert "Fatima" not in json.dumps(lines)
+
+
+def test_each_name_block_says_which_kind_of_name_it_was(lines: list[dict[str, object]]) -> None:
+    g, _ = gate()
+    assert clear(g, parts=(*OPS, PromptPart("Grace asked about it.", DataClass.INTERNAL))).refusal is (
+        Refusal.CUSTOMER_DATA
+    )
+    assert lines[-1]["reason"] == "known_customer_single_name"
+    assert (
+        clear(g, parts=(*OPS, PromptPart("A 7-day grace period applies.", DataClass.INTERNAL))).refusal
+        is None
+    )
 
 
 def test_a_gate_with_no_name_list_refuses_every_cloud_call_but_not_our_own_models() -> None:
