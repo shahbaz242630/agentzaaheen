@@ -8,7 +8,8 @@ What it does:
     (subscriptions, payments, refunds), each collector's sync state, the
     tenants and workspaces (archived, brought back or deleted for good, and the
     GitHub repository each reads, the scout's runs and checked advice, and each
-    workspace's daily summaries with the Board's morning briefings),
+    workspace's daily summaries with the Board's morning briefings, what each
+    Claude call cost),
     and each workspace's agents, switch and cap with
     the frozen role versions they run (ADR-039). Every table has a ``tenant_id`` and sits
     behind a database wall (row-level security, forced): each transaction
@@ -45,6 +46,7 @@ from yaqzan.core.store.audit import AuditRow, AuditRows
 from yaqzan.core.store.db import Database, DatabaseSettings, Scoped
 from yaqzan.core.store.errors import StoreError, StoreErrorCode
 from yaqzan.core.store.migrations import LATEST_VERSION, MIGRATIONS, Migration, check_schema, migrate
+from yaqzan.core.store.model_calls import ModelCalls
 from yaqzan.core.store.passkeys import PasskeyRow, PasskeyRows
 from yaqzan.core.store.records import MAX_PAGE, Records
 from yaqzan.core.store.registry_switches import (
@@ -100,6 +102,7 @@ __all__ = [
     "ItemKind",
     "KillSwitchRows",
     "Migration",
+    "ModelCalls",
     "NewAgent",
     "PasskeyRow",
     "PasskeyRows",

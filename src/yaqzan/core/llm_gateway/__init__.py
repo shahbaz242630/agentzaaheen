@@ -22,8 +22,8 @@ What it does (so far):
 Public interface:
     ``FactChat``, ``ChatReply``, ``ChatModel``, ``Tool``, ``SYSTEM_PROMPT``,
     ``build_messages``, ``catalogue``; ``ModelGate``, ``Clearance``,
-    ``Refusal``, ``PromptPart``, ``SpendLedger``, ``SpendBook``, ``MemoryBook``,
-    ``Use``, ``Usage``, ``MODELS``, ``CAPS_USD``, ``TOTAL_STOP_USD``; ``KnownNames``,
+    ``Refusal``, ``PromptPart``, ``SpendLedger``, ``SpendBook``, ``MemoryBook``, ``StoreBook``,
+    ``Use``, ``month_bounds``, ``Usage``, ``MODELS``, ``CAPS_USD``, ``TOTAL_STOP_USD``; ``KnownNames``,
     ``NameSource``, ``FixedNames``, ``part_from``; ``CloudAsk``, ``ClaudeDoor``, ``Answer``.
 
 How to test:
@@ -50,7 +50,16 @@ from yaqzan.core.llm_gateway.chat import (
 from yaqzan.core.llm_gateway.cloud_check import KnownNames, PromptPart, part_from
 from yaqzan.core.llm_gateway.model_map import MODELS, Usage
 from yaqzan.core.llm_gateway.route import Clearance, FixedNames, ModelGate, NameSource, Refusal
-from yaqzan.core.llm_gateway.spend import CAPS_USD, TOTAL_STOP_USD, MemoryBook, SpendBook, SpendLedger, Use
+from yaqzan.core.llm_gateway.spend import (
+    CAPS_USD,
+    TOTAL_STOP_USD,
+    MemoryBook,
+    SpendBook,
+    SpendLedger,
+    StoreBook,
+    Use,
+    month_bounds,
+)
 from yaqzan.core.llm_gateway.tools import Tool, catalogue
 
 __all__ = [
@@ -75,10 +84,12 @@ __all__ = [
     "Refusal",
     "SpendBook",
     "SpendLedger",
+    "StoreBook",
     "Tool",
     "Usage",
     "Use",
     "build_messages",
     "catalogue",
+    "month_bounds",
     "part_from",
 ]

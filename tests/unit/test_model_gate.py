@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -25,7 +25,7 @@ from yaqzan.core.llm_gateway import (
     Use,
 )
 from yaqzan.core.llm_gateway.route import worst_case_micro
-from yaqzan.core.llm_gateway.spend import month_of
+from yaqzan.core.llm_gateway.spend import month_bounds, month_of
 from yaqzan.core.sdk import DataClass, ModelLevel, install_log_sink
 
 OCT = datetime(2026, 10, 25, 9, 0, tzinfo=UTC)
@@ -214,7 +214,7 @@ def test_the_caps_are_the_agreed_ones() -> None:
 
 def test_a_call_whose_worst_case_passes_its_use_cap_is_refused(lines: list[dict[str, object]]) -> None:
     book = MemoryBook()
-    asyncio.run(book.add(Use.CODE_REVIEW, "2026-10", 19_990_000))
+    asyncio.run(book.add(Use.CODE_REVIEW, "claude-opus-5-5", 19_990_000, OCT))
     g, _ = gate(book=book)
     result = clear(g, role_level=ModelLevel.SONNET, wanted=ModelLevel.SONNET, use=Use.CODE_REVIEW)
     assert result.refusal is Refusal.USE_CAP
@@ -226,14 +226,14 @@ def test_a_call_whose_worst_case_passes_its_use_cap_is_refused(lines: list[dict[
 def test_a_call_that_still_fits_is_cleared_right_up_to_the_cap() -> None:
     book = MemoryBook()
     upto = worst_case_micro(MODELS[ModelLevel.OPUS], OPS, 3_000)
-    asyncio.run(book.add(Use.HEADS, "2026-10", 60_000_000 - upto))
+    asyncio.run(book.add(Use.HEADS, "claude-opus-5-5", 60_000_000 - upto, OCT))
     g, _ = gate(book=book)
     assert clear(g).refusal is None
 
 
 def test_the_total_stops_everything_even_when_a_use_has_room() -> None:
     book = MemoryBook()
-    asyncio.run(book.add(Use.HEADS, "2026-10", 10_000_000))
+    asyncio.run(book.add(Use.HEADS, "claude-opus-5-5", 10_000_000, OCT))
     g = ModelGate(SpendLedger(book, total_usd=10, clock=Clock(OCT)), NAMES)
     result = clear(g, role_level=ModelLevel.OPUS, wanted=ModelLevel.SONNET, use=Use.BOARD_CHAT)
     assert result.refusal is Refusal.TOTAL_STOP
@@ -241,7 +241,7 @@ def test_the_total_stops_everything_even_when_a_use_has_room() -> None:
 
 def test_last_months_spend_does_not_count_this_month() -> None:
     book = MemoryBook()
-    asyncio.run(book.add(Use.HEADS, "2026-09", 60_000_000))
+    asyncio.run(book.add(Use.HEADS, "claude-opus-5-5", 60_000_000, OCT - timedelta(days=31)))
     g, _ = gate(book=book)
     assert clear(g).refusal is None
 
@@ -249,6 +249,26 @@ def test_last_months_spend_does_not_count_this_month() -> None:
 def test_months_are_utc_calendar_months() -> None:
     dubai_morning_on_the_first = datetime.fromisoformat("2026-11-01T02:00:00+04:00")
     assert month_of(dubai_morning_on_the_first) == "2026-10"
+
+
+@pytest.mark.parametrize(
+    ("month", "start", "end"),
+    [
+        ("2026-10", "2026-10-01", "2026-11-01"),
+        ("2026-12", "2026-12-01", "2027-01-01"),  # December runs into the next year
+        ("2027-01", "2027-01-01", "2027-02-01"),
+    ],
+)
+def test_a_months_bounds_are_its_first_moment_and_the_next_months(month: str, start: str, end: str) -> None:
+    utc = [datetime.fromisoformat(day).replace(tzinfo=UTC) for day in (start, end)]
+    assert list(month_bounds(month)) == utc
+
+
+def test_the_memory_book_files_a_cost_under_the_utc_month_it_was_spent_in() -> None:
+    book, dubai_morning_on_the_first = MemoryBook(), datetime.fromisoformat("2026-11-01T02:00:00+04:00")
+    asyncio.run(book.add(Use.HEADS, "claude-opus-5-5", 5, dubai_morning_on_the_first))
+    assert asyncio.run(book.spent(Use.HEADS, "2026-10")) == 5
+    assert asyncio.run(book.spent(Use.HEADS, "2026-11")) == 0
 
 
 def test_recording_adds_the_real_cost_and_says_so(lines: list[dict[str, object]]) -> None:
@@ -281,7 +301,7 @@ def test_crossing_80_percent_is_said_once_and_listed_for_the_briefing(lines: lis
 def test_the_total_gets_its_own_80_percent_notice() -> None:
     book = MemoryBook()
     for use in (Use.HEADS, Use.CODE_REVIEW, Use.COMPUTER_USE, Use.BOARD_CHAT):
-        asyncio.run(book.add(use, "2026-10", CAPS_USD[use] * 810_000))  # 81% of each
+        asyncio.run(book.add(use, "claude-opus-5-5", CAPS_USD[use] * 810_000, OCT))  # 81% of each
     ledger = SpendLedger(book, clock=Clock(OCT))
     assert [n.cap for n in asyncio.run(ledger.notices())] == [
         "heads",
@@ -294,5 +314,5 @@ def test_the_total_gets_its_own_80_percent_notice() -> None:
 
 def test_just_under_80_percent_is_not_yet_a_notice() -> None:
     book = MemoryBook()
-    asyncio.run(book.add(Use.HEADS, "2026-10", 47_999_999))
+    asyncio.run(book.add(Use.HEADS, "claude-opus-5-5", 47_999_999, OCT))
     assert asyncio.run(SpendLedger(book, clock=Clock(OCT)).notices()) == []

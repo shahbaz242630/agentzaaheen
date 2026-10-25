@@ -10,9 +10,13 @@ Before a call, :meth:`SpendLedger.allows` checks that the call's worst case
 still fits under both its use's cap and the total; after it,
 :meth:`SpendLedger.record` adds what it really cost. Months are UTC calendar
 months. :meth:`SpendLedger.notices` lists every cap at 80% or more, for the
-morning briefing. The amounts live in a :class:`SpendBook`; the database
-book comes with the first real Claude call (slice 2), and nothing can reach
-Claude before then.
+morning briefing. The amounts live in a :class:`SpendBook`: in production
+the :class:`StoreBook`, one database row per call, so a restart never resets a
+cap.
+
+Two calls checked at the same moment can both pass before either is recorded,
+so a cap can be passed by at most what calls in flight cost; the USD 20 spare
+under the credit covers that.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from typing import Protocol
 
 from yaqzan.core.llm_gateway.model_map import MILLION, usd
 from yaqzan.core.sdk import get_logger, say
+from yaqzan.core.store import ModelCalls
 
 
 class Use(StrEnum):
@@ -49,8 +54,8 @@ class SpendBook(Protocol):
         """What ``use`` has spent in ``month`` (``"2026-10"``)."""
         ...
 
-    async def add(self, use: Use, month: str, micro: int) -> None:
-        """Add one call's cost to ``use`` in ``month``."""
+    async def add(self, use: Use, model: str, micro: int, at: datetime) -> None:
+        """Add one call's cost to ``use``, at the moment ``at``."""
         ...
 
 
@@ -64,9 +69,26 @@ class MemoryBook:
         """What ``use`` has spent in ``month``."""
         return self._amounts.get((use, month), 0)
 
-    async def add(self, use: Use, month: str, micro: int) -> None:
+    async def add(self, use: Use, model: str, micro: int, at: datetime) -> None:  # noqa: ARG002  # the model is only kept in the database
         """Add one call's cost."""
+        month = month_of(at)
         self._amounts[use, month] = self._amounts.get((use, month), 0) + micro
+
+
+class StoreBook:
+    """The book in the database: one row per call, added up per month (it survives restarts)."""
+
+    def __init__(self, calls: ModelCalls) -> None:
+        self._calls = calls
+
+    async def spent(self, use: Use, month: str) -> int:
+        """What ``use`` has spent in ``month``."""
+        start, end = month_bounds(month)
+        return await self._calls.spent(use.value, start=start, end=end)
+
+    async def add(self, use: Use, model: str, micro: int, at: datetime) -> None:
+        """Save one call's cost as its own row."""
+        await self._calls.add(use.value, model, micro, at=at)
 
 
 @dataclass(frozen=True)
@@ -96,6 +118,13 @@ class SpendNotice:
 def month_of(now: datetime) -> str:
     """The UTC calendar month a moment falls in (``"2026-10"``)."""
     return now.astimezone(UTC).strftime("%Y-%m")
+
+
+def month_bounds(month: str) -> tuple[datetime, datetime]:
+    """The first moment of ``month`` (``"2026-10"``) and of the month after, in UTC."""
+    start = datetime.strptime(month, "%Y-%m").replace(tzinfo=UTC)
+    year, month_number = divmod(start.year * 12 + start.month, 12)  # the month after, carrying into the year
+    return start, start.replace(year=year, month=month_number + 1)
 
 
 class SpendLedger:
@@ -128,10 +157,11 @@ class SpendLedger:
 
     async def record(self, use: Use, model: str, micro: int) -> None:
         """Add one call's real cost, and say so; say it too if that call crossed an 80% line."""
-        month = month_of(self._clock())
+        now = self._clock()
+        month = month_of(now)
         before = await self._book.spent(use, month)
         total_before = await self._total_spent(month)
-        await self._book.add(use, month, micro)
+        await self._book.add(use, model, micro, now)
         after = before + micro
         say(
             self._log,
