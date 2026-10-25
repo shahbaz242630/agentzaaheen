@@ -386,6 +386,14 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="The {role} role's call to {model} for {use} (run {run_id}) did not get an answer: {said}",
         explains="code",
     ),
+    "model_miss_not_recorded": LogEvent(
+        "error",
+        what=(
+            "The {role} role's run {run_id} did not run, and that could not be written down,"
+            " so the morning briefing will not name it: {said}"
+        ),
+        explains="code",
+    ),
     "model_cloud_call_done": LogEvent(
         "info",
         what=(

@@ -26,7 +26,8 @@ Public interface:
     ``Use``, ``month_bounds``, ``Usage``, ``MODELS``, ``CAPS_USD``, ``TOTAL_STOP_USD``; ``KnownNames``,
     ``NamePrint``, ``PrintKind``, ``Printer``, ``prints_of``,
     ``NameSource``, ``FixedNames``, ``StoreNames``, ``KeyedPrinter``, ``part_from``;
-    ``CloudAsk``, ``ClaudeDoor``, ``Answer``.
+    ``CloudAsk``, ``ClaudeDoor``, ``Answer``; ``MissBook``, ``MemoryMisses``, ``StoreMisses``
+    (runs that did not run, for the briefing).
 
 How to test:
     ``uv run pytest tests/unit/test_llm_chat.py tests/unit/test_llm_tools.py`` (a fake model; no server).
@@ -40,7 +41,14 @@ Must never:
     talk HTTP itself (the model is reached only through ``core.net``).
 """
 
-from agentzaaheen.core.llm_gateway.ask import Answer, ClaudeDoor, CloudAsk
+from agentzaaheen.core.llm_gateway.ask import (
+    Answer,
+    ClaudeDoor,
+    CloudAsk,
+    MemoryMisses,
+    MissBook,
+    StoreMisses,
+)
 from agentzaaheen.core.llm_gateway.chat import (
     SYSTEM_PROMPT,
     ChatModel,
@@ -59,6 +67,7 @@ from agentzaaheen.core.llm_gateway.cloud_check import (
     prints_of,
 )
 from agentzaaheen.core.llm_gateway.model_map import MODELS, Usage
+from agentzaaheen.core.llm_gateway.report import claude_lines
 from agentzaaheen.core.llm_gateway.route import (
     Clearance,
     FixedNames,
@@ -97,6 +106,8 @@ __all__ = [
     "KeyedPrinter",
     "KnownNames",
     "MemoryBook",
+    "MemoryMisses",
+    "MissBook",
     "ModelGate",
     "NamePrint",
     "NameSource",
@@ -107,12 +118,14 @@ __all__ = [
     "SpendBook",
     "SpendLedger",
     "StoreBook",
+    "StoreMisses",
     "StoreNames",
     "Tool",
     "Usage",
     "Use",
     "build_messages",
     "catalogue",
+    "claude_lines",
     "month_bounds",
     "part_from",
     "prints_of",

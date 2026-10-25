@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -28,7 +28,7 @@ from agentzaaheen.core.api.registry import DashboardSwitches, PasskeyStatus, Reg
 from agentzaaheen.core.api.removal import DashboardRemoval
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.auth import Site
-from agentzaaheen.core.llm_gateway import Inspect
+from agentzaaheen.core.llm_gateway import Inspect, SpendLedger, StoreBook, claude_lines
 from agentzaaheen.core.policy import (
     Added,
     AgentControl,
@@ -53,7 +53,15 @@ from agentzaaheen.core.policy import (
 )
 from agentzaaheen.core.registry import Kind, Registry
 from agentzaaheen.core.registry.roles import RoleLibrary
-from agentzaaheen.core.store import Database, DatabaseSettings, StoreError, WorkspaceRow, WorkspaceRows
+from agentzaaheen.core.store import (
+    Database,
+    DatabaseSettings,
+    ModelCallMisses,
+    ModelCalls,
+    StoreError,
+    WorkspaceRow,
+    WorkspaceRows,
+)
 from agentzaaheen.core.vault import Keyring
 from tools import laptop_db
 from tools.vault_key import CLAUDE_WORKSPACE, claude_slot
@@ -239,6 +247,16 @@ class LaptopSwitches:
         if self._claude_key is None:  # pragma: no cover  # _open always sets it
             raise RuntimeError("the laptop database is not open")
         return self._claude_key
+
+    async def claude_lines(self, now: datetime) -> tuple[str, ...]:
+        """The briefing's Claude lines: runs that did not run in the day before ``now``, caps at 80%."""
+        await self._open()
+        if self._db is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        board = self._db.scoped(LAPTOP_TENANT)
+        misses = await ModelCallMisses(board).between(now - timedelta(days=1), now)
+        notices = await SpendLedger(StoreBook(ModelCalls(board)), clock=lambda: now).notices()
+        return claude_lines(misses, notices)
 
     # ---- adding a project (ADR-039, F17 slice 5a): the dashboard acts as the Chairman (no login yet)
 

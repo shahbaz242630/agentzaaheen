@@ -588,6 +588,7 @@ def _summaries(  # noqa: PLR0913  # the options, the database, the facts' source
         zone=zoneinfo.ZoneInfo(ns.briefing_zone),
         agents=switches.view,
         scout=scout_of,
+        claude=switches.claude_lines,
         alerts=alerts,
         watched=watched,
         topic=topic,

@@ -16,7 +16,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from agentzaaheen.core.llm_gateway import MODELS, MemoryBook, Use
+from agentzaaheen.core.llm_gateway import MODELS, MemoryBook, MemoryMisses, Use
 from agentzaaheen.core.sdk import ModelLevel, SourceError, SourceErrorCode
 from tools import claude_check
 from tools.name_prints import make_key
@@ -59,7 +59,7 @@ def run_tool(handler: object = answered, *extra: str, book: Book | None = None) 
         return SecretStr(FAKE_KEY)
 
     level = claude_check.LEVELS[extra[1]] if extra else ModelLevel.SONNET
-    answer = asyncio.run(claude_check.check(key, level, book or Book(), transport))
+    answer = asyncio.run(claude_check.check(key, level, book or Book(), MemoryMisses(), transport))
     code, lines = claude_check.report(answer, MODELS[level].model_id)
     sys.stdout.write("\n".join(lines) + "\n")  # as main prints them
     return code
@@ -106,7 +106,9 @@ def test_no_saved_key_says_to_save_it_on_the_customize_page(capsys: pytest.Captu
     async def missing() -> SecretStr:
         raise SourceError(SourceErrorCode.AUTH, "no key", detail_code="credential.missing")
 
-    answer = asyncio.run(claude_check.check(missing, ModelLevel.SONNET, Book(), httpx.MockTransport(refuse)))
+    answer = asyncio.run(
+        claude_check.check(missing, ModelLevel.SONNET, Book(), MemoryMisses(), httpx.MockTransport(refuse))
+    )
     code, lines = claude_check.report(answer, "claude-sonnet-5-5")
     assert code == 1
     assert "no Claude key is saved" in lines[0]

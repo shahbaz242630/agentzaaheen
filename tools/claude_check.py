@@ -37,17 +37,19 @@ from agentzaaheen.core.llm_gateway import (
     CloudAsk,
     FixedNames,
     KnownNames,
+    MissBook,
     ModelGate,
     PromptPart,
     SpendBook,
     SpendLedger,
     StoreBook,
+    StoreMisses,
     Use,
 )
 from agentzaaheen.core.llm_gateway.model_map import usd
 from agentzaaheen.core.net import ClaudeClient
 from agentzaaheen.core.sdk import DataClass, ModelLevel, explain
-from agentzaaheen.core.store import Database, DatabaseSettings, ModelCalls
+from agentzaaheen.core.store import Database, DatabaseSettings, ModelCallMisses, ModelCalls
 from agentzaaheen.core.vault import Keyring
 from tools import laptop_db, vault_key
 
@@ -64,13 +66,17 @@ Prepare = Callable[[], Coroutine[Any, Any, SecretStr | None]]
 
 
 async def check(
-    key: KeySource, level: ModelLevel, book: SpendBook, transport: httpx.AsyncBaseTransport | None = None
+    key: KeySource,
+    level: ModelLevel,
+    book: SpendBook,
+    misses: MissBook,
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> Answer:
-    """One call through the gate and the door, its cost written to ``book``."""
+    """One call through the gate and the door, its cost written to ``book`` (or why not, to ``misses``)."""
     pinned = frozenset(entry.model_id for entry in MODELS.values() if entry.cloud)
     gate = ModelGate(SpendLedger(book), FixedNames(KnownNames.empty()))  # our own words: no names to hold
     async with ClaudeClient(key, models=pinned, transport=transport) as door:
-        return await CloudAsk(gate, door).ask(
+        return await CloudAsk(gate, door, misses).ask(
             role="claude-check",
             role_level=level,
             wanted=level,
@@ -89,8 +95,10 @@ async def check_saved_key(
     db = await Database.open(DatabaseSettings(dsn=url, min_size=1, max_size=2))
     try:
         slot = vault_key.claude_slot(db, keyring)
-        book = StoreBook(ModelCalls(db.scoped(laptop_db.LAPTOP_TENANT)))
-        return await check(slot.open, level, book, transport)
+        board = db.scoped(laptop_db.LAPTOP_TENANT)
+        return await check(
+            slot.open, level, StoreBook(ModelCalls(board)), StoreMisses(ModelCallMisses(board)), transport
+        )
     finally:
         await db.close()
 

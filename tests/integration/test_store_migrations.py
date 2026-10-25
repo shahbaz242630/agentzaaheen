@@ -153,7 +153,8 @@ def test_a_database_made_under_the_old_name_is_upgraded_once_and_keeps_its_data(
         finally:
             await conn.close()
         async with open_db(url) as db:
-            assert await migrate(db) == [12, 13]  # the old history is accepted, only the new ones run
+            # the old history is accepted; only the migrations made after the rename run
+            assert await migrate(db) == [m.version for m in MIGRATIONS if m.version > 11]
             assert await migrate(db) == []
             await check_schema(db)
         conn = await asyncpg.connect(url)

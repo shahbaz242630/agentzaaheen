@@ -29,7 +29,7 @@ from agentzaaheen.core.notify import Alert
 from agentzaaheen.core.policy import SummaryControl
 from agentzaaheen.core.store import AuditRows, Briefings, DailySummaries, Database, StoreError, WorkspaceRow
 from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
-from tools.dashboard_summaries import NO_TOPIC, AlertLog, LaptopSummaries
+from tools.dashboard_summaries import NO_TOPIC, AlertLog, ClaudeLines, LaptopSummaries
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000d1")
 SHOP_ID = UUID("00000000-0000-4000-8000-0000000000d2")
@@ -109,6 +109,7 @@ def job(  # the database, the clock, the phone, and what the job may count
     ping: SecretStr | None = None,
     alerts: AlertLog | None = None,
     workspaces: tuple[WorkspaceRow, ...] = (SHOP, CAFE),
+    claude: ClaudeLines | None = None,
 ) -> LaptopSummaries:
     control = SummaryControl(db, TENANT, clock)
 
@@ -123,6 +124,7 @@ def job(  # the database, the clock, the phone, and what the job may count
         zone=DUBAI,
         alerts=alerts,
         watched=frozenset({"shop"}),
+        claude=claude,
         topic=topic,
         ping=ping,
         transport=(phone or Phone()).transport(),
@@ -375,3 +377,24 @@ def test_marking_a_sent_briefing_again_logs_that_nothing_needed_writing(
     assert said == [
         ("store_unchanged", "a briefing sent"), ("store_unchanged", "a briefing not sent"),
     ]  # fmt: skip
+
+
+def test_the_briefing_carries_the_boards_claude_lines(test_db: ScratchDb) -> None:
+    seen: list[datetime] = []
+
+    async def claude(now: datetime) -> tuple[str, ...]:
+        seen.append(now)
+        return (
+            "1 Claude run did not run (ops: Claude declined to answer). Nothing answered in their place.",
+        )
+
+    async def body() -> str:
+        clock, phone = Clock(NOW + timedelta(hours=2)), Phone()
+        async with open_db(test_db.app_url) as db:
+            await job(db, clock, phone, claude=claude).tick()
+        (sent,) = phone.seen
+        return sent.content.decode()
+
+    text = run(body())
+    assert text.splitlines()[1].startswith("1 Claude run did not run (ops:")
+    assert seen == [NOW + timedelta(hours=2)]  # asked at the briefing's own time

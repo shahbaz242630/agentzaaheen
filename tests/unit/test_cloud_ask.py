@@ -18,6 +18,8 @@ from agentzaaheen.core.llm_gateway import (
     FixedNames,
     KnownNames,
     MemoryBook,
+    MemoryMisses,
+    MissBook,
     ModelGate,
     PromptPart,
     SpendLedger,
@@ -25,6 +27,7 @@ from agentzaaheen.core.llm_gateway import (
 )
 from agentzaaheen.core.net import ClaudeReply, NetError, NetErrorCode
 from agentzaaheen.core.sdk import DataClass, ModelLevel, install_log_sink
+from agentzaaheen.core.store import MissRow, StoreError, StoreErrorCode
 from tests.fixtures.name_prints import PRINTER
 
 OCT = datetime(2026, 10, 25, 9, 0, tzinfo=UTC)
@@ -71,11 +74,10 @@ class FakeDoor:
         return self.reply
 
 
-def setup(door: FakeDoor) -> tuple[CloudAsk, SpendLedger]:
+def setup(door: FakeDoor, misses: MissBook | None = None) -> tuple[CloudAsk, SpendLedger]:
     ledger = SpendLedger(MemoryBook(), clock=lambda: OCT)
-    return CloudAsk(
-        ModelGate(ledger, FixedNames(KnownNames.of(["Fatima Al Mansoori"], PRINTER))), door
-    ), ledger
+    gate = ModelGate(ledger, FixedNames(KnownNames.of(["Fatima Al Mansoori"], PRINTER)))
+    return CloudAsk(gate, door, misses or MemoryMisses(), clock=lambda: OCT), ledger
 
 
 def ask(
@@ -189,3 +191,40 @@ def test_cloud_ask_is_only_for_claude_levels() -> None:
                 run_id="run-44",
             )
         )
+
+
+def test_each_run_that_did_not_run_is_written_down_with_codes_only() -> None:
+    misses = MemoryMisses()
+    named = PromptPart("Fatima Al Mansoori is unhappy.", DataClass.INTERNAL)
+    asker, _ = setup(FakeDoor(), misses)
+    ask(asker, task=(TASK, named))
+    unreachable, _ = setup(FakeDoor(NetError(NetErrorCode.AUTH, "no", status=401)), misses)
+    ask(unreachable)
+    declined, _ = setup(FakeDoor(ClaudeReply("", "refusal", 5_000, 10, 0, 0, 0)), misses)
+    ask(declined)
+    answered, _ = setup(FakeDoor(), misses)
+    ask(answered)  # an answer is not a miss
+
+    def miss(outcome: str, detail: str | None = None) -> MissRow:
+        return MissRow(OCT, "head-of-engineering", "heads", "claude-opus-5-5", outcome, detail, "run-42")
+
+    assert misses.misses == [
+        miss("model.customer_data"),
+        miss("model.unreachable", "net.auth"),
+        miss("model.declined"),
+    ]
+    assert "Fatima" not in repr(misses.misses)
+
+
+class BrokenMisses:
+    async def add(self, miss: MissRow) -> None:
+        raise StoreError(StoreErrorCode.UNAVAILABLE, "down")
+
+
+def test_a_miss_that_cannot_be_written_is_said_and_the_answer_still_comes_back(
+    lines: list[dict[str, object]],
+) -> None:
+    asker, _ = setup(FakeDoor(NetError(NetErrorCode.TIMEOUT, "slow")), BrokenMisses())
+    assert ask(asker).outcome == "model.unreachable"
+    assert lines[-1]["event"] == "model_miss_not_recorded"
+    assert lines[-1]["code"] == "store.unavailable"

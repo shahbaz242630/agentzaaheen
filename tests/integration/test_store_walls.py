@@ -28,6 +28,8 @@ from agentzaaheen.core.store import (
     Briefings,
     DailySummaries,
     KillSwitchRows,
+    MissRow,
+    ModelCallMisses,
     ModelCalls,
     NamePrints,
     NewAgent,
@@ -134,6 +136,9 @@ async def _fill_every_table(url: str) -> None:
         await DailySummaries(here).put(NOW.date(), {"walled": True}, made_at=NOW)
         await Briefings(db.scoped(TENANT)).open(NOW.date(), title="Briefing", message="Walled.", made_at=NOW)
         await ModelCalls(db.scoped(TENANT)).add("heads", "claude-opus-5-5", 1, at=NOW)
+        await ModelCallMisses(db.scoped(TENANT)).add(
+            MissRow(NOW, "heads", "heads", "claude-opus-5-5", "model.declined", None, "run-1")
+        )
         await NamePrints(here).add({("single", bytes(32))}, key_id="names-1", at=NOW)
 
 
