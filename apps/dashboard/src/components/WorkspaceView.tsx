@@ -24,10 +24,12 @@ interface Props {
   onTab: (tab: Tab) => void;
   // The project was archived or deleted for good: back to the Board, with what happened.
   onRemoved: (message: string) => void;
+  // A project just added: the Agents tab asks the scout straight away.
+  askScout?: boolean;
 }
 
 // One workspace (ADR-039): everything on this page belongs to it only.
-export function WorkspaceView({ detail, registry, tab, onTab, onRemoved }: Props) {
+export function WorkspaceView({ detail, registry, tab, onTab, onRemoved, askScout = false }: Props) {
   const { project } = detail;
   const ids = useId();
   return (
@@ -70,7 +72,7 @@ export function WorkspaceView({ detail, registry, tab, onTab, onRemoved }: Props
 
       <div role="tabpanel" id={`${ids}-panel`} aria-labelledby={`${ids}-${tab}`}>
         {tab === "overview" && <Overview detail={detail} registry={registry} />}
-        {tab === "agents" && <AgentsPanel slug={project.id} name={project.name} />}
+        {tab === "agents" && <AgentsPanel slug={project.id} name={project.name} askScout={askScout} />}
         {tab === "alerts" && <Alerts cards={detail.cards} />}
         {tab === "sources" && <Sources slug={project.id} registry={registry} />}
       </div>

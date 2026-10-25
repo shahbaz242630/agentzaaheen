@@ -272,6 +272,46 @@ export const Profile = z
   );
 export type Profile = z.infer<typeof Profile>;
 
+// The scout's newest run and its advice, checked by code (F17 slice 5b-2). Mirrors src/yaqzan/core/api/scout.py.
+const repoPath = z.string().min(1).max(400);
+export const RoleAdvice = z.strictObject({
+  role_id: item,
+  title: z.string(),
+  recommend: z.boolean(),
+  reason: z.string().max(400),
+  files: z.array(repoPath).max(5),
+  removed_files: z.int().nonnegative(),
+  downgraded: z.boolean(),
+});
+export type RoleAdvice = z.infer<typeof RoleAdvice>;
+export const ScoutReport = z.strictObject({
+  summary: z.string().max(600),
+  roles: z.array(RoleAdvice),
+  not_reviewed: z.array(item),
+  suggested_providers: z
+    .array(z.strictObject({ name: z.string().max(60), files: z.array(repoPath).min(1).max(5) }))
+    .max(5),
+  notes: z.array(z.string()),
+});
+export type ScoutReport = z.infer<typeof ScoutReport>;
+export const ScoutView = z
+  .strictObject({
+    connected: z.boolean(),
+    state: z.enum(["none", "running", "done", "failed"]),
+    stage: z.enum(["reading", "thinking", "checking", "finished"]).nullable(),
+    repo: repoName.nullable(),
+    branch: z.string().nullable(),
+    started_at: time.nullable(),
+    finished_at: time.nullable(),
+    reason: code.nullable(),
+    report: ScoutReport.nullable(),
+  })
+  // Advice is shown only from a finished run; a run that is not done never carries any.
+  .refine(({ state, report }) => (state === "done") === (report !== null), {
+    message: "only a finished run carries advice",
+  });
+export type ScoutView = z.infer<typeof ScoutView>;
+
 // The Chairman's passkey (ADR-SEC-007): whether it exists, and whether it may be set up on this run.
 export const PasskeyStatus = z.strictObject({ enrolled: z.boolean(), enrolment_open: z.boolean() });
 export type PasskeyStatus = z.infer<typeof PasskeyStatus>;
@@ -375,6 +415,9 @@ export const api = {
   repos: () => getJson("/api/github/repos", RepoList),
   addProject: (name: string, repo: string | null) => postJson("/api/workspaces", { name, repo }, AddedProject),
   profile: (slug: string) => getJson(`${workspacePath(slug)}/profile`, Profile),
+  // The scout only reads and advises, so asking needs no Windows Hello.
+  scout: (slug: string) => getJson(`${workspacePath(slug)}/scout`, ScoutView),
+  askScout: (slug: string) => postJson(`${workspacePath(slug)}/scout`, {}, ScoutView),
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),

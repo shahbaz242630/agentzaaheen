@@ -63,3 +63,21 @@ export function freshnessLabel(freshness: Freshness, lastSuccess: string | null,
       return "Not connected yet";
   }
 }
+
+// Money in US cents, for spend caps (ADR-039).
+export function money(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+// A cap in words: "not set" means nothing may be spent.
+export function capWords(cents: number | null): string {
+  return cents === null ? "not set" : money(cents);
+}
+
+// Dollars typed by a person, as cents; empty means no cap (then nothing may be spent).
+export function centsFrom(text: string): number | null | "bad" {
+  const trimmed = text.trim().replace(/^\$/, "");
+  if (trimmed === "") return null;
+  if (!/^\d{1,7}(\.\d{1,2})?$/.test(trimmed)) return "bad";
+  return Math.round(Number(trimmed) * 100);
+}
