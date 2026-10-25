@@ -100,13 +100,20 @@ def test_sample_cards_are_left_out_by_name_never_counted() -> None:
     assert made.sample_left_out == ("Revenue",)
     assert made.sources == ()
     assert made.health is Health.UNKNOWN  # nothing real: unknown, never "all fine"
+    assert first_line(made) == "Nothing to report: no real source is connected yet (1 sample card left out)."
+
+
+def test_only_sample_cards_still_says_nothing_real_even_with_agents_read() -> None:
+    sample = detail(*(card(f"c{i}", f"Card {i}", sample=True) for i in range(5)))
+    made = summary(sample, agents=AgentsFact(agents=0, on=0, workspace_on=False, spent_minor=0))
+    assert first_line(made) == "Nothing to report: no real source is connected yet (5 sample cards left out)."
 
 
 def test_no_data_says_nothing_to_report_never_zero() -> None:
     made = summary(None)
     assert made.nothing_to_report
     line = first_line(made)
-    assert line == "Nothing to report: no source could be read for this project yet."
+    assert line == "Nothing to report: no real source is connected yet."
     assert "0" not in line
 
 

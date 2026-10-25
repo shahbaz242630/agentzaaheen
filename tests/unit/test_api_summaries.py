@@ -76,9 +76,7 @@ def test_without_a_database_every_route_says_not_connected() -> None:
 def test_the_board_gets_one_line_each_and_an_unreadable_one_says_so() -> None:
     found = client(Backend()).get("/api/summaries").json()
     assert found["connected"] is True
-    assert found["workspaces"]["zaaheen"]["line"] == (
-        "Nothing to report: no source could be read for this project yet."
-    )
+    assert found["workspaces"]["zaaheen"]["line"] == ("Nothing to report: no real source is connected yet.")
     assert found["workspaces"]["eva"] == {
         "day": "2026-10-25", "made_at": "2026-10-25T03:00:00Z", "health": "unknown", "line": None,
     }  # fmt: skip

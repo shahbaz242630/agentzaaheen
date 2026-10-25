@@ -235,14 +235,18 @@ def _count(count: int, one: str, many: str | None = None) -> str:
 
 def first_line(summary: DailySummary) -> str:
     """The summary in one line, from counts and our own words (the Board card and the briefing)."""
-    if summary.nothing_to_report and not summary.unread:
-        return "Nothing to report: no source could be read for this project yet."
     parts: list[str] = []
-    if summary.unread:
-        titles = ", ".join(u.title for u in summary.unread[:3])
-        more = f" and {len(summary.unread) - 3} more" if len(summary.unread) > 3 else ""
-        parts.append(f"Could not read {titles}{more}")
-    parts.append(_HEALTH_WORDS[summary.health])
+    if not summary.sources and not summary.unread:
+        # Nothing real was read: say so, never just "unknown" (and never 0).
+        sample = len(summary.sample_left_out)
+        left_out = f" ({_count(sample, 'sample card')} left out)" if sample else ""
+        parts.append(f"Nothing to report: no real source is connected yet{left_out}")
+    else:
+        if summary.unread:
+            titles = ", ".join(u.title for u in summary.unread[:3])
+            more = f" and {len(summary.unread) - 3} more" if len(summary.unread) > 3 else ""
+            parts.append(f"Could not read {titles}{more}")
+        parts.append(_HEALTH_WORDS[summary.health])
     flagged = sum(len(s.flagged) for s in summary.sources)
     if flagged:
         parts.append(_count(flagged, "thing to look at", "things to look at"))

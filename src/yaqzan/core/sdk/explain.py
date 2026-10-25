@@ -249,6 +249,22 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
         "The connector is new or has never succeeded.",
         "Check the {vendor} key is saved, then wait for the first sync.",
     ),
+    # ---- daily summaries and the morning briefing (F17 slice 6)
+    "briefing.no_topic": (
+        "The morning briefing was kept on the dashboard and not sent to the phone.",
+        "No ntfy topic was given when the dashboard started.",
+        "Start the dashboard with --ntfy-topic-env YAQZAN_NTFY_TOPIC to have it sent.",
+    ),
+    "summary.not_valid": (
+        "A daily summary could not be made: one of its facts broke the summary's own limits.",
+        "A bug in Yaqzan's code (nothing was guessed or saved).",
+        _TELL_CLAUDE,
+    ),
+    "scout.unreadable": (
+        "The scout's saved advice could not be read, so it is left out.",
+        "It was saved by an older version of Yaqzan, or it is damaged.",
+        "Ask the scout again on the workspace's Agents tab.",
+    ),
     "policy.bad_switch_row": (
         "A kill-switch record is unreadable, so all agents were stopped.",
         "The switch data is damaged; Yaqzan fails safe by stopping everything.",
