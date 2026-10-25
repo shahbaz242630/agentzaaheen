@@ -34,6 +34,7 @@ def test_the_page_carries_the_registry_and_where_each_connector_is_used() -> Non
     assert paddle.endpoints[0] == "GET /subscriptions"
     assert [(s.id, s.missing) for s in page.skills] == [
         ("check-slo", ()),
+        ("read-logs", ()),
         ("trace-request", ("grafana",)),  # honest: the Grafana connector does not exist yet (ADR-032)
         ("triage-failing-build", ()),
         ("triage-outage", ()),

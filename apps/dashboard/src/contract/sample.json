@@ -1066,6 +1066,15 @@
         "state": "on"
       },
       {
+        "id": "read-logs",
+        "description": "Read Yaqzan's own log lines for one project - its recent warnings and errors, each saying what happened, why and what to do next - and say what keeps going wrong. Use when someone asks what went wrong, why something failed or stopped, whether an error keeps repeating, or what Yaqzan did recently for a project.",
+        "invocation": "auto",
+        "requires": [],
+        "missing": [],
+        "fingerprint": "64127e6da2bec001aac8a8694746e46a7c03fbc0f60e64dd66aa32fd7069d335",
+        "state": "on"
+      },
+      {
         "id": "trace-request",
         "description": "Follow one request through every service it touched, using its trace ID, and explain where it went wrong - which step failed or was slow, with the matching log lines and metrics. Use when you have a trace or request ID (from an error message, a customer report, an alert or a slow-request example) and need to know exactly what happened to it.",
         "invocation": "auto",

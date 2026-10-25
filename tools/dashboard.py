@@ -457,6 +457,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
             clock=clock,
             transport=transport,
             fixes=fixes,
+            logs=LogFolder(ns.log_dir.expanduser()) if ns.log_dir is not None else None,
         )
         if chat is None:
             return 1
@@ -626,13 +627,14 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
     clock: Clock,
     transport: httpx.AsyncBaseTransport | None,
     fixes: Mapping[str, Project],
+    logs: LogFolder | None,
 ) -> ChatBackend | None:
     """The chat, with tools for what is on (with switches, it asks them before every question)."""
     raw = raw_token.strip()
     token = SecretStr(raw) if raw and usable_secret(raw) else None
     if switches is None:
         tools, skills = tools_for(
-            registry, PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport=transport, fixes=fixes
+            registry, PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport=transport, fixes=fixes, logs=logs
         )
         return model_chat(model_url, transport, tools, skills)
 
@@ -646,6 +648,7 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
             transport=transport,
             standing=standing,
             fixes=fixes,
+            logs=logs,
         )
 
     # Board inspection needs the audit log (the laptop database), so it exists only with switches.

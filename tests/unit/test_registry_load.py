@@ -28,6 +28,7 @@ def test_the_real_plugins_folder_loads_without_problems() -> None:
     assert [c.id for c in registry.connectors] == ["github", "paddle", "supabase", "uptime"]
     assert [s.id for s in registry.skills] == [
         "check-slo",
+        "read-logs",
         "trace-request",
         "triage-failing-build",
         "triage-outage",

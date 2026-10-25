@@ -10,6 +10,8 @@ each with a closed list of arguments:
   always handed to the model as untrusted text.
 - ``fix_guide`` (with ``--fixes``): what serves one part of a project and what
   to check or fix when it is down (``tools.fix_guides``, our own local file).
+- ``read_logs`` (with ``--log-dir``, while the ``read-logs`` skill is on): one
+  project's recent warnings and errors from the kept logs (``tools.log_tool``).
 
 The skill catalogue in the prompt lists the same skills, one line each.
 
@@ -31,6 +33,7 @@ import httpx
 from pydantic import SecretStr
 
 from tools.fix_guides import Project, fix_guide_tool
+from tools.log_tool import READ_LOGS_SKILL, read_logs_tool
 from yaqzan.core.api import ChatBackend
 from yaqzan.core.llm_gateway import ChatModel, ChatReply, FactChat, Inspect, Tool, catalogue
 from yaqzan.core.net import DownloadPolicy, JsonClient, ModelClient, NetError, NetPolicy
@@ -38,6 +41,7 @@ from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Invocation, ItemError, Kind, Registry, load_registry, skill_instructions
 from yaqzan.core.sdk import FailedStepLog, get_logger, say
 from yaqzan.core.store import StoreError
+from yaqzan.core.telemetry import LogFolder
 from yaqzan.plugins.connectors import github
 
 Clock = Callable[[], datetime]
@@ -209,6 +213,7 @@ def tools_for(  # noqa: PLR0913  # the registry, where it lives, the outside wor
     transport: httpx.AsyncBaseTransport | None = None,
     standing: Standing | None = None,
     fixes: Mapping[str, Project] | None = None,
+    logs: LogFolder | None = None,
 ) -> ToolSet:
     """The chat's tools and skill catalogue for what is on (``standing``; ``None``: no switches, so all)."""
     skill, skills = skill_tool(registry, plugins_root, None if standing is None else standing.on(Kind.SKILL))
@@ -219,4 +224,8 @@ def tools_for(  # noqa: PLR0913  # the registry, where it lives, the outside wor
     guide = fix_guide_tool(fixes or {})
     if guide is not None:
         tools.append(guide)
+    if standing is None or READ_LOGS_SKILL in standing.on(Kind.SKILL):
+        reader = read_logs_tool(logs, repos)  # the same projects: each one's id
+        if reader is not None:
+            tools.append(reader)
     return tools, skills

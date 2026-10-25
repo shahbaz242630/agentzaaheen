@@ -245,6 +245,7 @@ def test_the_customize_page_lists_what_is_on_disk(ui: Path) -> None:
     assert [u["project_id"] for u in page["connectors"][1]["uses"]] == ["zaaheen"]
     assert [s["id"] for s in page["skills"]] == [
         "check-slo",
+        "read-logs",
         "trace-request",
         "triage-failing-build",
         "triage-outage",
