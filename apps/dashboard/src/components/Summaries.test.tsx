@@ -16,7 +16,7 @@ const SUMMARY: DailySummary = {
   made_at: NOW,
   window_start: "2026-10-24T01:00:00Z",
   health: "alert",
-  unread: [{ title: "Revenue", reason: "source.auth" }],
+  unread: [{ title: "Revenue", reason: "source.refused" }],
   sources: [
     {
       card: "code",
@@ -85,7 +85,7 @@ describe("the Board card's summary line", () => {
 
   it("words days and reasons in plain English", () => {
     expect(dayWords("2026-03-29")).toBe("Sun 29 Mar");
-    expect(reasonWords("source.auth")).toBe("The service refused our key; it may have expired");
+    expect(reasonWords("source.rate_limited")).toBe("The service asked us to slow down");
     expect(reasonWords("something.new")).toBe("Cannot be worked out right now");
   });
 });
@@ -99,7 +99,7 @@ describe("a workspace's daily summary", () => {
     const unread = within(panel).getByRole("heading", { name: "Could not be read" });
     const facts = within(panel).getByText("Code");
     expect(unread.compareDocumentPosition(facts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(panel).getByText("Revenue: The service refused our key; it may have expired.")).toBeInTheDocument();
+    expect(within(panel).getByText("Revenue: The service refused the request.")).toBeInTheDocument();
     expect(within(panel).getByText("· Open issues 4")).toBeInTheDocument();
     expect(within(panel).getByText(/Newest build on main failed/)).toBeInTheDocument();
     expect(within(panel).getByText("Revenue MRR: $100 → $120")).toBeInTheDocument();
