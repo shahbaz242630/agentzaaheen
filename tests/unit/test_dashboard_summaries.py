@@ -14,6 +14,10 @@ from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+import pytest
+from pydantic import SecretStr
+
+from tools.dashboard import _briefing_ping
 from tools.dashboard_summaries import AlertLog, LaptopSummaries
 from yaqzan.core.api import SamplePortfolio
 from yaqzan.core.api.agents import AgentOut, WorkspaceAgentsOut
@@ -185,3 +189,24 @@ def test_a_check_that_crashes_does_not_end_the_job() -> None:
         return crashes
 
     assert asyncio.run(body()) >= 2  # it kept checking after the first crash
+
+
+PING = "https://hc-ping.com/0f3c6a1e-5b7d-4c2a-9e8f-1a2b3c4d5e6f"  # made up
+TOPIC = SecretStr("abcdefghijklmnop" + "qrstuvwx")
+
+
+def test_the_briefing_ping_address_is_checked_at_start(capsys: pytest.CaptureFixture[str]) -> None:
+    env = {"PING": PING, "ODD": "https://evil.example/x", "BLANK": " "}
+    assert _briefing_ping(env, None, TOPIC) is None  # not asked for: nothing said
+    found = _briefing_ping(env, "PING", TOPIC)
+    assert found is not None
+    assert found.get_secret_value() == PING
+    assert capsys.readouterr().out == ""
+    assert _briefing_ping(env, "BLANK", TOPIC) is None
+    assert "BLANK is not set" in capsys.readouterr().out
+    assert _briefing_ping(env, "ODD", TOPIC) is None
+    said = capsys.readouterr().out
+    assert "ODD is not a Healthchecks ping address" in said
+    assert "evil" not in said  # the value is never shown
+    assert _briefing_ping(env, "PING", None) is not None
+    assert "Healthchecks will alert every morning" in capsys.readouterr().out
