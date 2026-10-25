@@ -1,4 +1,4 @@
-"""The registry: one list of every connector, skill and plugin bundle Yaqzan has (ADR-027, F06).
+"""The registry: one list of every connector, skill and plugin bundle Agent Zaaheen has (ADR-027, F06).
 
 What it does:
     Reads, from disk only, each connector's reviewed ``plugin.yaml``, each

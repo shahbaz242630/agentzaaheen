@@ -372,4 +372,4 @@ def test_the_daily_summaries_reach_the_laptop_database(
 
 def test_an_unknown_briefing_zone_is_refused(ui: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert dashboard.main(["--briefing-zone", "Mars/Olympus"], static_dir=ui, serve=lambda *_: None) == 1
-    assert "'Mars/Olympus' is not a time zone Yaqzan knows" in capsys.readouterr().out
+    assert "'Mars/Olympus' is not a time zone Agent Zaaheen knows" in capsys.readouterr().out

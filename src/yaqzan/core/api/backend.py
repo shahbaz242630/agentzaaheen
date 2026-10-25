@@ -28,7 +28,7 @@ _STATE_WORDS: Mapping[ProjectState, str] = {
     ProjectState.PAUSED: "is paused",
     ProjectState.FAILED: "failed to start, restore or pause",
     ProjectState.REMOVED: "has been removed",
-    ProjectState.UNKNOWN: "is in a state Yaqzan does not know",
+    ProjectState.UNKNOWN: "is in a state Agent Zaaheen does not know",
 }
 
 

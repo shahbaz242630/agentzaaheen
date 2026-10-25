@@ -97,7 +97,7 @@ class UptimeWatch:
         return Alert(
             project_id=project,
             down=True,
-            title=f"Yaqzan: {self._name(project)} is down",
+            title=f"Agent Zaaheen: {self._name(project)} is down",
             message=f"{what}. Details on the dashboard.",
             priority="high",
         )
@@ -108,7 +108,7 @@ class UptimeWatch:
         return Alert(
             project_id=project,
             down=False,
-            title=f"Yaqzan: {self._name(project)} is back up",
+            title=f"Agent Zaaheen: {self._name(project)} is back up",
             message=f"{which} answering again; {report.up} of {len(report.sites)} up now.",
             priority="default",
         )

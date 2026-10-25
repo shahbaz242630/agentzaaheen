@@ -217,7 +217,7 @@ def test_nothing_before_five_then_summaries_then_the_briefing_at_seven(test_db: 
             await summaries.tick()
             (sent,) = phone.seen
             body_text = sent.content.decode()
-            assert sent.headers["Title"] == "Yaqzan briefing, Sun 25 Oct"
+            assert sent.headers["Title"] == "Agent Zaaheen briefing, Sun 25 Oct"
             assert body_text.splitlines()[0] == "2 projects; 1 need a look."
             assert "Ignore" not in body_text
             assert "http" not in body_text

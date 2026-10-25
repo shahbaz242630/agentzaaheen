@@ -8,7 +8,7 @@ class. Four nets, in order, and any one refuses the whole call:
    data the moment they become a part (:func:`part_from`), whatever the
    caller thinks; a finding keeps its own tag.
 2. **Our own customers' names** (the Chairman's point, 25 Oct 2026: a name
-   cannot be found by pattern). Yaqzan never keeps the names: only a keyed
+   cannot be found by pattern). Agent Zaaheen never keeps the names: only a keyed
    fingerprint of each (see ``yaqzan.core.vault.NamePrinter``), and the
    prompt's words are fingerprinted the same way to compare. Names are matched
    as whole words, ignoring accents. A full name matches in any case. A one-word name

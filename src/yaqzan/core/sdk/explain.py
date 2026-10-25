@@ -34,7 +34,7 @@ _NEW_KEY = (
     "with only the access its connector lists, and save it."
 )
 _WAIT = (
-    "Nothing yet: Yaqzan retries on the next scheduled sync. "
+    "Nothing yet: Agent Zaaheen retries on the next scheduled sync. "
     "If it keeps happening, check {vendor}'s status page."
 )
 _TELL_CLAUDE = "Report it to Claude with the code; it needs a code fix, not a retry."
@@ -44,7 +44,7 @@ _TELL_IF_REPEATS = "Report it to Claude with the code if it repeats."
 _CATALOGUE: dict[str, tuple[str, str, str]] = {
     # ---- network: one outbound call
     "net.blocked": (
-        "Yaqzan refused to send a request to {vendor}.",
+        "Agent Zaaheen refused to send a request to {vendor}.",
         "The address broke a safety rule (not https, not on the allowlist, or a redirect).",
         "Do not loosen the rule. " + _TELL_CLAUDE,
     ),
@@ -54,7 +54,7 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
         _WAIT,
     ),
     "net.unavailable": (
-        "Yaqzan could not reach {vendor}.",
+        "Agent Zaaheen could not reach {vendor}.",
         "No internet connection, a DNS problem, or {vendor} is down.",
         "Check this machine's internet connection. " + _WAIT,
     ),
@@ -79,12 +79,12 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
         _TELL_CLAUDE,
     ),
     "net.too_large": (
-        "{vendor} sent more data than Yaqzan accepts in one answer.",
+        "{vendor} sent more data than Agent Zaaheen accepts in one answer.",
         "The response was over the size cap, which protects this machine.",
         _TELL_CLAUDE,
     ),
     "net.bad_response": (
-        "{vendor} sent an answer Yaqzan could not read.",
+        "{vendor} sent an answer Agent Zaaheen could not read.",
         "It was not the JSON we expect; possibly an outage page or an API change.",
         _WAIT,
     ),
@@ -115,7 +115,7 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
         _TELL_CLAUDE,
     ),
     "source.unknown_value": (
-        "{vendor} sent a value Yaqzan does not know yet, so none of it was saved.",
+        "{vendor} sent a value Agent Zaaheen does not know yet, so none of it was saved.",
         "{vendor} has probably added a new status or type.",
         _TELL_CLAUDE,
     ),
@@ -126,7 +126,7 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
     ),
     # ---- store: the database
     "store.unavailable": (
-        "Yaqzan could not reach its database.",
+        "Agent Zaaheen could not reach its database.",
         "The database is stopped, restarting or out of resources.",
         "Check that the database is running (on the laptop: uv run python -m tools.dev_db up).",
     ),
@@ -142,7 +142,7 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
     ),
     "store.denied": (
         "The database refused permission.",
-        "Yaqzan tried something its database role may not do (by design, e.g. deleting history).",
+        "Agent Zaaheen tried something its database role may not do (by design, e.g. deleting history).",
         _TELL_CLAUDE,
     ),
     "store.failed": (
@@ -151,7 +151,7 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
         "Check the database is healthy and has free disk space. " + _TELL_CLAUDE,
     ),
     "store.schema_mismatch": (
-        "The database layout does not match this version of Yaqzan.",
+        "The database layout does not match this version of Agent Zaaheen.",
         "The database is newer or older than the code, or set up by hand.",
         "Do not start the agents. " + _TELL_CLAUDE,
     ),
@@ -162,7 +162,7 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
     ),
     "store.naive_time": (
         "A time without a timezone reached the database.",
-        "A bug in Yaqzan's code.",
+        "A bug in Agent Zaaheen's code.",
         _TELL_CLAUDE,
     ),
     # ---- vault: secrets
@@ -175,7 +175,7 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
     "vault.key_file_too_open": (
         "The vault refused to use its master key file.",
         "Other users on this machine can read the file.",
-        "Restrict the file so only the Yaqzan account can read it.",
+        "Restrict the file so only the Agent Zaaheen account can read it.",
     ),
     "vault.unknown_key": (
         "A secret was sealed with a master key this machine does not have.",
@@ -231,7 +231,7 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
     # ---- collector, freshness, policy
     "collect.crashed": (
         "The {vendor} sync crashed.",
-        "A bug in Yaqzan's code, not an outage.",
+        "A bug in Agent Zaaheen's code, not an outage.",
         _TELL_CLAUDE,
     ),
     "freshness.stale": (
@@ -257,17 +257,17 @@ _CATALOGUE: dict[str, tuple[str, str, str]] = {
     ),
     "summary.not_valid": (
         "A daily summary could not be made: one of its facts broke the summary's own limits.",
-        "A bug in Yaqzan's code (nothing was guessed or saved).",
+        "A bug in Agent Zaaheen's code (nothing was guessed or saved).",
         _TELL_CLAUDE,
     ),
     "scout.unreadable": (
         "The scout's saved advice could not be read, so it is left out.",
-        "It was saved by an older version of Yaqzan, or it is damaged.",
+        "It was saved by an older version of Agent Zaaheen, or it is damaged.",
         "Ask the scout again on the workspace's Agents tab.",
     ),
     "policy.bad_switch_row": (
         "A kill-switch record is unreadable, so all agents were stopped.",
-        "The switch data is damaged; Yaqzan fails safe by stopping everything.",
+        "The switch data is damaged; Agent Zaaheen fails safe by stopping everything.",
         _TELL_CLAUDE,
     ),
 }
@@ -282,7 +282,7 @@ def explain(code: str, *, vendor: str | None = None) -> Explanation:
     if entry is None:
         return Explanation(
             code,
-            "Something failed with a code Yaqzan has no description for.",
+            "Something failed with a code Agent Zaaheen has no description for.",
             "The code is new or misspelled.",
             _TELL_CLAUDE,
         )

@@ -1,6 +1,6 @@
 """The one door to Claude: a Messages API request to api.anthropic.com, nothing else (ADR-033).
 
-Every Claude call in Yaqzan goes through :class:`ClaudeClient`, and only after
+Every Claude call in Agent Zaaheen goes through :class:`ClaudeClient`, and only after
 the gateway's ``ModelGate`` has cleared it (level, customer data, spend caps).
 The client:
 

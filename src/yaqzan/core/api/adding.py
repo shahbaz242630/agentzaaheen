@@ -2,7 +2,7 @@
 
 ``GET /api/github/repos`` lists the repositories the read-only GitHub token
 covers, each marked if a workspace already reads it, so the Board offers only
-repositories Yaqzan can read. ``POST /api/workspaces`` adds a workspace from a
+repositories Agent Zaaheen can read. ``POST /api/workspaces`` adds a workspace from a
 name and (optionally) one of those repositories. No Windows Hello: a new
 workspace has no agents, is switched off and has no cap. After adding, the
 workspace directory is read again, so the new address answers at once.

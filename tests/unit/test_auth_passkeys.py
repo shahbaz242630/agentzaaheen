@@ -41,7 +41,7 @@ def enrolled(device: SoftAuthenticator) -> KnownPasskey:
 
 def test_set_up_asks_this_laptop_for_a_verified_passkey() -> None:
     options = enrol_options(SITE, b"c" * 32, [b"x" * 16])
-    assert options["rp"] == {"name": "Yaqzan", "id": "localhost"}
+    assert options["rp"] == {"name": "Agent Zaaheen", "id": "localhost"}
     selection = options["authenticatorSelection"]
     assert selection == {"authenticatorAttachment": "platform", "residentKey": "preferred",
                          "requireResidentKey": False, "userVerification": "required"}  # fmt: skip

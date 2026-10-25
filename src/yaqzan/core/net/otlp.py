@@ -2,7 +2,7 @@
 
 One kind of host only, matched as a whole name (Grafana Cloud's OTLP gateway),
 https on the default port, no credentials or query in the url, no redirects and
-no retries: telemetry is dropped rather than slow Yaqzan down or pile up. The
+no retries: telemetry is dropped rather than slow Agent Zaaheen down or pile up. The
 token is a ``SecretStr`` that only ever becomes the ``Authorization`` header.
 Synchronous on purpose: the telemetry workers call it from their own threads.
 It never opens a span itself (a span about sending spans would loop), and its

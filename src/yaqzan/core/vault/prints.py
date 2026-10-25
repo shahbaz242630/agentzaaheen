@@ -1,6 +1,6 @@
 """Name fingerprints: a customer's name turned into a code no one can turn back (F10 slice 2b, ADR-023).
 
-The customer-data check needs to know our customers' names without Yaqzan
+The customer-data check needs to know our customers' names without Agent Zaaheen
 keeping them. Each name is turned into a keyed fingerprint (HMAC-SHA256)
 with a key that lives in a key file on the machine, never in the database.
 The database holds only fingerprints: without the key, not even a list of

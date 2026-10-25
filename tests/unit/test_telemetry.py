@@ -220,7 +220,7 @@ def test_a_refused_send_is_dropped_quietly() -> None:
     tracing = start_tracing(sender, version="1")
     with span("request"):
         pass
-    tracing.shutdown()  # no exception: telemetry never breaks Yaqzan
+    tracing.shutdown()  # no exception: telemetry never breaks Agent Zaaheen
     assert len(sender.bodies) == 1
     assert tracing.provider is not None
 

@@ -1,4 +1,4 @@
-"""Metrics: every number Yaqzan shows, computed by code from stored data (07-METRICS).
+"""Metrics: every number Agent Zaaheen shows, computed by code from stored data (07-METRICS).
 
 What it does:
     Pure functions over the SDK's revenue shapes: MRR per currency

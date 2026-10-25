@@ -5,7 +5,7 @@ What it does:
     kept in a root-only file), bound to the credential's slot so ciphertexts
     cannot be swapped between projects; master-key rotation by re-wrapping.
     Name fingerprints (``NamePrinter``): a keyed code for each customer name,
-    so the customer-data check can know names Yaqzan never keeps.
+    so the customer-data check can know names Agent Zaaheen never keeps.
 
 Public interface:
     ``seal``, ``open_secret``, ``rewrap``, ``CredentialSlot``, ``SealedSecret``,

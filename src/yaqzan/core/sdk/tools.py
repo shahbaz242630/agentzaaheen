@@ -17,7 +17,7 @@ from yaqzan.core.sdk.models import DataClass, Trust
 class ToolLevel(StrEnum):
     """The permission ladder. Higher = more dangerous.
 
-    read: looks only. draft: prepares something inside Yaqzan for a human.
+    read: looks only. draft: prepares something inside Agent Zaaheen for a human.
     act: would change the outside world (only ever after human approval).
     forbidden: never callable, by anyone (delete, deploy, merge, billing).
     """

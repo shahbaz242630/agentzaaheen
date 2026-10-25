@@ -155,7 +155,7 @@ describe("the Customize page", () => {
   it("keeps Discover honest: only what is not on, and empty when everything is", async () => {
     render(view(page));
     await userEvent.click(screen.getByRole("button", { name: "Discover" }));
-    expect(screen.getByText("Every connector Yaqzan has is on.")).toBeInTheDocument();
+    expect(screen.getByText("Every connector Agent Zaaheen has is on.")).toBeInTheDocument();
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
   });
 

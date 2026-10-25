@@ -374,7 +374,7 @@ def _preflight(ns: argparse.Namespace, static_dir: Path) -> int | None:
     try:
         zoneinfo.ZoneInfo(ns.briefing_zone)
     except (zoneinfo.ZoneInfoNotFoundError, ValueError):
-        print(f"dashboard: {ns.briefing_zone!r} is not a time zone Yaqzan knows (try Asia/Dubai).")
+        print(f"dashboard: {ns.briefing_zone!r} is not a time zone Agent Zaaheen knows (try Asia/Dubai).")
         return 1
     if ns.enrol_passkey and not ns.switches:
         print("dashboard: --enrol-passkey needs --switches (the passkey is kept in the laptop database).")

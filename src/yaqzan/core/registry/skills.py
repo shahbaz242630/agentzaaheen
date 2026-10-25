@@ -2,7 +2,7 @@
 
 The header may hold only the fields the format allows (the same list
 Anthropic's validator checks), so our skills stay usable in Claude, Codex and
-Cursor. Yaqzan's own fields live under ``metadata`` as plain text, which is
+Cursor. Agent Zaaheen's own fields live under ``metadata`` as plain text, which is
 what the format allows there:
 
     metadata:
@@ -58,7 +58,7 @@ def read_skill(folder: Path) -> Skill:
         raise ItemError(
             "registry.unknown_field",
             f"{SKILL_FILE} has fields the skill format does not allow: {', '.join(unknown)} "
-            "(Yaqzan's own fields go under 'metadata')",
+            "(Agent Zaaheen's own fields go under 'metadata')",
         )
     name = _name(fields.get("name"), folder.name)
     metadata = _metadata(fields.get("metadata"))

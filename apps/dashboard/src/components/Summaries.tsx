@@ -11,7 +11,7 @@ import {
 import { ago, capWords, explainUnknown, formatValue, money } from "../format";
 
 // Daily summaries and the Board's briefings (F17 slice 6). Every word of a summary was written by code
-// from what Yaqzan holds; this page only lays it out. What could not be read always comes first.
+// from what Agent Zaaheen holds; this page only lays it out. What could not be read always comes first.
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -98,7 +98,7 @@ function SummaryBody({ load }: { load: Load<WorkspaceSummaries> }) {
   return (
     <div className="mt-2 flex flex-col gap-4">
       <p className="text-sm text-faint">
-        {dayWords(newest.day)} · made {ago(newest.made_at)} · written by code from what Yaqzan holds
+        {dayWords(newest.day)} · made {ago(newest.made_at)} · written by code from what Agent Zaaheen holds
       </p>
       {newest.summary === null ? (
         <p role="alert" className="text-sm text-alert">
@@ -212,7 +212,7 @@ function briefingState(b: Briefing): { words: string; tone: string } {
     return { words: "Kept here only: no phone (ntfy) topic is set up", tone: "text-muted" };
   }
   return {
-    words: `Not sent: ${reasonWords(b.reason ?? "")}. Yaqzan tries again every 15 minutes today.`,
+    words: `Not sent: ${reasonWords(b.reason ?? "")}. Agent Zaaheen tries again every 15 minutes today.`,
     tone: "text-alert",
   };
 }

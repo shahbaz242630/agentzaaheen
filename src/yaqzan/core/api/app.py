@@ -407,7 +407,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
             if on_close is not None:
                 await on_close()
 
-    app = FastAPI(title="Yaqzan", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    app = FastAPI(title="Agent Zaaheen", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
 
     app.middleware("http")(_with_headers)

@@ -57,7 +57,7 @@ def test_a_failure_without_a_status_or_place_still_explains(capsys: pytest.Captu
     assert run_tool({"K": FAKE_KEY}, httpx.MockTransport(serve)) == 1
     out = capsys.readouterr().out
     assert "failed with net.unavailable at GET /subscriptions." in out
-    assert "What: Yaqzan could not reach Paddle." in out
+    assert "What: Agent Zaaheen could not reach Paddle." in out
 
 
 def test_a_trailing_newline_is_stripped_but_inner_spaces_are_refused(

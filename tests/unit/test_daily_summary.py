@@ -189,7 +189,7 @@ def test_the_briefing_puts_the_worst_first_and_says_when_it_is_late() -> None:
     )
     bad = summary(detail(card("code", "Code", entries=(Entry(text="x", tone=Tone.ALERT),))))
     title, lines = briefing([fine, bad], day=DAY, local_time="10:02", late=True)
-    assert title == "Yaqzan briefing, Sun 25 Oct"
+    assert title == "Agent Zaaheen briefing, Sun 25 Oct"
     assert lines[0] == "Made late, at 10:02: the dashboard was not running at the usual time."
     assert lines[1] == "2 projects; 1 need a look."
     assert lines[2].startswith("Shop: Needs you now")

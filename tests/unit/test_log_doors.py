@@ -1,4 +1,4 @@
-"""Everything in or through Yaqzan is logged (ADR-034, slice 2): one log point at each shared door.
+"""Everything in or through Agent Zaaheen is logged (ADR-034, slice 2): one log point at each shared door.
 
 The doors are the few places everything passes: the API, every outside call, every
 database write, chat tool runs, the Customize page's decisions, alerts, scheduled jobs

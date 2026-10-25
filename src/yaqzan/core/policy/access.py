@@ -42,7 +42,7 @@ class Channel(StrEnum):
 
 
 class Operation(StrEnum):
-    """Things a person or operator can ask Yaqzan to do."""
+    """Things a person or operator can ask Agent Zaaheen to do."""
 
     VIEW = "view"
     REJECT_ACTION = "reject_action"

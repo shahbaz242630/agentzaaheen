@@ -1,4 +1,4 @@
-"""Record Yaqzan's spans in memory for a test (no network, nothing global changed)."""
+"""Record Agent Zaaheen's spans in memory for a test (no network, nothing global changed)."""
 
 from __future__ import annotations
 

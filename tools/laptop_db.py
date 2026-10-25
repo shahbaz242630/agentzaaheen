@@ -198,7 +198,7 @@ async def set_up(admin: str, database: str = DATABASE) -> SecretStr:
     app = await Database.open(DatabaseSettings(dsn=url))
     try:
         workspaces = WorkspaceRows(app.scoped(LAPTOP_TENANT))
-        await workspaces.add_tenant("Yaqzan")
+        await workspaces.add_tenant("Agent Zaaheen")
         for workspace in LAPTOP_WORKSPACES:
             await workspaces.add(workspace)
         await _connect_repos(app, await workspaces.workspaces())

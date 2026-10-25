@@ -1,6 +1,6 @@
 """Switch telemetry on: traces, RED metrics and log lines, batched and dropped on failure (ADR-032, R2).
 
-Spans go to Yaqzan's own provider and are sent every few seconds by the
+Spans go to Agent Zaaheen's own provider and are sent every few seconds by the
 OpenTelemetry batch worker. The same finished spans feed :class:`RedMetrics`,
 and every redacted log line is queued by :class:`LogQueue`. One background
 pump sends the queued log lines every :data:`LOGS_EVERY_S` seconds and a
@@ -147,7 +147,7 @@ class Tracing:
 
 
 def start_tracing(sender: TelemetrySender, *, version: str, environment: str = "laptop") -> Tracing:
-    """Send every Yaqzan span, its RED metrics and every log line to ``sender`` from now on."""
+    """Send every Agent Zaaheen span, its RED metrics and every log line to ``sender`` from now on."""
     resource_values = {
         "service.name": SERVICE_NAME,
         "service.version": version,

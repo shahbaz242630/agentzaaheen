@@ -37,7 +37,7 @@ const EMPTY = {
   reason: null,
 };
 
-// The registry says Yaqzan reads GitHub for "shop" (and for another workspace, which must not count).
+// The registry says Agent Zaaheen reads GitHub for "shop" (and for another workspace, which must not count).
 const REGISTRY = {
   connectors: [
     { id: "github", uses: [{ project_id: "shop", status: "live" }] },
@@ -72,7 +72,7 @@ describe("what a workspace is built with", () => {
     expect(screen.getByText("90.0%")).toBeTruthy();
   });
 
-  it("groups providers, gives the evidence, and says which ones Yaqzan watches", async () => {
+  it("groups providers, gives the evidence, and says which ones Agent Zaaheen watches", async () => {
     serve(200, READY);
     render(<BuiltWith slug="shop" registry={REGISTRY} />);
     const payments = (await screen.findByText("Payments")).parentElement as HTMLElement;
@@ -80,11 +80,11 @@ describe("what a workspace is built with", () => {
     expect(within(payments).getByText("Not watched yet")).toBeTruthy(); // watched for another workspace only
     expect(within(payments).getByText("Found in apps/mobile/package.json: react-native-purchases")).toBeTruthy();
     const code = screen.getByText("Code and builds").parentElement as HTMLElement;
-    expect(within(code).getByText("Yaqzan watches it")).toBeTruthy();
+    expect(within(code).getByText("Agent Zaaheen watches it")).toBeTruthy();
     expect(screen.getByText("Outside providers (2)")).toBeTruthy();
   });
 
-  it("names services Yaqzan watches that the code does not call, but never its own checks", async () => {
+  it("names services Agent Zaaheen watches that the code does not call, but never its own checks", async () => {
     serve(200, READY);
     const registry = {
       connectors: [
@@ -97,7 +97,7 @@ describe("what a workspace is built with", () => {
     render(<BuiltWith slug="shop" registry={registry} />);
     expect(
       await screen.findByText(
-        "Yaqzan also watches Supabase for this project. The code in this repository does not call it, so it is connected some other way.",
+        "Agent Zaaheen also watches Supabase for this project. The code in this repository does not call it, so it is connected some other way.",
       ),
     ).toBeTruthy();
   });

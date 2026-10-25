@@ -138,13 +138,13 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         "error",
         what="The dashboard's request {method} {route} in the {workspace} workspace "
         "failed (http {http_status}) after {duration_ms} ms.",
-        why="Something inside Yaqzan broke while answering it.",
+        why="Something inside Agent Zaaheen broke while answering it.",
         next="Open this request's trace (the trace_id on this line) to see which step failed.",
     ),
     "api_failed": LogEvent(
         "error",
         what="The dashboard's request {method} {route} failed (http {http_status}) after {duration_ms} ms.",
-        why="Something inside Yaqzan broke while answering it.",
+        why="Something inside Agent Zaaheen broke while answering it.",
         next="Open this request's trace (the trace_id on this line) to see which step failed.",
     ),
     # ---- outbound calls
@@ -245,13 +245,13 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
     "kill_switches_unreadable": LogEvent(
         "error",
         what="Every agent action was stopped.",
-        why="The kill switches could not be read ({reason_code}); Yaqzan stops everything rather than guess.",
+        why="The kill switches could not be read ({reason_code}); everything stops rather than guess.",
         next="Check the database is running; actions resume by themselves once the switches can be read.",
     ),
     "kill_switch_row_invalid": LogEvent(
         "error",
         what="Every agent action was stopped.",
-        why="A stored kill switch makes no sense ({reason_code}); Yaqzan stops everything rather than guess.",
+        why="A stored kill switch makes no sense ({reason_code}); everything stops rather than guess.",
         next="Report it to Claude: the stored switch row needs to be checked and fixed.",
     ),
     # ---- the Customize page's switches and approvals (each also in the audit log)
@@ -269,7 +269,7 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
     "store_saved": LogEvent(
         "info",
         what="Wrote {record} to the database in {duration_ms} ms.",
-        why="Yaqzan keeps it so it is not forgotten.",
+        why="Agent Zaaheen keeps it so it is not forgotten.",
     ),
     "store_unchanged": LogEvent(
         "info",

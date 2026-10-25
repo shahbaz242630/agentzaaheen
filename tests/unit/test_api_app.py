@@ -12,7 +12,7 @@ NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 
 @pytest.fixture
 def ui(tmp_path: Path) -> Path:
-    (tmp_path / "index.html").write_text("<!doctype html><title>Yaqzan</title>", encoding="utf-8")
+    (tmp_path / "index.html").write_text("<!doctype html><title>Agent Zaaheen</title>", encoding="utf-8")
     return tmp_path
 
 
@@ -66,7 +66,7 @@ def test_api_answers_are_never_cached(client: TestClient) -> None:
 def test_serves_the_web_ui(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "<title>Yaqzan</title>" in response.text
+    assert "<title>Agent Zaaheen</title>" in response.text
 
 
 @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])

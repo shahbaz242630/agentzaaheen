@@ -31,7 +31,7 @@ def spans() -> Iterator[Recorded]:
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
-    (tmp_path / "index.html").write_text("<!doctype html><title>Yaqzan</title>", encoding="utf-8")
+    (tmp_path / "index.html").write_text("<!doctype html><title>Agent Zaaheen</title>", encoding="utf-8")
     return TestClient(create_app(SamplePortfolio(NOW), static_dir=tmp_path), base_url="http://127.0.0.1")
 
 

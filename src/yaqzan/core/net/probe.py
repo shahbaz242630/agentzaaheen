@@ -4,7 +4,7 @@ The same rules as the JSON client, checked before a byte leaves: https only,
 default port, a host on this probe's allowlist that is a name (never an IP
 literal), no credentials, no query, a plain path. Redirects are reported, not
 followed. The connection is closed as soon as the status line arrives: the
-page is never read, so nothing a server sends can reach Yaqzan. No retries:
+page is never read, so nothing a server sends can reach Agent Zaaheen. No retries:
 one failed answer is what the card should show. Implements the SDK's
 ``StatusGetter``.
 """

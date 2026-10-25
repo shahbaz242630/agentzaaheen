@@ -2,7 +2,7 @@
 
 Only the OpenTelemetry *API* is used here. Until :mod:`yaqzan.core.telemetry`
 installs a provider, every span is a cheap no-op and no ID exists, so code can
-open spans freely. Spans go to Yaqzan's own provider, never the global one, so a
+open spans freely. Spans go to Agent Zaaheen's own provider, never the global one, so a
 library that opens spans of its own (FastAPI does) cannot send anything.
 
 What a span may carry is fixed by :data:`ALLOWED_ATTRIBUTES`: codes, names,
@@ -57,7 +57,7 @@ class _Installed:
 
 
 def install(provider: trace.TracerProvider | None) -> None:
-    """Send Yaqzan's spans to ``provider``; ``None`` switches tracing off again."""
+    """Send Agent Zaaheen's spans to ``provider``; ``None`` switches tracing off again."""
     _Installed.provider = provider if provider is not None else trace.NoOpTracerProvider()
 
 

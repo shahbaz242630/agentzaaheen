@@ -1,6 +1,6 @@
 """A workspace's daily summary and the Board's morning briefing, written by code (F17 slice 6, ADR-039).
 
-Every fact comes from what Yaqzan already holds (PRD F2: every number is put
+Every fact comes from what Agent Zaaheen already holds (PRD F2: every number is put
 in by code; no model writes here). :func:`summarise` turns one workspace's
 cards, its alerts, agents and the scout's newest advice into a
 :class:`DailySummary`. Rules:
@@ -265,7 +265,7 @@ def briefing(
     summaries: Sequence[DailySummary], *, day: date, local_time: str, late: bool
 ) -> tuple[str, tuple[str, ...]]:
     """The Board's morning message: a title and its lines (one per workspace, worst first), no links."""
-    title = f"Yaqzan briefing, {day.strftime('%a')} {day.day} {day.strftime('%b')}"
+    title = f"Agent Zaaheen briefing, {day.strftime('%a')} {day.day} {day.strftime('%b')}"
     lines: list[str] = []
     if late:
         lines.append(f"Made late, at {local_time}: the dashboard was not running at the usual time.")

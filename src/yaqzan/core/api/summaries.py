@@ -5,7 +5,7 @@
 - ``GET /api/briefings``: the Board's last 7 briefings, the exact words, and whether each was sent.
 - ``POST /api/summaries/make``: make today's summaries again now (it reads and saves; nothing is sent).
 
-Every summary was written by code from facts Yaqzan holds; a saved one that no
+Every summary was written by code from facts Agent Zaaheen holds; a saved one that no
 longer reads as a summary is shown as unreadable, never guessed.
 """
 

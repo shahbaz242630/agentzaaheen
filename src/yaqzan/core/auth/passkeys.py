@@ -56,7 +56,7 @@ class Site(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     rp_id: str = Field(default="localhost", pattern=r"^[a-z0-9.-]{1,253}$")
-    rp_name: str = "Yaqzan"
+    rp_name: str = "Agent Zaaheen"
     origin: str = Field(pattern=r"^https?://[a-z0-9.-]+(:[0-9]{1,5})?$")
 
 
@@ -125,7 +125,7 @@ def enrol_options(site: Site, challenge: bytes, existing: list[bytes]) -> dict[s
         rp_name=site.rp_name,
         user_id=USER_ID,
         user_name="chairman",
-        user_display_name="Yaqzan Chairman",
+        user_display_name="Agent Zaaheen Chairman",
         challenge=challenge,
         authenticator_selection=AuthenticatorSelectionCriteria(
             authenticator_attachment=AuthenticatorAttachment.PLATFORM,

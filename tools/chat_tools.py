@@ -50,7 +50,7 @@ LOCAL_MODEL_ID = "local-gemma"
 # The registry id of the connector that ``failed_build_log`` reads through (its plugin.yaml).
 GITHUB_CONNECTOR = "github"
 CHANGED_SKILL = (
-    "This skill was not opened: its files changed (or went missing) since Yaqzan started, "
+    "This skill was not opened: its files changed (or went missing) since Agent Zaaheen started, "
     "so it has not been reviewed in this form. Answer without it and say so."
 )
 
@@ -137,7 +137,7 @@ def skill_tool(
 
     tool = Tool(
         name="load_skill",
-        description="Open a skill's instructions (Yaqzan's own playbook).",
+        description="Open a skill's instructions (Agent Zaaheen's own playbook).",
         choices=tuple(reviewed),
         run=run,
         trusted=True,

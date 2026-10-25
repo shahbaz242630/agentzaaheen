@@ -1,6 +1,6 @@
 """Keeping each workspace's daily summary and the Board's briefing (F17 slice 6, ADR-039).
 
-A summary is a read: code gathers what Yaqzan already holds and saves it;
+A summary is a read: code gathers what Agent Zaaheen already holds and saves it;
 nothing is switched on and nothing spends. The morning job (the Board's)
 goes through the tenant's active workspaces one at a time, and the dashboard
 reads one workspace's summaries by the API door's address. Either way this is

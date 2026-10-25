@@ -2,7 +2,7 @@
 
 The list lives in ``projects/slo.yaml`` (git-ignored and path-guarded like the
 other project lists, Rulebook §7b). It is a stream of OpenSLO v1 ``SLO``
-documents; Yaqzan reads a strict subset and refuses anything it would
+documents; Agent Zaaheen reads a strict subset and refuses anything it would
 otherwise have to ignore::
 
     apiVersion: openslo/v1
@@ -11,7 +11,7 @@ otherwise have to ignore::
       name: sandoq-kin-api-speed
       displayName: Sandoq Kin API answers fast
     spec:
-      service: sandoq-kin                 # a Yaqzan project id
+      service: sandoq-kin                 # an Agent Zaaheen project id
       indicator:
         metadata: {name: latency}         # availability, latency or errors
       timeWindow:
@@ -112,7 +112,7 @@ def _mapping(value: object, allowed: frozenset[str], where: str) -> dict[str, ob
         raise SloListError(f"{where} must be a mapping")
     unknown = sorted(set(value) - allowed)
     if unknown:
-        raise SloListError(f"{where} has fields Yaqzan does not read: {', '.join(unknown)}")
+        raise SloListError(f"{where} has fields Agent Zaaheen does not read: {', '.join(unknown)}")
     return value
 
 

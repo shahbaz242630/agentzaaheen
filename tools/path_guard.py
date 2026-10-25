@@ -1,6 +1,6 @@
 """Path guard: allow only code files into the repository (ADR-014).
 
-Yaqzan's repository is public and holds code only. Documentation, plans,
+Agent Zaaheen's repository is public and holds code only. Documentation, plans,
 handoffs, research, runbooks, project configs and secrets live outside the
 repo. ``.gitignore`` is the first fence; this script is the second (run as a
 pre-commit hook on staged files) and third (run in CI on every tracked file).
@@ -157,7 +157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     rejected = check(paths)
     if rejected:
-        print("path-guard: these files are not allowed in the Yaqzan repo (code only, ADR-014):")
+        print("path-guard: these files are not allowed in the Agent Zaaheen repo (code only, ADR-014):")
         for path in rejected:
             print(f"  - {path}")
         print("Docs, plans, configs and secrets belong outside the repository.")

@@ -1,4 +1,4 @@
--- Yaqzan checker (ADR-032): what the external checker remembers in Cloudflare D1.
+-- Agent Zaaheen checker (ADR-032): what the external checker remembers in Cloudflare D1.
 -- Addresses are never stored: each is known by a short hash of its URL.
 
 -- Each address's last confirmed state; written only when it changes.

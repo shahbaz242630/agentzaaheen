@@ -51,7 +51,9 @@ class Backend:
     async def briefings(self) -> Sequence[BriefingRow]:
         self._check()
         return [
-            BriefingRow(DAY, NOW, "Yaqzan briefing", "1 project.\nDetails.", "not_sent", None, "net.timeout")
+            BriefingRow(
+                DAY, NOW, "Agent Zaaheen briefing", "1 project.\nDetails.", "not_sent", None, "net.timeout"
+            )
         ]
 
     async def make_now(self) -> tuple[int, int]:

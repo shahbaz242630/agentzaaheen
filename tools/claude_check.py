@@ -1,4 +1,4 @@
-"""One live call to Claude through Yaqzan's own door, to prove the key, the gate and the costing work.
+"""One live call to Claude through Agent Zaaheen's own door, to prove the key, the gate and the costing work.
 
 Sends one short fixed question (no customer data: our own words) through the
 same path every agent will use: the model gate, the customer-data check, the

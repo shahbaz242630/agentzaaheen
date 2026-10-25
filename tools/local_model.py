@@ -30,7 +30,7 @@ import httpx
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8766
-LLM_HOME = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Yaqzan" / "llm"
+LLM_HOME = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Agent Zaaheen" / "llm"
 DEFAULT_SERVER = (
     LLM_HOME / "llama-b11624" / ("llama-server.exe" if sys.platform == "win32" else "llama-server")
 )

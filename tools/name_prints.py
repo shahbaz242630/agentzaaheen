@@ -47,7 +47,7 @@ from yaqzan.core.vault import MasterKey, NamePrinter, VaultError, load_master_ke
 from yaqzan.plugins.connectors.paddle import ALLOWED_HOSTS, API_VERSION_HEADER, LIVE_BASE_URL, PaddleSource
 
 KEY_ID = "names-1"
-KEY_FILE = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Yaqzan" / "keys" / "names.key"
+KEY_FILE = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Agent Zaaheen" / "keys" / "names.key"
 
 
 @dataclass(frozen=True)

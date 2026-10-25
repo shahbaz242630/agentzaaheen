@@ -167,7 +167,7 @@ class Finding(_Record):
 
 
 class ActionLevel(StrEnum):
-    """Draft = prepared inside Yaqzan; Act = would change the outside world."""
+    """Draft = prepared inside Agent Zaaheen; Act = would change the outside world."""
 
     DRAFT = "draft"
     ACT = "act"

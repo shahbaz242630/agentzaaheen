@@ -61,7 +61,7 @@ def read_logs_tool(logs: LogFolder | None, projects: Iterable[str]) -> Tool | No
 
     return Tool(
         name="read_logs",
-        description="Read one project's warnings and errors of today and yesterday from Yaqzan's own logs.",
+        description="Read one project's warnings and errors of today and yesterday from our own logs.",
         choices=choices,
         run=run,
         trusted=False,

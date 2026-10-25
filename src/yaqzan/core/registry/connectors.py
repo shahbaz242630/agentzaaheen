@@ -1,6 +1,6 @@
 """Reading one connector folder: its reviewed ``plugin.yaml`` (Rulebook §3.2, ADR-027).
 
-Yaqzan decides what a connector may do from *our* manifest, never from what
+Agent Zaaheen decides what a connector may do from *our* manifest, never from what
 an outside server says about itself (the MCP spec calls those hints
 untrusted, research/07 §3.3). A manifest that declares no permissions counts
 as ``act``, so it could only ever propose. A connector that declares itself

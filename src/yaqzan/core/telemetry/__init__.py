@@ -1,7 +1,7 @@
-"""Telemetry: Yaqzan's traces, RED metrics and log lines, sent to the store (ADR-032, 08-OBSERVABILITY §4).
+"""Telemetry: Agent Zaaheen's traces, RED metrics and log lines, sent to the store (ADR-032, OBS §4).
 
 What it does:
-    :func:`start_tracing` gives Yaqzan its own OpenTelemetry provider, so the
+    :func:`start_tracing` gives Agent Zaaheen its own OpenTelemetry provider, so the
     spans every module opens with ``core.sdk.span`` are batched and sent, as
     OTLP/JSON, through a ``TelemetrySender`` (``core.net.OtlpSender``). The same
     spans become RED metrics (:class:`RedMetrics`: rate, errors, duration, each
