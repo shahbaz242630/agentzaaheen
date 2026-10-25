@@ -25,7 +25,8 @@ Public interface:
     ``Refusal``, ``PromptPart``, ``SpendLedger``, ``SpendBook``, ``MemoryBook``, ``StoreBook``,
     ``Use``, ``month_bounds``, ``Usage``, ``MODELS``, ``CAPS_USD``, ``TOTAL_STOP_USD``; ``KnownNames``,
     ``NamePrint``, ``PrintKind``, ``Printer``, ``prints_of``,
-    ``NameSource``, ``FixedNames``, ``part_from``; ``CloudAsk``, ``ClaudeDoor``, ``Answer``.
+    ``NameSource``, ``FixedNames``, ``StoreNames``, ``KeyedPrinter``, ``part_from``;
+    ``CloudAsk``, ``ClaudeDoor``, ``Answer``.
 
 How to test:
     ``uv run pytest tests/unit/test_llm_chat.py tests/unit/test_llm_tools.py`` (a fake model; no server).
@@ -58,7 +59,15 @@ from yaqzan.core.llm_gateway.cloud_check import (
     prints_of,
 )
 from yaqzan.core.llm_gateway.model_map import MODELS, Usage
-from yaqzan.core.llm_gateway.route import Clearance, FixedNames, ModelGate, NameSource, Refusal
+from yaqzan.core.llm_gateway.route import (
+    Clearance,
+    FixedNames,
+    KeyedPrinter,
+    ModelGate,
+    NameSource,
+    Refusal,
+    StoreNames,
+)
 from yaqzan.core.llm_gateway.spend import (
     CAPS_USD,
     TOTAL_STOP_USD,
@@ -85,6 +94,7 @@ __all__ = [
     "FactChat",
     "FixedNames",
     "Inspect",
+    "KeyedPrinter",
     "KnownNames",
     "MemoryBook",
     "ModelGate",
@@ -97,6 +107,7 @@ __all__ = [
     "SpendBook",
     "SpendLedger",
     "StoreBook",
+    "StoreNames",
     "Tool",
     "Usage",
     "Use",

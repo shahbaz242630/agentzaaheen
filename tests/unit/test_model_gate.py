@@ -22,8 +22,10 @@ from yaqzan.core.llm_gateway import (
     PromptPart,
     Refusal,
     SpendLedger,
+    StoreNames,
     Usage,
     Use,
+    prints_of,
 )
 from yaqzan.core.llm_gateway.route import worst_case_micro
 from yaqzan.core.llm_gateway.spend import month_bounds, month_of
@@ -317,3 +319,27 @@ def test_just_under_80_percent_is_not_yet_a_notice() -> None:
     book = MemoryBook()
     asyncio.run(book.add(Use.HEADS, "claude-opus-5-5", 47_999_999, OCT))
     assert asyncio.run(SpendLedger(book, clock=Clock(OCT)).notices()) == []
+
+
+class Prints:
+    def __init__(self, names: list[str]) -> None:
+        self.rows = {(p.kind.value, p.print) for p in prints_of(names, PRINTER)}
+        self.asked: list[str] = []
+
+    async def made_with(self, key_id: str) -> set[tuple[str, bytes]]:
+        self.asked.append(key_id)
+        return self.rows
+
+
+def test_the_stored_list_is_read_fresh_for_each_call_with_this_keys_prints_only() -> None:
+    rows = Prints(["Fatima Al Mansoori"])
+    g = ModelGate(SpendLedger(MemoryBook(), clock=Clock(OCT)), StoreNames(rows, PRINTER))
+    named = PromptPart("Fatima Al Mansoori asked again.", DataClass.INTERNAL)
+    assert clear(g, parts=(*OPS, named)).refusal is Refusal.CUSTOMER_DATA
+    assert clear(g).refusal is None
+    rows.rows |= {(p.kind.value, p.print) for p in prints_of(["Grace"], PRINTER)}  # a name added since
+    assert (
+        clear(g, parts=(*OPS, PromptPart("Grace wrote in.", DataClass.INTERNAL))).refusal
+        is Refusal.CUSTOMER_DATA
+    )
+    assert rows.asked == ["test-names"] * 3

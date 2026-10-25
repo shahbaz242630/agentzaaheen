@@ -22,7 +22,14 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from yaqzan.core.llm_gateway.cloud_check import Found, KnownNames, PromptPart, customer_data_in
+from yaqzan.core.llm_gateway.cloud_check import (
+    Found,
+    KnownNames,
+    NamePrint,
+    PrintKind,
+    PromptPart,
+    customer_data_in,
+)
 from yaqzan.core.llm_gateway.model_map import MODELS, ModelEntry, Usage, cost_micro_usd, usd
 from yaqzan.core.llm_gateway.spend import SpendLedger, Use
 from yaqzan.core.sdk import ModelLevel, get_logger, say
@@ -65,6 +72,41 @@ class FixedNames:
     async def known_names(self) -> KnownNames:
         """The same list every time."""
         return self._names
+
+
+class KeyedPrinter(Protocol):
+    """A name printer and the id of its key (the vault's ``NamePrinter``)."""
+
+    key_id: str
+
+    def __call__(self, text: str) -> bytes:
+        """The fingerprint of ``text``."""
+        ...
+
+
+class PrintRows(Protocol):
+    """Where the fingerprints are kept (the store's ``AllNamePrints``)."""
+
+    async def made_with(self, key_id: str) -> set[tuple[str, bytes]]:
+        """Every ``(kind, print)`` made with ``key_id``."""
+        ...
+
+
+class StoreNames:
+    """The name list from the database: every workspace's fingerprints made with this printer's key.
+
+    Read fresh for each cloud call, so a name added a moment ago already counts.
+    A read that fails raises, and the gate then refuses the call.
+    """
+
+    def __init__(self, prints: PrintRows, printer: KeyedPrinter) -> None:
+        self._prints = prints
+        self._printer = printer
+
+    async def known_names(self) -> KnownNames:
+        """Every customer name we hold, as fingerprints, across all workspaces."""
+        rows = await self._prints.made_with(self._printer.key_id)
+        return KnownNames((NamePrint(PrintKind(kind), value) for kind, value in rows), self._printer)
 
 
 class ModelGate:

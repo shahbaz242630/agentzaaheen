@@ -125,6 +125,7 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "daily_summaries": read_add,  # plus UPDATE on made_at and facts: a day made again replaces it
         "briefings": read_add,  # plus UPDATE on whether it was sent (column grants)
         "model_calls": read_add,  # a cost is added, never changed: a cap can only fill up
+        "customer_name_prints": read_add,  # fingerprints only; removed only with the workspace
     }
 
 
