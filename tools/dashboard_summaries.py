@@ -61,6 +61,8 @@ UNMAKEABLE = "summary.not_valid"  # a fact broke the summary's own limits (a bug
 Clock = Callable[[], datetime]
 Agents = Callable[[WorkspaceRow], Awaitable[WorkspaceAgentsOut]]
 Scout = Callable[[WorkspaceRow], Awaitable[ScoutRun | None]]
+# The Board's Claude lines for a briefing made at a given time (F10 slice 3a).
+ClaudeLines = Callable[[datetime], Awaitable[tuple[str, ...]]]
 
 
 class AlertLog:
@@ -104,6 +106,7 @@ class LaptopSummaries:
         zone: ZoneInfo,
         agents: Agents | None = None,
         scout: Scout | None = None,
+        claude: ClaudeLines | None = None,
         alerts: AlertLog | None = None,
         watched: frozenset[str] = frozenset(),
         topic: SecretStr | None = None,
@@ -118,6 +121,7 @@ class LaptopSummaries:
         self._zone = zone
         self._agents = agents
         self._scout = scout
+        self._claude = claude
         self._alerts = alerts
         self._watched = watched
         self._topic = topic
@@ -284,6 +288,15 @@ class LaptopSummaries:
         recommended = tuple(advice.role_id for advice in report.roles if advice.recommend)
         return ScoutFact(state="done", at=run.finished_at or run.started_at, recommended=recommended[:40])
 
+    async def _claude_lines(self) -> tuple[str, ...]:
+        """The Board's Claude lines; if they cannot be read, the briefing says so (never left out)."""
+        if self._claude is None:
+            return ()
+        try:
+            return await self._claude(self._clock())
+        except StoreError as exc:
+            return (f"Claude runs could not be read ({exc.code.value}); see the dashboard.",)
+
     async def _send(self, control: SummaryControl, due: Plan, briefed: Briefed) -> None:
         if briefed == "none":
             summaries = []
@@ -292,7 +305,13 @@ class LaptopSummaries:
                 found = read_summary(rows[0].facts) if rows and rows[0].day == due.day else None
                 if found is not None:
                     summaries.append(found)
-            title, lines = briefing(summaries, day=due.day, local_time=due.local_time, late=due.late)
+            title, lines = briefing(
+                summaries,
+                day=due.day,
+                local_time=due.local_time,
+                late=due.late,
+                claude=await self._claude_lines(),
+            )
             await control.open_briefing(due.day, title=title, message="\n".join(lines))
         saved = (await control.briefings(until=due.day, days=1))[0]
         if self._topic is None:

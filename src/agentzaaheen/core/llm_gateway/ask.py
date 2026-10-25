@@ -10,20 +10,27 @@ What comes back is an :class:`Answer` whose ``outcome`` is ``"answered"`` or
 a code saying why not. A call that was refused, could not reach Claude, or
 that Claude declined is **never** answered by a weaker model instead: the
 caller marks its run "did not run" and names it in the briefing.
+
+Every ask that ends without an answer is written to a :class:`MissBook` (the
+database's ``model_call_misses`` in real use), codes only, so the morning
+briefing can name it (F10 slice 3a). If that write fails, the line
+``model_miss_not_recorded`` says so and the caller still gets its answer.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Protocol
 
 from agentzaaheen.core.llm_gateway.cloud_check import PromptPart
-from agentzaaheen.core.llm_gateway.model_map import Usage, usd
+from agentzaaheen.core.llm_gateway.model_map import MODELS, Usage, usd
 from agentzaaheen.core.llm_gateway.route import ModelGate
 from agentzaaheen.core.llm_gateway.spend import Use
 from agentzaaheen.core.net import ClaudeReply
 from agentzaaheen.core.sdk import ModelLevel, SourceError, get_logger, say
+from agentzaaheen.core.store import MissRow, ModelCallMisses, StoreError
 
 ANSWERED = "answered"
 UNREACHABLE = "model.unreachable"
@@ -62,12 +69,51 @@ class Answer:
     status: int | None = None
 
 
-class CloudAsk:
-    """Clears, sends and records one Claude call at a time."""
+class MissBook(Protocol):
+    """Where runs that did not run are written (``StoreMisses`` in real use)."""
 
-    def __init__(self, gate: ModelGate, door: ClaudeDoor) -> None:
+    async def add(self, miss: MissRow) -> None:
+        """Keep one miss."""
+        ...
+
+
+class MemoryMisses:
+    """Misses kept in memory (tests, and the dashboard without a database)."""
+
+    def __init__(self) -> None:
+        self.misses: list[MissRow] = []
+
+    async def add(self, miss: MissRow) -> None:
+        """Keep one miss."""
+        self.misses.append(miss)
+
+
+class StoreMisses:
+    """Misses kept in the database (``model_call_misses``): the briefing reads them."""
+
+    def __init__(self, misses: ModelCallMisses) -> None:
+        self._misses = misses
+
+    async def add(self, miss: MissRow) -> None:
+        """Keep one miss."""
+        await self._misses.add(miss)
+
+
+class CloudAsk:
+    """Clears, sends and records one Claude call at a time; a run that did not run is written down."""
+
+    def __init__(
+        self,
+        gate: ModelGate,
+        door: ClaudeDoor,
+        misses: MissBook,
+        *,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self._gate = gate
         self._door = door
+        self._misses = misses
+        self._clock = clock
         self._log = get_logger("agentzaaheen.models")
 
     async def ask(  # noqa: PLR0913  # each is a separate fact about the call
@@ -83,9 +129,52 @@ class CloudAsk:
         run_id: str,
         effort: str | None = None,
     ) -> Answer:
-        """Ask the ``wanted`` level's Claude model, if the gate allows it."""
+        """Ask the ``wanted`` level's Claude model, if the gate allows it; write it down if it did not run."""
         if wanted < ModelLevel.SONNET:
             raise ValueError("CloudAsk is for Claude levels only; our own models are asked directly")
+        answer = await self._ask(
+            role=role,
+            role_level=role_level,
+            wanted=wanted,
+            use=use,
+            system=system,
+            task=task,
+            max_output_tokens=max_output_tokens,
+            run_id=run_id,
+            effort=effort,
+        )
+        if answer.outcome != ANSWERED:
+            await self._missed(answer, role=role, use=use, model=MODELS[wanted].model_id, run_id=run_id)
+        return answer
+
+    async def _missed(self, answer: Answer, *, role: str, use: Use, model: str, run_id: str) -> None:
+        miss = MissRow(
+            at=self._clock(),
+            role=role,
+            use=use.value,
+            model=model,
+            outcome=answer.outcome,
+            detail=answer.reason or None,
+            run_id=run_id,
+        )
+        try:
+            await self._misses.add(miss)
+        except StoreError as exc:  # the caller still gets its answer; the line says the briefing will miss it
+            say(self._log, "model_miss_not_recorded", role=role, run_id=run_id, code=exc.code.value)
+
+    async def _ask(  # noqa: PLR0913  # each is a separate fact about the call
+        self,
+        *,
+        role: str,
+        role_level: ModelLevel,
+        wanted: ModelLevel,
+        use: Use,
+        system: Sequence[PromptPart],
+        task: Sequence[PromptPart],
+        max_output_tokens: int,
+        run_id: str,
+        effort: str | None,
+    ) -> Answer:
         cleared = await self._gate.clear(
             role=role,
             role_level=role_level,

@@ -262,9 +262,18 @@ def first_line(summary: DailySummary) -> str:
 
 
 def briefing(
-    summaries: Sequence[DailySummary], *, day: date, local_time: str, late: bool
+    summaries: Sequence[DailySummary],
+    *,
+    day: date,
+    local_time: str,
+    late: bool,
+    claude: Sequence[str] = (),
 ) -> tuple[str, tuple[str, ...]]:
-    """The Board's morning message: a title and its lines (one per workspace, worst first), no links."""
+    """The Board's morning message: a title and its lines (one per workspace, worst first), no links.
+
+    ``claude`` are the Board's Claude lines (runs that did not run, caps at 80%), written by
+    ``llm_gateway.claude_lines`` from fixed templates; they come right after the count line.
+    """
     title = f"Agent Zaaheen briefing, {day.strftime('%a')} {day.day} {day.strftime('%b')}"
     lines: list[str] = []
     if late:
@@ -274,6 +283,7 @@ def briefing(
         lines.append(f"{_count(len(summaries), 'project')}; {len(needs)} need a look.")
     else:
         lines.append("No project has a summary today.")
+    lines.extend(claude)
     end = "Details on the dashboard."
     used = sum(_bytes(line) for line in lines) + _bytes(end)
     for index, summary in enumerate(_worst_first(summaries)):
