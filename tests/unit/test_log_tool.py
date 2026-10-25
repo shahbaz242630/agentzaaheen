@@ -138,5 +138,5 @@ def test_the_chat_gets_the_tool_only_while_the_skill_is_on_and_logs_are_kept(tmp
 def test_the_skill_is_in_the_catalogue_and_opens(tmp_path: Path) -> None:
     tool, skills = chat_tools.skill_tool(load_registry(PLUGINS), PLUGINS)
     assert tool is not None
-    assert "- read-logs: Read Yaqzan's own log lines" in skills
-    assert run(tool, READ_LOGS_SKILL).startswith("# Read Yaqzan's logs")
+    assert "- read-logs: Read Agent Zaaheen's own log lines" in skills
+    assert run(tool, READ_LOGS_SKILL).startswith("# Read Agent Zaaheen's logs")

@@ -77,6 +77,6 @@ Write it for someone who does not code:
 
 ## Rules
 
-- Read only. Every change is a proposal; nothing leaves Yaqzan without approval.
+- Read only. Every change is a proposal; nothing leaves Agent Zaaheen without approval.
 - One outage per report; triage each project separately.
 - Never copy secrets, personal data or whole logs into the report.

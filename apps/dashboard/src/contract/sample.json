@@ -1068,11 +1068,11 @@
       },
       {
         "id": "read-logs",
-        "description": "Read Yaqzan's own log lines for one project - its recent warnings and errors, each saying what happened, why and what to do next - and say what keeps going wrong. Use when someone asks what went wrong, why something failed or stopped, whether an error keeps repeating, or what Yaqzan did recently for a project.",
+        "description": "Read Agent Zaaheen's own log lines for one project - its recent warnings and errors, each saying what happened, why and what to do next - and say what keeps going wrong. Use when someone asks what went wrong, why something failed or stopped, whether an error keeps repeating, or what Agent Zaaheen did recently for a project.",
         "invocation": "auto",
         "requires": [],
         "missing": [],
-        "fingerprint": "64127e6da2bec001aac8a8694746e46a7c03fbc0f60e64dd66aa32fd7069d335",
+        "fingerprint": "54403bd38b3a4a8e97c84ca1210765f5de8a73a8b560f007a985bdeeca91428e",
         "state": "on"
       },
       {
@@ -1085,7 +1085,7 @@
         "missing": [
           "grafana"
         ],
-        "fingerprint": "2ef4a0125a61501830bd43aa518802b0e549117de82c82460b79179036f78fe3",
+        "fingerprint": "da50b111de3be4f401a628aa4fcb3d1f0a9198d37bdb5a56d8bb9e7a80200cd6",
         "state": "on"
       },
       {
@@ -1096,7 +1096,7 @@
           "github"
         ],
         "missing": [],
-        "fingerprint": "b9b58c1dcfaee1a2b6ba4ffe4e4a0ca60555de863202f3cfd0e877caee575f79",
+        "fingerprint": "5ee34aa01d9a2ac5359cc252b40e0d7464016735dc2b476f1b461b17d924ddc6",
         "state": "on"
       },
       {
@@ -1108,7 +1108,7 @@
           "github"
         ],
         "missing": [],
-        "fingerprint": "ce38a01a0f5b723be8b0d33b658778c65bc9e0098562cc5122f0948d08cb84b3",
+        "fingerprint": "08596485ad8b5dccdd841ac62af8d3b4712012720750d1518b549e8b29a1d719",
         "state": "on"
       }
     ],
