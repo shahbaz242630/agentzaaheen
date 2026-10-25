@@ -23,7 +23,7 @@ from uuid import UUID
 
 import asyncpg
 
-from yaqzan.core.store.db import Scoped
+from yaqzan.core.store.db import Scoped, written
 from yaqzan.core.store.errors import StoreError, StoreErrorCode
 from yaqzan.core.store.workspaces import WorkspaceRows
 
@@ -158,7 +158,7 @@ class SealedSecrets:
         """Remove one credential. Returns False if the slot was empty."""
         self._check(slot)
         async with self._scope.write("the removal of a sealed secret") as conn:
-            return await conn.fetchval(_DELETE, *slot.params()) is not None
+            return written(await conn.fetchval(_DELETE, *slot.params()))
 
 
 class AllSealedSecrets:

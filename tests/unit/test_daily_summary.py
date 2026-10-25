@@ -82,13 +82,13 @@ def summary(found: ProjectDetail | None, **more: object) -> DailySummary:
 
 def test_what_could_not_be_read_comes_first_with_its_reason() -> None:
     failed = card("paddle", "Revenue", fresh=Freshness.NEVER, metrics=(
-        Metric(label="MRR", value=NotKnown(reason="source.auth")),))  # fmt: skip
+        Metric(label="MRR", value=NotKnown(reason="source.refused")),))  # fmt: skip
     stale = card("code", "Code", fresh=Freshness.STALE, metrics=(
         Metric(label="Open issues", value=NotKnown(reason="freshness.stale")),))  # fmt: skip
     ok = card("uptime", "Uptime", metrics=(Metric(label="Up", value=Count(value=3)),))
     made = summary(detail(failed, stale, ok), not_read=(Unread(title="Agents", reason="store.unavailable"),))
     assert [(u.title, u.reason) for u in made.unread] == [
-        ("Revenue", "source.auth"), ("Code", "freshness.stale"), ("Agents", "store.unavailable"),
+        ("Revenue", "source.refused"), ("Code", "freshness.stale"), ("Agents", "store.unavailable"),
     ]  # fmt: skip
     assert [s.title for s in made.sources] == ["Uptime"]  # a failed or stale card gives no number
     assert first_line(made).startswith("Could not read Revenue, Code, Agents;")

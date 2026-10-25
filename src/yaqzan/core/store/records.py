@@ -17,7 +17,7 @@ import asyncpg
 from pydantic import BaseModel
 
 from yaqzan.core.sdk import Action, Event, Finding, RunRecord
-from yaqzan.core.store.db import Scoped, require_aware
+from yaqzan.core.store.db import Scoped, require_aware, written
 
 MAX_PAGE = 500
 
@@ -126,7 +126,7 @@ class Records:
         """Store an event once. Returns False if its idempotency key was already stored."""
         values = _values(event, _EVENT_COLUMNS, frozenset({"payload"}))
         async with self._scope.write("an event") as conn:
-            return await conn.fetchval(_INSERT_EVENT, *values) is not None
+            return written(await conn.fetchval(_INSERT_EVENT, *values))
 
     async def get_event(self, event_id: UUID) -> Event | None:
         """One event, or None if it does not exist in this workspace."""
@@ -167,7 +167,7 @@ class Records:
         """Store a proposed action once. Returns False if its idempotency key was already stored."""
         values = _values(action, _ACTION_COLUMNS, frozenset({"payload"}))
         async with self._scope.write("a proposed action") as conn:
-            return await conn.fetchval(_INSERT_ACTION, *values) is not None
+            return written(await conn.fetchval(_INSERT_ACTION, *values))
 
     async def get_action(self, action_id: UUID) -> Action | None:
         """One action, or None."""
