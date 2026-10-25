@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from yaqzan.core.registry.roles import LINE_LIMITS, load_roles, version_of
+from yaqzan.core.sdk import ModelLevel
 
 CARD = """# Monitoring
 
@@ -121,3 +122,20 @@ def test_a_missing_library_folder_is_a_problem_not_a_crash(tmp_path: Path) -> No
     library = load_roles(tmp_path / "nowhere")
     assert library.packs == ()
     assert [p.code for p in library.problems] == ["role.no_library"]
+
+
+def test_a_pack_carries_the_model_level_its_card_names(tmp_path: Path) -> None:
+    folder = pack(tmp_path, "head-of-engineering")
+    card = (folder / "ROLE.md").read_text(encoding="utf-8")
+    (folder / "ROLE.md").write_text(
+        card.replace("| **Held by** |", "| **Model** | Claude Opus 5.5, medium effort |\n| **Held by** |"),
+        encoding="utf-8",
+    )
+    (role,) = load_roles(tmp_path).packs
+    assert role.level is ModelLevel.OPUS
+
+
+def test_a_pack_whose_card_names_no_model_gets_level_0(tmp_path: Path) -> None:
+    pack(tmp_path, "monitoring")
+    (role,) = load_roles(tmp_path).packs
+    assert role.level is ModelLevel.CODE

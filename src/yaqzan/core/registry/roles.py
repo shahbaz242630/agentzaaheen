@@ -5,6 +5,9 @@ laptop, a folder on the server); they are never in the public repository.
 Each pack is a folder of short Markdown files. A pack becomes an agent only if
 it is an AI job: its job card's "Highest permission" starts with Read, Draft
 or Act (the Board's own packs, Chairman and CEO, are people, not agents).
+Its card's "Model" row gives its model level (ADR-033): the gateway refuses
+any call above it. A row that names no known model gives level 0 (plain code,
+no model), so an unclear pack can never reach a stronger model than intended.
 
 Every file is read with the registry's safe reader (size cap, no links, UTF-8).
 A pack's ``version`` is the SHA-256 of its files' names and text, so the copy
@@ -20,6 +23,7 @@ from pathlib import Path
 from typing import Literal
 
 from yaqzan.core.registry.files import ItemError, read_text
+from yaqzan.core.sdk import ModelLevel
 
 Permission = Literal["read", "draft", "act"]
 
@@ -35,6 +39,7 @@ LINE_LIMITS = {
 }
 MAX_PACK_FILES = 40
 _PERMISSION = re.compile(r"^\|\s*\*\*Highest permission\*\*\s*\|\s*([A-Za-z]+)", re.MULTILINE)
+_MODEL = re.compile(r"^\|\s*\*\*Model\*\*\s*\|([^|\n]*)\|", re.MULTILINE)
 _TITLE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 _MISSION = re.compile(r"^## Mission\s*\n+(.+?)\s*$", re.MULTILINE)
 
@@ -49,6 +54,7 @@ class RolePack:
     permission: Permission
     files: dict[str, str]
     version: str
+    level: ModelLevel = ModelLevel.CODE
 
 
 @dataclass(frozen=True)
@@ -121,6 +127,7 @@ def _pack(folder: Path) -> RolePack:
         permission=_permission(card, folder.name),
         files=files,
         version=version_of(files),
+        level=level_of(card),
     )
 
 
@@ -153,6 +160,19 @@ def _permission(card: str, role_id: str) -> Permission:
     raise ItemError(
         "role.not_an_agent", f"{role_id} is not an AI job (its highest permission is not Read, Draft or Act)"
     )
+
+
+def level_of(card: str) -> ModelLevel:
+    """The model level a job card's "Model" row names; level 0 (no model) if it names none we know."""
+    match = _MODEL.search(card)
+    words = match.group(1).replace("*", "").strip().lower() if match else ""
+    if words.startswith("claude opus"):
+        return ModelLevel.OPUS
+    if words.startswith("claude sonnet"):
+        return ModelLevel.SONNET
+    if words.startswith("local") or (words.startswith("code") and "local model" in words):
+        return ModelLevel.LOCAL
+    return ModelLevel.CODE
 
 
 def _first(pattern: re.Pattern[str], text: str, default: str) -> str:
