@@ -30,6 +30,7 @@ from yaqzan.core.llm_gateway import (
 from yaqzan.core.llm_gateway.route import worst_case_micro
 from yaqzan.core.llm_gateway.spend import month_bounds, month_of
 from yaqzan.core.sdk import DataClass, ModelLevel, install_log_sink
+from yaqzan.core.vault import MasterKey, NamePrinter
 
 OCT = datetime(2026, 10, 25, 9, 0, tzinfo=UTC)
 OPS = (PromptPart("Head of Engineering: 3 builds failed this week.", DataClass.INTERNAL),)
@@ -321,9 +322,12 @@ def test_just_under_80_percent_is_not_yet_a_notice() -> None:
     assert asyncio.run(SpendLedger(book, clock=Clock(OCT)).notices()) == []
 
 
+OWN_KEY = NamePrinter(MasterKey("names-7", bytes(range(1, 33))))
+
+
 class Prints:
     def __init__(self, names: list[str]) -> None:
-        self.rows = {(p.kind.value, p.print) for p in prints_of(names, PRINTER)}
+        self.rows = {(p.kind.value, p.print) for p in prints_of(names, OWN_KEY)}
         self.asked: list[str] = []
 
     async def made_with(self, key_id: str) -> set[tuple[str, bytes]]:
@@ -333,13 +337,13 @@ class Prints:
 
 def test_the_stored_list_is_read_fresh_for_each_call_with_this_keys_prints_only() -> None:
     rows = Prints(["Fatima Al Mansoori"])
-    g = ModelGate(SpendLedger(MemoryBook(), clock=Clock(OCT)), StoreNames(rows, PRINTER))
+    g = ModelGate(SpendLedger(MemoryBook(), clock=Clock(OCT)), StoreNames(rows, OWN_KEY))
     named = PromptPart("Fatima Al Mansoori asked again.", DataClass.INTERNAL)
     assert clear(g, parts=(*OPS, named)).refusal is Refusal.CUSTOMER_DATA
     assert clear(g).refusal is None
-    rows.rows |= {(p.kind.value, p.print) for p in prints_of(["Grace"], PRINTER)}  # a name added since
+    rows.rows |= {(p.kind.value, p.print) for p in prints_of(["Grace"], OWN_KEY)}  # a name added since
     assert (
         clear(g, parts=(*OPS, PromptPart("Grace wrote in.", DataClass.INTERNAL))).refusal
         is Refusal.CUSTOMER_DATA
     )
-    assert rows.asked == ["test-names"] * 3
+    assert rows.asked == ["names-7"] * 3  # only prints made with this key
