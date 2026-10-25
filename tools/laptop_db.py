@@ -65,11 +65,11 @@ EXIT_ERROR = dev_db.EXIT_ERROR
 EXIT_LOW_MEMORY = dev_db.EXIT_LOW_MEMORY
 
 _NAMESPACE = UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8")  # the URL namespace
-LAPTOP_TENANT = uuid5(_NAMESPACE, "agentzaaheen:laptop")
+# The ids are made from fixed text that keeps the old name for good: change it and every id changes,
+# and the saved switches, passkey and workspaces would belong to a tenant no one uses.
+LAPTOP_TENANT = uuid5(_NAMESPACE, "yaqzan:laptop")
 LAPTOP_WORKSPACES = tuple(
-    WorkspaceRow(
-        workspace_id=uuid5(_NAMESPACE, f"agentzaaheen:laptop:workspace:{slug}"), slug=slug, name=name
-    )
+    WorkspaceRow(workspace_id=uuid5(_NAMESPACE, f"yaqzan:laptop:workspace:{slug}"), slug=slug, name=name)
     for slug, name in (
         ("zaaheen", "Zaaheen"),
         ("sandoq-kin", "Sandoq Kin"),
