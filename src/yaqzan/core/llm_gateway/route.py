@@ -4,8 +4,9 @@ Three checks, in this order, each logged in plain English:
 
 1. **The role's level.** A role may use only a model at or below the level its
    pack names. Level 0 has no model at all.
-2. **Customer data** (cloud models only): one part tagged customer data, or
-   anything the second net finds, refuses the call; nothing is trimmed.
+2. **Customer data** (cloud models only): one part tagged customer data, one
+   of our own customers' names, or anything the second net finds refuses the
+   call; nothing is trimmed. With no name list, no cloud call may go.
 3. **The spend caps** (cloud models only): the call's worst case must fit
    under its use's cap and the total this month.
 
@@ -19,8 +20,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
-from yaqzan.core.llm_gateway.cloud_check import PromptPart, customer_data_in
+from yaqzan.core.llm_gateway.cloud_check import Found, KnownNames, PromptPart, customer_data_in
 from yaqzan.core.llm_gateway.model_map import MODELS, ModelEntry, Usage, cost_micro_usd, usd
 from yaqzan.core.llm_gateway.spend import SpendLedger, Use
 from yaqzan.core.sdk import ModelLevel, get_logger, say
@@ -46,11 +48,31 @@ class Clearance:
     upto_micro: int = 0
 
 
+class NameSource(Protocol):
+    """Where our own customers' names come from (the store, slice 2b), read fresh for each cloud call."""
+
+    async def known_names(self) -> KnownNames:
+        """Every customer name we hold, across all workspaces."""
+        ...
+
+
+class FixedNames:
+    """A name list that does not change: for tests, and an explicit empty list before there are customers."""
+
+    def __init__(self, names: KnownNames) -> None:
+        self._names = names
+
+    async def known_names(self) -> KnownNames:
+        """The same list every time."""
+        return self._names
+
+
 class ModelGate:
     """Decides whether one role may make one model call, and records what Claude calls cost."""
 
-    def __init__(self, ledger: SpendLedger) -> None:
+    def __init__(self, ledger: SpendLedger, names: NameSource | None = None) -> None:
         self._ledger = ledger
+        self._names = names
         self._log = get_logger("yaqzan.models")
 
     async def clear(  # noqa: PLR0913  # each is a separate fact the gate checks
@@ -95,7 +117,7 @@ class ModelGate:
                 reason=Refusal.NO_USE.value,
             )
             return Clearance(Refusal.NO_USE)
-        found = customer_data_in(parts)
+        found = customer_data_in(parts, await self._known_names())
         if found is not None:
             say(self._log, "model_customer_data_refused", role=role, model=entry.model_id, reason=found.value)
             return Clearance(Refusal.CUSTOMER_DATA)
@@ -108,6 +130,16 @@ class ModelGate:
         if model.cloud:
             await self._ledger.record(use, model.model_id, micro)
         return micro
+
+    async def _known_names(self) -> KnownNames | None:
+        """The name list, or ``None`` (so the call is refused) if there is none or it could not be read."""
+        if self._names is None:
+            return None
+        try:
+            return await self._names.known_names()
+        except Exception:  # noqa: BLE001  # whatever failed, no list means no cloud call
+            say(self._log, "model_names_unreadable", reason=Found.NO_NAME_LIST.value)
+            return None
 
     async def _spend(  # the facts the spend check needs
         self, role: str, entry: ModelEntry, use: Use, parts: Sequence[PromptPart], max_output_tokens: int

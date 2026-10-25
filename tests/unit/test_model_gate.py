@@ -14,6 +14,8 @@ from yaqzan.core.llm_gateway import (
     MODELS,
     TOTAL_STOP_USD,
     Clearance,
+    FixedNames,
+    KnownNames,
     MemoryBook,
     ModelGate,
     PromptPart,
@@ -47,9 +49,12 @@ class Clock:
         return self.now
 
 
+NAMES = FixedNames(KnownNames(["Fatima Al Mansoori", "Grace"]))
+
+
 def gate(clock: Clock | None = None, book: MemoryBook | None = None) -> tuple[ModelGate, SpendLedger]:
     ledger = SpendLedger(book or MemoryBook(), clock=clock or Clock(OCT))
-    return ModelGate(ledger), ledger
+    return ModelGate(ledger, NAMES), ledger
 
 
 def clear(  # mirrors the gate's own knobs
@@ -151,6 +156,47 @@ def test_customer_data_refuses_a_cloud_call_and_the_log_never_holds_it(
     assert asyncio.run(ledger.notices()) == []
 
 
+def test_one_of_our_customers_names_refuses_a_cloud_call(lines: list[dict[str, object]]) -> None:
+    g, _ = gate()
+    named = PromptPart("Fatima Al Mansoori asked about the refund.", DataClass.INTERNAL)
+    assert clear(g, parts=(*OPS, named)).refusal is Refusal.CUSTOMER_DATA
+    assert lines[-1]["reason"] == "known_customer_name"
+    assert "Fatima" not in json.dumps(lines)
+
+
+def test_each_name_block_says_which_kind_of_name_it_was(lines: list[dict[str, object]]) -> None:
+    g, _ = gate()
+    assert clear(g, parts=(*OPS, PromptPart("Grace asked about it.", DataClass.INTERNAL))).refusal is (
+        Refusal.CUSTOMER_DATA
+    )
+    assert lines[-1]["reason"] == "known_customer_single_name"
+    assert (
+        clear(g, parts=(*OPS, PromptPart("A 7-day grace period applies.", DataClass.INTERNAL))).refusal
+        is None
+    )
+
+
+def test_a_gate_with_no_name_list_refuses_every_cloud_call_but_not_our_own_models() -> None:
+    g = ModelGate(SpendLedger(MemoryBook(), clock=Clock(OCT)))
+    assert clear(g).refusal is Refusal.CUSTOMER_DATA
+    local = clear(g, role_level=ModelLevel.LOCAL, wanted=ModelLevel.LOCAL, use=None)
+    assert local.refusal is None
+
+
+class BrokenNames:
+    async def known_names(self) -> KnownNames:
+        raise RuntimeError("database down")
+
+
+def test_a_name_list_that_cannot_be_read_refuses_the_call_and_says_why(
+    lines: list[dict[str, object]],
+) -> None:
+    g = ModelGate(SpendLedger(MemoryBook(), clock=Clock(OCT)), BrokenNames())
+    assert clear(g).refusal is Refusal.CUSTOMER_DATA
+    assert events(lines) == ["model_names_unreadable", "model_customer_data_refused"]
+    assert lines[-1]["reason"] == "no_name_list"
+
+
 def test_no_prompt_text_is_ever_logged(lines: list[dict[str, object]]) -> None:
     g, _ = gate()
     clear(g)
@@ -188,7 +234,7 @@ def test_a_call_that_still_fits_is_cleared_right_up_to_the_cap() -> None:
 def test_the_total_stops_everything_even_when_a_use_has_room() -> None:
     book = MemoryBook()
     asyncio.run(book.add(Use.HEADS, "2026-10", 10_000_000))
-    g = ModelGate(SpendLedger(book, total_usd=10, clock=Clock(OCT)))
+    g = ModelGate(SpendLedger(book, total_usd=10, clock=Clock(OCT)), NAMES)
     result = clear(g, role_level=ModelLevel.OPUS, wanted=ModelLevel.SONNET, use=Use.BOARD_CHAT)
     assert result.refusal is Refusal.TOTAL_STOP
 
