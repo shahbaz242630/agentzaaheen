@@ -26,7 +26,7 @@ from yaqzan.core.llm_gateway import FactChat
 from yaqzan.core.llm_gateway.tools import Tool
 from yaqzan.core.net import JsonClient, ModelClient, NetError, NetPolicy, PushClient, StatusProbe
 from yaqzan.core.store import StoreError, StoreErrorCode
-from yaqzan.core.store.db import Database, written
+from yaqzan.core.store.db import Database, changed, written
 
 NOW = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
 HOST = "api.example.com"
@@ -257,6 +257,23 @@ def test_a_write_that_found_its_row_already_there_says_nothing_needed_writing(
     assert [line["what"].split(" (")[0] for line in unchanged] == ["Nothing needed writing for a workspace"]
     # The next write starts afresh: one "nothing" never makes a later real write look unchanged.
     assert [line["record"] for line in saved] == ["a workspace"]
+
+
+def test_an_update_that_matched_no_row_says_nothing_needed_writing(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async def body() -> list[bool]:
+        db = Database(_Pool())  # type: ignore[arg-type]  # a fake pool
+        found = []
+        for status in ("UPDATE 0", "UPDATE 1", "INSERT 0 1", "DELETE 0", "UPDATE 2"):
+            async with db.write(f"a briefing ({status})"):
+                found.append(changed(status))
+        return found
+
+    assert asyncio.run(body()) == [False, True, True, False, True]
+    err = capsys.readouterr().err
+    unchanged = [json.loads(raw)["record"] for raw in err.splitlines() if '"store_unchanged"' in raw]
+    assert unchanged == ["a briefing (UPDATE 0)", "a briefing (DELETE 0)"]
 
 
 def test_nothing_written_inside_a_write_does_not_leak_out_of_it(capsys: pytest.CaptureFixture[str]) -> None:

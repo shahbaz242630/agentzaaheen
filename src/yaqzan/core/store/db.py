@@ -50,6 +50,17 @@ def written(row: object) -> bool:
     return row is not None
 
 
+def changed(status: str) -> bool:
+    """True if a write's ``execute`` status (``"UPDATE 1"``) counts a row; if not, it logs nothing was needed.
+
+    Call it inside the write's ``async with`` block, with what ``execute`` returned.
+    """
+    done = status.rsplit(" ", 1)[-1] not in {"0", ""}
+    if not done:
+        _NOTHING_WRITTEN.set(True)
+    return done
+
+
 class DatabaseSettings(BaseModel):
     """How to reach the database. The DSN holds a password, so it is a ``SecretStr``."""
 
