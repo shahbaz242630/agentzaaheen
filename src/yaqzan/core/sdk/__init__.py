@@ -10,7 +10,8 @@ What it does:
     (an address's rule, its status and timing, never its page) and the
     backend health shapes (codes and numbers only), the repository bundle
     the scout reads (paths and untrusted file text, secret files never), what a
-    project is built with (languages, and providers code found), and spans: :func:`span`
+    project is built with (languages, and providers code found), the model
+    levels of the model map (ADR-033), and spans: :func:`span`
     opens one, :func:`traceparent` names the current one, and every log line
     inside a span carries its IDs (ADR-032); :func:`install_log_sink` lets
     telemetry ship each redacted line.
@@ -38,6 +39,7 @@ from yaqzan.core.sdk.backend import (
 from yaqzan.core.sdk.code import REPO_PATTERN, BuildState, RepoHealth, RepoSource
 from yaqzan.core.sdk.events import LOG_EVENTS, LogEvent, elapsed_ms, say
 from yaqzan.core.sdk.explain import KNOWN_CODES, Explanation, explain
+from yaqzan.core.sdk.levels import ModelLevel
 from yaqzan.core.sdk.log import (
     REDACTED,
     LogSink,
@@ -184,6 +186,7 @@ __all__ = [
     "LogEvent",
     "LogSink",
     "ModelInfo",
+    "ModelLevel",
     "Payment",
     "PaymentStatus",
     "ProjectState",

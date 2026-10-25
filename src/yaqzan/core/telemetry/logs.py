@@ -76,6 +76,16 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "checked",
         "failing",
         "changes",
+        # F10: the model map (our own role ids, levels, use names and amounts)
+        "role",
+        "model_level",
+        "role_level",
+        "use",
+        "percent",
+        "estimate_usd",
+        "spent_usd",
+        "cap_usd",
+        "cost_usd",
     }
 )
 

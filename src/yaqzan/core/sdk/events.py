@@ -300,6 +300,65 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         explains="code",
         vendor="source",
     ),
+    # ---- the model map (F10, ADR-033): which model a role may use, customer data, spend caps
+    "model_call_refused": LogEvent(
+        "warning",
+        what="The {role} role asked for a level {model_level} model and was refused ({reason}).",
+        why="A role may only use a model at or below its pack's level ({role_level}); level 0 has no model.",
+        next="Nothing is sent anywhere. If the role needs a stronger model, its pack must say so first.",
+    ),
+    "model_call_cleared_local": LogEvent(
+        "info",
+        what="The {role} role may use our own model {model} (level {model_level}).",
+        why="It is at or below the role's level, and our own models cost nothing per call.",
+    ),
+    "model_customer_data_refused": LogEvent(
+        "warning",
+        what="A call to {model} from the {role} role was refused: the prompt holds customer data ({reason}).",
+        why="Customer data never goes to a cloud model (ADR-023); the call is refused, not trimmed.",
+        next="Run that job on our local model, or build its prompt from cleaned totals and findings only.",
+    ),
+    "model_cloud_check_passed": LogEvent(
+        "info",
+        what="The prompt for {model} passed the customer-data check ({checked} parts).",
+        why=(
+            "No part is tagged customer data, and the second net found no email, phone number,"
+            " card number or customer ID."
+        ),
+    ),
+    "model_call_cleared": LogEvent(
+        "info",
+        what=(
+            "The {role} role may call {model} for {use}: up to {estimate_usd} USD,"
+            " with {spent_usd} of {cap_usd} USD spent this month."
+        ),
+        why="The worst case of this call still fits under that use's cap and the monthly total.",
+    ),
+    "model_spend_refused": LogEvent(
+        "warning",
+        what=(
+            "A call to {model} from the {role} role was refused ({reason}): up to {estimate_usd} USD"
+            " would pass the {use} cap, with {spent_usd} of {cap_usd} USD spent this month."
+        ),
+        why="The monthly caps are in code (ADR-033) so no one use can eat the month's Claude credit.",
+        next=(
+            "The run is marked did not run, never answered by a weaker model."
+            " Changing a cap is the Chairman's call."
+        ),
+    ),
+    "model_spend_recorded": LogEvent(
+        "info",
+        what=(
+            "A call to {model} cost {cost_usd} USD for {use}; {spent_usd} of {cap_usd} USD spent this month."
+        ),
+        why="Worked out from the API's own token counts and the pinned price table.",
+    ),
+    "model_spend_notice": LogEvent(
+        "warning",
+        what="The {use} cap is at {percent}% of its {cap_usd} USD this month.",
+        why="The last Claude call crossed the 80% line.",
+        next="It is named in the morning briefing; at 100% that use stops until next month.",
+    ),
     # ---- the scout (F17 slice 5b-2): it reads a repository and advises; it switches nothing on
     "scout_asked": LogEvent(
         "info",
