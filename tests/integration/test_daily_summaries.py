@@ -11,6 +11,7 @@ Healthchecks check once; a briefing that was not sent never does.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -354,3 +355,23 @@ def test_a_day_with_an_earlier_summary_says_what_changed(test_db: ScratchDb) -> 
             assert made.compared_with == yesterday.day
 
     run(body())
+
+
+def test_marking_a_sent_briefing_again_logs_that_nothing_needed_writing(
+    test_db: ScratchDb, capsys: pytest.CaptureFixture[str]
+) -> None:
+    async def body() -> None:
+        async with open_db(test_db.app_url) as db:
+            briefings = Briefings(db.scoped(TENANT))
+            assert await briefings.open(DAY, title="Briefing", message="One line.", made_at=NOW)
+            assert await briefings.sent(DAY, at=NOW)
+            capsys.readouterr()  # only the late writes' lines
+            assert not await briefings.sent(DAY, at=NOW)
+            assert not await briefings.not_sent(DAY, "net.timeout")
+
+    run(body())
+    events = [json.loads(raw) for raw in capsys.readouterr().err.splitlines() if raw.startswith("{")]
+    said = [(e["event"], e["record"]) for e in events if e.get("event", "").startswith("store_")]
+    assert said == [
+        ("store_unchanged", "a briefing sent"), ("store_unchanged", "a briefing not sent"),
+    ]  # fmt: skip

@@ -8,6 +8,7 @@ workspace and go when it is deleted for good; every ask is audited.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -240,3 +241,23 @@ def test_a_new_run_id_is_used_each_time(test_db: ScratchDb) -> None:
             assert isinstance(uuid4(), UUID)
 
     run(body())
+
+
+def test_closing_a_run_that_already_ended_logs_that_nothing_needed_writing(
+    test_db: ScratchDb, capsys: pytest.CaptureFixture[str]
+) -> None:
+    async def body() -> None:
+        async with open_db(test_db.app_url) as db:
+            _verdict, run_id = await ask(db)
+            assert run_id is not None
+            assert await scout(db).finish(SHOP, run_id, REPORT)
+            capsys.readouterr()  # only the late writes' lines
+            assert not await scout(db).fail(SHOP, run_id, "scout.late")
+            await scout(db).stage(SHOP, run_id, "checking")
+
+    run(body())
+    events = [json.loads(raw) for raw in capsys.readouterr().err.splitlines() if raw.startswith("{")]
+    said = [(e["event"], e["record"]) for e in events if e.get("event", "").startswith("store_")]
+    assert said == [
+        ("store_unchanged", "a failed scout run"), ("store_unchanged", "a scout run's stage"),
+    ]  # fmt: skip

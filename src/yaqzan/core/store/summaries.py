@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Literal
 
-from yaqzan.core.store.db import Scoped, require_aware
+from yaqzan.core.store.db import Scoped, changed, require_aware
 from yaqzan.core.store.errors import StoreError, StoreErrorCode
 
 BriefingState = Literal["waiting", "sent", "not_sent"]
@@ -117,19 +117,15 @@ class Briefings:
         """Mark the day's briefing as sent. ``False`` if there is none, or it was already sent."""
         require_aware(at)
         async with self._scope.write("a briefing sent") as conn:
-            return _changed(await conn.execute(_SENT, self._tenant, day, at))
+            return changed(await conn.execute(_SENT, self._tenant, day, at))
 
     async def not_sent(self, day: date, reason: str) -> bool:
         """Mark the day's briefing as not sent, with why. ``False`` if there is none, or it was sent."""
         async with self._scope.write("a briefing not sent") as conn:
-            return _changed(await conn.execute(_NOT_SENT, self._tenant, day, reason))
+            return changed(await conn.execute(_NOT_SENT, self._tenant, day, reason))
 
     async def recent(self, *, until: date, days: int = 7) -> list[BriefingRow]:
         """Up to ``days`` briefings on or before ``until``, newest first."""
         async with self._scope.connection() as conn:
             rows = await conn.fetch(_BRIEFINGS, self._tenant, until, _limit(days))
         return [BriefingRow(**dict(row)) for row in rows]
-
-
-def _changed(status: str) -> bool:
-    return status.rsplit(" ", 1)[-1] == "1"

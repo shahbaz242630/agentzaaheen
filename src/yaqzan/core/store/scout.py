@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from yaqzan.core.store.db import Scoped, require_aware
+from yaqzan.core.store.db import Scoped, changed, require_aware
 from yaqzan.core.store.errors import StoreError, StoreErrorCode
 
 RunState = Literal["running", "done", "failed"]
@@ -91,28 +91,22 @@ class ScoutRuns:
     async def stage(self, run_id: UUID, stage: Stage, *, branch: str | None = None) -> None:
         """Move a running run to its next stage (and record the branch once it is known)."""
         async with self._scope.write("a scout run's stage") as conn:
-            await conn.execute(_STAGE, *self._key, run_id, stage, branch)
+            changed(await conn.execute(_STAGE, *self._key, run_id, stage, branch))
 
     async def finish(self, run_id: UUID, result: dict[str, Any], *, at: datetime) -> bool:
         """Close a run as done with its checked advice. ``False`` if it was not running any more."""
         require_aware(at)
         async with self._scope.write("a scout run's advice") as conn:
-            status = await conn.execute(_FINISH, *self._key, run_id, "done", at, result, None)
-        return _changed(status)
+            return changed(await conn.execute(_FINISH, *self._key, run_id, "done", at, result, None))
 
     async def fail(self, run_id: UUID, reason: str, *, at: datetime) -> bool:
         """Close a run as failed with a reason code. ``False`` if it was not running any more."""
         require_aware(at)
         async with self._scope.write("a failed scout run") as conn:
-            status = await conn.execute(_FINISH, *self._key, run_id, "failed", at, None, reason)
-        return _changed(status)
+            return changed(await conn.execute(_FINISH, *self._key, run_id, "failed", at, None, reason))
 
     async def latest(self) -> ScoutRun | None:
         """The newest run in this workspace, or ``None``."""
         async with self._scope.connection() as conn:
             row = await conn.fetchrow(_LATEST, *self._key)
         return None if row is None else ScoutRun(**dict(row))
-
-
-def _changed(status: str) -> bool:
-    return status.rsplit(" ", 1)[-1] == "1"
