@@ -27,6 +27,8 @@ DOORS = {
     # Removing a project: the workspace comes from the API door's address (archive) or the archived list.
     # Adding one: the new workspace's id is made right there; its repository list, one workspace at a time.
     "src/yaqzan/core/policy/workspaces.py",
+    # The scout: the workspace comes from the API door's address; its runs are saved behind its wall.
+    "src/yaqzan/core/policy/scout.py",
     # The laptop set-up: its own five fixed workspaces, one at a time, to save each one's repository once.
     "tools/laptop_db.py",
 }

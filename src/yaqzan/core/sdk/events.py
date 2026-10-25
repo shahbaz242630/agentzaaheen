@@ -284,6 +284,22 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         explains="code",
         vendor="source",
     ),
+    # ---- the scout (F17 slice 5b-2): it reads a repository and advises; it switches nothing on
+    "scout_asked": LogEvent(
+        "info",
+        what="The scout was asked about the {workspace} workspace: {verdict}.",
+        why="The Chairman pressed Ask the scout on that workspace's page.",
+    ),
+    "scout_finished": LogEvent(
+        "info",
+        what="The scout finished the {workspace} workspace in {duration_ms} ms: {entries} roles reviewed.",
+        why="It read the repository, the local model answered, and code checked the answer.",
+    ),
+    "scout_failed": LogEvent(
+        "warning",
+        what="The scout could not finish the {workspace} workspace (stage {stage}): {said}",
+        explains="code",
+    ),
     # ---- revenue sync
     "revenue_synced": LogEvent(
         "info",

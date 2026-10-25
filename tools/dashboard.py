@@ -69,7 +69,7 @@ import json
 import os
 import secrets
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -79,9 +79,10 @@ from fastapi import FastAPI
 from pydantic import SecretStr
 
 from tools import laptop_db
-from tools.chat_tools import Switched, model_chat, tools_for
+from tools.chat_tools import LOCAL_MODEL_ID, Switched, model_chat, tools_for
 from tools.dashboard_adding import LaptopAdding
 from tools.dashboard_profile import LaptopProfiles, Repos
+from tools.dashboard_scout import LaptopScout
 from tools.dashboard_sources import (
     GITHUB_REPOS,
     Clock,
@@ -103,6 +104,7 @@ from yaqzan.core.api.uptime import CARD_ID as UPTIME_CARD
 from yaqzan.core.api.workspaces import WorkspaceDirectory
 from yaqzan.core.auth import Site
 from yaqzan.core.llm_gateway import Tool
+from yaqzan.core.net import ModelClient, NetError
 from yaqzan.core.policy import Standing
 from yaqzan.core.registry import Registry, load_registry
 from yaqzan.core.registry.roles import RoleLibrary, load_roles
@@ -116,6 +118,7 @@ PLUGINS_ROOT = UI_ROOT.parent.parent / "src" / "yaqzan" / "plugins"
 ROLES_ROOT = UI_ROOT.parent.parent / "docs" / "hr" / "roles"
 CONTRACT_TIME = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 HOST = "127.0.0.1"
+SCOUT_TIMEOUT_S = 900.0  # one scout answer takes about 5 minutes on the server's CPU
 DEFAULT_PORT = 8765
 # Which card each connector feeds, on which projects (handoffs/CONNECTORS-CHECKLIST).
 # Uptime is added per run, for the projects on the local list.
@@ -346,6 +349,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         return 1
     chosen = portfolio or SamplePortfolio(clock())
     switches = None
+    library = _library(ns.roles)
     if connected is not None:
         code = secrets.token_hex(4) if ns.enrol_passkey else None
         switches = LaptopSwitches(
@@ -355,7 +359,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
             clock,
             site=Site(origin=f"http://localhost:{ns.port}"),
             enrol_code=code,
-            library=_library(ns.roles),
+            library=library,
         )
         if code is not None:
             print(f"dashboard: passkey set-up is open. The code to type on the Customize page is {code}")
@@ -365,6 +369,15 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
     usable = SecretStr(github_token) if github_token and usable_secret(github_token) else None
     adding = LaptopAdding(switches, usable, transport) if switches is not None else None
     profiles = LaptopProfiles(usable, _repos_of(switches), clock, transport)
+    scout = _scout(
+        ns.model_url,
+        switches,
+        token=usable,
+        library=library,
+        profiles=profiles,
+        clock=clock,
+        transport=transport,
+    )
     # The workspaces the door knows (ADR-039): the laptop database's, or the fixed five without it.
     known = connected.workspaces if connected else laptop_db.LAPTOP_WORKSPACES
     # Read again whenever a workspace is archived or brought back.
@@ -397,7 +410,8 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         removal=switches,
         adding=adding,
         profiles=profiles,
-        on_close=switches.close if switches is not None else None,
+        scout=scout,
+        on_close=_closer(switches, scout),
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
@@ -407,6 +421,51 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
     print(f"dashboard: open http://localhost:{ns.port} ({what}; press Ctrl+C to stop)")
     (serve or _serve)(app, HOST, ns.port)
     return 0
+
+
+def _scout(  # noqa: PLR0913  # the model, the database, GitHub, the roles, more facts, the outside world
+    model_url: str | None,
+    switches: LaptopSwitches | None,
+    *,
+    token: SecretStr | None,
+    library: RoleLibrary,
+    profiles: LaptopProfiles,
+    clock: Clock,
+    transport: httpx.AsyncBaseTransport | None,
+) -> LaptopScout | None:
+    """The scout, if there is a database and a model (it needs both to save and to think)."""
+    if switches is None or not model_url:
+        return None
+    try:
+        model = ModelClient(model_url, timeout_s=SCOUT_TIMEOUT_S, transport=transport)
+    except NetError:
+        return None  # the chat says why the address was refused
+    return LaptopScout(
+        control=switches.scout_control,
+        repos=switches.repos_in_use,
+        token=token,
+        model=model,
+        model_id=LOCAL_MODEL_ID,
+        library=library,
+        clock=clock,
+        profiles=profiles,
+        transport=transport,
+    )
+
+
+def _closer(
+    switches: LaptopSwitches | None, scout: LaptopScout | None
+) -> Callable[[], Awaitable[None]] | None:
+    """What to close when the server stops: the scout's runs first, then the database."""
+    if switches is None:
+        return None
+
+    async def close() -> None:
+        if scout is not None:
+            await scout.close()
+        await switches.close()
+
+    return close
 
 
 def _repos_of(switches: LaptopSwitches | None) -> Repos:

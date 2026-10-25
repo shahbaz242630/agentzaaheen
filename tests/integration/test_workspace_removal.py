@@ -51,7 +51,7 @@ NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 PROJECT_TABLES = (
     "events", "runs", "findings", "actions", "sealed_secrets", "revenue_subscriptions",
     "revenue_payments", "revenue_refunds", "source_syncs", "workspace_settings", "agents",
-    "workspace_sources",
+    "workspace_sources", "scout_runs",
 )  # fmt: skip
 
 

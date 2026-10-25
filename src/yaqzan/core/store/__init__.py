@@ -7,7 +7,7 @@ What it does:
     and requests (ADR-030), the passkey (ADR-SEC-007), the revenue mirror
     (subscriptions, payments, refunds), each collector's sync state, the
     tenants and workspaces (archived, brought back or deleted for good, and the
-    GitHub repository each reads),
+    GitHub repository each reads, and the scout's runs and checked advice),
     and each workspace's agents, switch and cap with
     the frozen role versions they run (ADR-039). Every table has a ``tenant_id`` and sits
     behind a database wall (row-level security, forced): each transaction
@@ -54,6 +54,7 @@ from yaqzan.core.store.registry_switches import (
     SwitchRow,
 )
 from yaqzan.core.store.revenue import MAX_ROWS, RevenueRows, SyncState
+from yaqzan.core.store.scout import INTERRUPTED, ScoutRun, ScoutRuns
 from yaqzan.core.store.sealed import (
     Access,
     AllSealedSecrets,
@@ -73,6 +74,7 @@ from yaqzan.core.store.workspaces import (
 )
 
 __all__ = [
+    "INTERRUPTED",
     "LATEST_VERSION",
     "MAX_PAGE",
     "MAX_ROWS",
@@ -104,6 +106,8 @@ __all__ = [
     "RoleVersion",
     "RoleVersionRows",
     "Scoped",
+    "ScoutRun",
+    "ScoutRuns",
     "SealedRow",
     "SealedSecrets",
     "SlotKey",
