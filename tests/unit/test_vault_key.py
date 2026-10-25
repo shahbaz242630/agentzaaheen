@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,8 @@ def test_no_key_file_or_a_bad_one_gives_no_keyring_and_says_why(
     assert "Make one: python -m tools.vault_key make-key" in capsys.readouterr().out
     bad = tmp_path / "bad.key"
     bad.write_text("not a key\n", encoding="ascii")
+    if os.name == "posix":  # a key file must be private there, or it is refused before it is read
+        bad.chmod(0o600)
     assert vault_key.load_keyring(bad) is None
     assert "could not be used (vault.bad_key_file)" in capsys.readouterr().out
 
