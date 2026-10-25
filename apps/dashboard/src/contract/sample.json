@@ -997,12 +997,13 @@
           "GET /subscriptions",
           "GET /transactions",
           "GET /adjustments",
-          "GET /discounts"
+          "GET /discounts",
+          "GET /customers"
         ],
         "key_slots": [
           "api_key"
         ],
-        "fingerprint": "da29bcd1f657e1c5a25d41697f69972bb05505e71758076194fed0c9c1b5bc9f",
+        "fingerprint": "8aa194edb9844366bca2c7f9a6c479b8e84950473cf5b1dd02e20d7c4eebf73c",
         "uses": [
           {
             "project_id": "zaaheen",

@@ -1,10 +1,14 @@
 """The real Paddle source: named read-only GETs, paged, mapped to SDK shapes.
 
-It only ever calls four list endpoints (subscriptions, transactions,
-adjustments, discounts) through the ``JsonGetter`` the core hands it, so it
+It only ever calls five list endpoints (subscriptions, transactions,
+adjustments, discounts, customers) through the ``JsonGetter`` the core hands it, so it
 holds no key and opens no socket itself. Paging follows Paddle's own
 ``meta.pagination.next`` link and stops at a page cap rather than looping
 forever on a misbehaving API.
+
+Customers are read for one thing only: their names, which the caller turns
+into fingerprints straight away (the customer-data check, ADR-023). Nothing
+else about a customer is read, and the names are never part of a batch.
 """
 
 from __future__ import annotations
@@ -35,7 +39,13 @@ API_VERSION_HEADER = {"Paddle-Version": "1"}
 MAX_PAGES = 200
 _DISCOUNT_IDS_PER_CALL = 50
 # Paddle's own per-page maximums for each list endpoint.
-_PER_PAGE = {"/subscriptions": "200", "/transactions": "30", "/adjustments": "50", "/discounts": "200"}
+_PER_PAGE = {
+    "/subscriptions": "200",
+    "/transactions": "30",
+    "/adjustments": "50",
+    "/discounts": "200",
+    "/customers": "200",
+}
 
 
 class PaddleSource:
@@ -74,6 +84,18 @@ class PaddleSource:
             ) from None
         except SourceError as exc:
             exc.at("read paddle data")
+            raise
+
+    async def customer_names(self) -> list[str]:
+        """Every customer's name, as Paddle holds it (customers without one are skipped).
+
+        For fingerprinting only: the caller must not keep, log or show them.
+        """
+        raw = await self._pages("/customers", {})
+        try:
+            return [name for customer in raw if (name := mapping.optional_text(customer, "name"))]
+        except SourceError as exc:
+            exc.at("read paddle customers")
             raise
 
     async def _discounts(self, raw_subs: list[Json]) -> dict[str, Json]:

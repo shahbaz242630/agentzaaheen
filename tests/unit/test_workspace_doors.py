@@ -33,6 +33,10 @@ DOORS = {
     "src/yaqzan/core/policy/summaries.py",
     # The laptop set-up: its own five fixed workspaces, one at a time, to save each one's repository once.
     "tools/laptop_db.py",
+    # Name fingerprints: the customer-data check reads every workspace's, one at a time (tenant-wide).
+    "src/yaqzan/core/store/name_prints.py",
+    # Saving name fingerprints: the workspace is the one the Chairman names on the command line.
+    "tools/name_prints.py",
 }
 
 

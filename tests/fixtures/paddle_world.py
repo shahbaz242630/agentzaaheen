@@ -404,6 +404,18 @@ EXPECTED_REFUNDS = (
 # ---------------------------------------------------------------- a pretend Paddle API
 
 
+# Made-up customers; only their names are read, and only to fingerprint them.
+CUSTOMERS: list[dict[str, object]] = [
+    {
+        "id": f"ctm_01hv8x4k2m9q7r3t5w6y8z{n:04d}",
+        "name": name,
+        "email": f"c{n}@example.com",
+        "status": "active",
+    }
+    for n, name in enumerate(["Fatima Al Mansoori", None, "Grace", "Zoë O'Brien"])
+]
+
+
 class PaddleWorld:
     """Answers GET list requests like Paddle; records every request it saw."""
 
@@ -413,12 +425,14 @@ class PaddleWorld:
         transactions: list[dict[str, object]] | None = None,
         adjustments: list[dict[str, object]] | None = None,
         discounts: list[dict[str, object]] | None = None,
+        customers: list[dict[str, object]] | None = None,
     ) -> None:
         self.tables: dict[str, list[dict[str, object]]] = {
             "/subscriptions": SUBSCRIPTIONS if subscriptions is None else subscriptions,
             "/transactions": TRANSACTIONS if transactions is None else transactions,
             "/adjustments": ADJUSTMENTS if adjustments is None else adjustments,
             "/discounts": DISCOUNTS if discounts is None else discounts,
+            "/customers": CUSTOMERS if customers is None else customers,
         }
         self.requests: list[httpx.Request] = []
 
