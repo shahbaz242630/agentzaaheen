@@ -86,6 +86,12 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "spent_usd",
         "cap_usd",
         "cost_usd",
+        "run_id",
+        "tokens_in",
+        "tokens_out",
+        "cache_read",
+        "cache_write",
+        "stop",
     }
 )
 

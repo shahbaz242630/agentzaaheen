@@ -17,13 +17,17 @@ What it does:
     posts finished spans to the trace store's OTLP gateway (ADR-032), never
     retried, dropped on failure. :class:`HeartbeatClient` makes one GET to a
     Healthchecks ping address, so a job that stops running raises an alert.
+    :class:`ClaudeClient` is the one door to Claude (ADR-033): one Messages
+    POST to ``api.anthropic.com`` only, pinned model ids, the key asked for
+    once per call, never retried, size-capped.
 
 Public interface:
     ``JsonClient``, ``NetPolicy``, ``DownloadPolicy``, ``NetError``, ``NetErrorCode``,
     ``check_base_url``, ``check_path``, ``ModelClient``, ``check_model_url``,
     ``StatusProbe``, ``check_probe_url``, ``PushClient``, ``NTFY_HOST``,
     ``OtlpSender``, ``check_otlp_endpoint``, ``HeartbeatClient``,
-    ``HEALTHCHECKS_PING_HOST``, ``check_ping_url``.
+    ``HEALTHCHECKS_PING_HOST``, ``check_ping_url``, ``ClaudeClient``, ``ClaudeReply``,
+    ``CLAUDE_HOST``.
     A ``JsonClient`` satisfies the SDK's ``JsonGetter`` protocol, which is all
     a connector ever sees.
 
@@ -32,13 +36,14 @@ How to test:
     test runs through ``httpx.MockTransport``).
 
 Must never:
-    Send anything but GET (the model chat POST, the ntfy alert and the
-    telemetry POST aside); follow a redirect (the one signed download aside,
+    Send anything but GET (the model chat POST, the Claude POST, the ntfy
+    alert and the telemetry POST aside); follow a redirect (the one signed download aside,
     with no credentials); talk to a host not on the
     allowlist; put a key in a url, an error or a log line. No other module
     may import an HTTP library (import-linter).
 """
 
+from yaqzan.core.net.claude import CLAUDE_HOST, ClaudeClient, ClaudeReply
 from yaqzan.core.net.client import DownloadPolicy, JsonClient, NetPolicy, check_base_url, check_path
 from yaqzan.core.net.errors import NetError, NetErrorCode
 from yaqzan.core.net.heartbeat import HEALTHCHECKS_PING_HOST, HeartbeatClient, check_ping_url
@@ -48,8 +53,11 @@ from yaqzan.core.net.probe import StatusProbe, check_probe_url
 from yaqzan.core.net.push import NTFY_HOST, PushClient
 
 __all__ = [
+    "CLAUDE_HOST",
     "HEALTHCHECKS_PING_HOST",
     "NTFY_HOST",
+    "ClaudeClient",
+    "ClaudeReply",
     "DownloadPolicy",
     "HeartbeatClient",
     "JsonClient",

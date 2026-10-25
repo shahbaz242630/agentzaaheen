@@ -193,6 +193,17 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="The local model did not answer (http {status}).",
         explains="code",
     ),
+    "claude_answered": LogEvent(
+        "info",
+        what="Claude ({model}) answered in {duration_ms} ms.",
+        why="A role's call was cleared by the model gate and sent through the one door to Claude.",
+    ),
+    "claude_call_failed": LogEvent(
+        "warning",
+        what="Claude ({model}) did not answer (http {status}): {said}",
+        explains="code",
+        vendor="source",
+    ),
     "telemetry_dropped": LogEvent(
         "warning",
         what="Some {kind} for the log store were dropped and not sent.",
@@ -358,6 +369,26 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="The {use} cap is at {percent}% of its {cap_usd} USD this month.",
         why="The last Claude call crossed the 80% line.",
         next="It is named in the morning briefing; at 100% that use stops until next month.",
+    ),
+    "model_names_unreadable": LogEvent(
+        "warning",
+        what="Our customers' names could not be read for the customer-data check, so the cloud call stopped.",
+        why="Without the name list a customer's name could slip through, so no cloud call may go ({reason}).",
+        next="Check the database is up; the call can be asked again once the names can be read.",
+    ),
+    "model_cloud_call_failed": LogEvent(
+        "warning",
+        what="The {role} role's call to {model} for {use} (run {run_id}) did not get an answer: {said}",
+        explains="code",
+    ),
+    "model_cloud_call_done": LogEvent(
+        "info",
+        what=(
+            "The {role} role's call to {model} for {use} (run {run_id}) finished ({stop}):"
+            " {tokens_in} tokens in, {tokens_out} out, {cache_read} read from cache,"
+            " {cache_write} written to cache; it cost {cost_usd} USD."
+        ),
+        why="Every Claude call is logged with its counts and cost, never its text (ADR-033).",
     ),
     # ---- the scout (F17 slice 5b-2): it reads a repository and advises; it switches nothing on
     "scout_asked": LogEvent(
