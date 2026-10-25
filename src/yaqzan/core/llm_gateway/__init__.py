@@ -24,6 +24,7 @@ Public interface:
     ``build_messages``, ``catalogue``; ``ModelGate``, ``Clearance``,
     ``Refusal``, ``PromptPart``, ``SpendLedger``, ``SpendBook``, ``MemoryBook``, ``StoreBook``,
     ``Use``, ``month_bounds``, ``Usage``, ``MODELS``, ``CAPS_USD``, ``TOTAL_STOP_USD``; ``KnownNames``,
+    ``NamePrint``, ``PrintKind``, ``Printer``, ``prints_of``,
     ``NameSource``, ``FixedNames``, ``part_from``; ``CloudAsk``, ``ClaudeDoor``, ``Answer``.
 
 How to test:
@@ -47,7 +48,15 @@ from yaqzan.core.llm_gateway.chat import (
     Inspect,
     build_messages,
 )
-from yaqzan.core.llm_gateway.cloud_check import KnownNames, PromptPart, part_from
+from yaqzan.core.llm_gateway.cloud_check import (
+    KnownNames,
+    NamePrint,
+    Printer,
+    PrintKind,
+    PromptPart,
+    part_from,
+    prints_of,
+)
 from yaqzan.core.llm_gateway.model_map import MODELS, Usage
 from yaqzan.core.llm_gateway.route import Clearance, FixedNames, ModelGate, NameSource, Refusal
 from yaqzan.core.llm_gateway.spend import (
@@ -79,7 +88,10 @@ __all__ = [
     "KnownNames",
     "MemoryBook",
     "ModelGate",
+    "NamePrint",
     "NameSource",
+    "PrintKind",
+    "Printer",
     "PromptPart",
     "Refusal",
     "SpendBook",
@@ -92,4 +104,5 @@ __all__ = [
     "catalogue",
     "month_bounds",
     "part_from",
+    "prints_of",
 ]

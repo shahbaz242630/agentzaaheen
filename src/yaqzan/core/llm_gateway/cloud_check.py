@@ -8,8 +8,10 @@ class. Four nets, in order, and any one refuses the whole call:
    data the moment they become a part (:func:`part_from`), whatever the
    caller thinks; a finding keeps its own tag.
 2. **Our own customers' names** (the Chairman's point, 25 Oct 2026: a name
-   cannot be found by pattern). Every name we hold is matched as whole words,
-   ignoring accents. A full name matches in any case. A one-word name
+   cannot be found by pattern). Yaqzan never keeps the names: only a keyed
+   fingerprint of each (see ``yaqzan.core.vault.NamePrinter``), and the
+   prompt's words are fingerprinted the same way to compare. Names are matched
+   as whole words, ignoring accents. A full name matches in any case. A one-word name
    ("Grace", "Mark") matches only when written like a name, with a capital
    (or in a script with no capitals, such as Arabic), so "a 7-day grace
    period" is not refused; "Grace periods..." at the start of a sentence
@@ -27,7 +29,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -67,35 +69,80 @@ def part_from(record: Subscription | Payment | Refund | Finding) -> PromptPart:
     return PromptPart(record.model_dump_json(), DataClass.CUSTOMER_PII)
 
 
-class KnownNames:
-    """Our own customers' names, each kept as its words (case and accents ignored when stored)."""
+Printer = Callable[[str], bytes]  # plain text to its fingerprint (the vault's ``NamePrinter``)
 
-    def __init__(self, names: Iterable[str]) -> None:
-        kept = {
-            words
-            for name in names
-            if (words := _words(name))
-            and len(words) <= MAX_NAME_WORDS
-            and len("".join(words)) >= MIN_NAME_CHARS
-        }
-        self._full = frozenset(words for words in kept if len(words) > 1)
-        self._single = frozenset(words[0] for words in kept if len(words) == 1)
-        self._first = frozenset(words[0] for words in self._full)
-        self._longest = max((len(words) for words in self._full), default=0)
+
+class PrintKind(StrEnum):
+    """What a stored fingerprint is of."""
+
+    FULL = "full"  # a whole name of two words or more
+    FIRST = "first"  # the first word of a whole name: only a hint to look further
+    SINGLE = "single"  # a one-word name
+
+
+@dataclass(frozen=True)
+class NamePrint:
+    """One stored fingerprint and what it is of."""
+
+    kind: PrintKind
+    print: bytes
+
+
+def prints_of(names: Iterable[str], printer: Printer) -> set[NamePrint]:
+    """The fingerprints that stand for ``names``; the names themselves are not kept."""
+    out: set[NamePrint] = set()
+    for name in names:
+        words = _words(name)
+        if not words or len(words) > MAX_NAME_WORDS or len("".join(words)) < MIN_NAME_CHARS:
+            continue
+        if len(words) == 1:
+            out.add(NamePrint(PrintKind.SINGLE, printer(words[0])))
+        else:
+            out.add(NamePrint(PrintKind.FULL, printer(" ".join(words))))
+            out.add(NamePrint(PrintKind.FIRST, printer(words[0])))
+    return out
+
+
+class KnownNames:
+    """Our own customers' names, as fingerprints only (case and accents ignored before printing)."""
+
+    def __init__(self, prints: Iterable[NamePrint], printer: Printer) -> None:
+        kept = set(prints)
+        self._full = frozenset(p.print for p in kept if p.kind is PrintKind.FULL)
+        self._first = frozenset(p.print for p in kept if p.kind is PrintKind.FIRST)
+        self._single = frozenset(p.print for p in kept if p.kind is PrintKind.SINGLE)
+        self._printer = printer
+
+    @classmethod
+    def of(cls, names: Iterable[str], printer: Printer) -> KnownNames:
+        """The list for ``names`` (for tests and for making prints from a fresh read)."""
+        return cls(prints_of(names, printer), printer)
+
+    @classmethod
+    def empty(cls) -> KnownNames:
+        """A real answer that we hold no customers' names (not the same as no list at all)."""
+        return cls((), lambda _text: b"")  # never asked: an empty list matches nothing
 
     def __len__(self) -> int:
         return len(self._full) + len(self._single)
 
     def match_in(self, text: str) -> Found | None:
         """Which kind of our customers' names ``text`` holds, if any."""
+        if not self._full and not self._single:
+            return None
         tokens = _tokens(text)
-        words = tuple(word for word, _ in tokens)
+        words = [word for word, _ in tokens]
+        seen: dict[str, bytes] = {}  # each distinct word is printed once
         for i, (word, written_as_name) in enumerate(tokens):
-            if word in self._first and any(
-                words[i : i + n] in self._full for n in range(2, self._longest + 1)
+            printed = seen.get(word)
+            if printed is None:
+                printed = seen[word] = self._printer(word)
+            if printed in self._first and any(
+                self._printer(" ".join(words[i : i + n])) in self._full
+                for n in range(2, min(MAX_NAME_WORDS, len(words) - i) + 1)
             ):
                 return Found.KNOWN_NAME
-            if written_as_name and word in self._single:
+            if written_as_name and printed in self._single:
                 return Found.KNOWN_SINGLE_NAME
         return None
 

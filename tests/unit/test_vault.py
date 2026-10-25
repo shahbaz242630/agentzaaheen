@@ -17,6 +17,7 @@ from yaqzan.core.vault import (
     CredentialSlot,
     Keyring,
     MasterKey,
+    NamePrinter,
     SealedSecret,
     VaultError,
     VaultErrorCode,
@@ -268,3 +269,11 @@ def test_sealed_secret_survives_a_json_round_trip(ring: Keyring) -> None:
     restored = SealedSecret.model_validate_json(sealed.model_dump_json())
     assert restored == sealed
     assert open_secret(restored, where, ring).get_secret_value() == SECRET
+
+
+def test_a_name_printer_never_shows_its_key() -> None:
+    key = MasterKey("names-1", bytes(range(32)))
+    printer = NamePrinter(key)
+    assert repr(printer) == str(printer) == "NamePrinter(key_id='names-1', key=<hidden>)"
+    assert printer("grace") == printer("grace") != printer("mark")
+    assert printer("grace") != NamePrinter(MasterKey("names-2", bytes(32)))("grace")

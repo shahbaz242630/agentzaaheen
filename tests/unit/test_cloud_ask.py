@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from tests.fixtures.name_prints import PRINTER
 from yaqzan.core.llm_gateway import (
     Answer,
     CloudAsk,
@@ -72,7 +73,9 @@ class FakeDoor:
 
 def setup(door: FakeDoor) -> tuple[CloudAsk, SpendLedger]:
     ledger = SpendLedger(MemoryBook(), clock=lambda: OCT)
-    return CloudAsk(ModelGate(ledger, FixedNames(KnownNames(["Fatima Al Mansoori"]))), door), ledger
+    return CloudAsk(
+        ModelGate(ledger, FixedNames(KnownNames.of(["Fatima Al Mansoori"], PRINTER))), door
+    ), ledger
 
 
 def ask(

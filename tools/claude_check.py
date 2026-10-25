@@ -62,7 +62,9 @@ async def check(
         return key
 
     pinned = frozenset(entry.model_id for entry in MODELS.values() if entry.cloud)
-    gate = ModelGate(SpendLedger(MemoryBook()), FixedNames(KnownNames([])))  # our own words: no names to hold
+    gate = ModelGate(
+        SpendLedger(MemoryBook()), FixedNames(KnownNames.empty())
+    )  # our own words: no names to hold
     async with ClaudeClient(key_source, models=pinned, transport=transport) as door:
         return await CloudAsk(gate, door).ask(
             role="claude-check",

@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from tests.fixtures.name_prints import PRINTER
 from yaqzan.core.llm_gateway import (
     CAPS_USD,
     MODELS,
@@ -49,7 +50,7 @@ class Clock:
         return self.now
 
 
-NAMES = FixedNames(KnownNames(["Fatima Al Mansoori", "Grace"]))
+NAMES = FixedNames(KnownNames.of(["Fatima Al Mansoori", "Grace"], PRINTER))
 
 
 def gate(clock: Clock | None = None, book: MemoryBook | None = None) -> tuple[ModelGate, SpendLedger]:
