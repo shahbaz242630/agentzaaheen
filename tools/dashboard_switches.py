@@ -45,6 +45,7 @@ from yaqzan.core.policy import (
     Role,
     ScoutControl,
     Standing,
+    SummaryControl,
     Verdict,
     WorkspaceControl,
 )
@@ -117,6 +118,7 @@ class LaptopSwitches:
         self._removal: DashboardRemoval | None = None
         self._workspaces: WorkspaceControl | None = None
         self._scout: ScoutControl | None = None
+        self._summaries: SummaryControl | None = None
         self._site = site
         self._enrol_code = enrol_code
         self._registry = registry
@@ -144,6 +146,7 @@ class LaptopSwitches:
                 self._workspaces = WorkspaceControl(db, LAPTOP_TENANT, self._clock)
                 self._removal = DashboardRemoval(self._workspaces, passkeys)
                 self._scout = ScoutControl(db, LAPTOP_TENANT, self._clock)
+                self._summaries = SummaryControl(db, LAPTOP_TENANT, self._clock)
         return self._switches
 
     async def _agents_now(self) -> DashboardAgents:
@@ -202,6 +205,15 @@ class LaptopSwitches:
         if self._scout is None:  # pragma: no cover  # _open always sets it
             raise RuntimeError("the laptop database is not open")
         return self._scout
+
+    # ---- daily summaries and the Board's briefings (ADR-039, F17 slice 6)
+
+    async def summary_control(self) -> SummaryControl:
+        """The daily summaries and briefings (opens the database on first use)."""
+        await self._open()
+        if self._summaries is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._summaries
 
     # ---- adding a project (ADR-039, F17 slice 5a): the dashboard acts as the Chairman (no login yet)
 

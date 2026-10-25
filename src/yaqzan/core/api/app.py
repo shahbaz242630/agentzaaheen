@@ -53,6 +53,7 @@ from yaqzan.core.api.registry import (
 )
 from yaqzan.core.api.removal import WorkspaceRemoval, removal_routes
 from yaqzan.core.api.scout import WorkspaceScout, scout_routes
+from yaqzan.core.api.summaries import WorkspaceSummaries, summary_routes
 from yaqzan.core.api.views import (
     ChatAnswer,
     ChatQuestion,
@@ -365,6 +366,8 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     adding: WorkspaceAdding | None = None,
     profiles: WorkspaceProfiles | None = None,
     scout: WorkspaceScout | None = None,
+    summaries: WorkspaceSummaries | None = None,
+    on_start: Callable[[], Awaitable[None]] | None = None,
     on_close: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
     """Build the app. ``static_dir`` is the built web UI; without it only the API is served.
@@ -377,6 +380,8 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     ``profiles`` reads what each workspace is built with (with a GitHub token); without it,
     the panel says GitHub is not connected. ``scout`` reads a workspace's repository on the local
     model and advises which agents it needs (with a database, a token and a model).
+    ``summaries`` keeps each workspace's daily summary and the Board's briefings (with a database).
+    ``on_start`` runs once the server is up, inside its event loop (the morning job starts there);
     ``on_close`` runs when the server stops (the laptop database's pool is closed there).
 
     Without ``chat`` the chat route answers ``chat.not_connected``. ``registry`` is
@@ -390,6 +395,8 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        if on_start is not None:
+            await on_start()
         try:
             yield
         finally:
@@ -434,6 +441,7 @@ def create_app(  # noqa: PLR0913  # the portfolio, then each optional part of th
     adding_routes(app, adding, directory, _refuse_foreign)
     profile_routes(app, profiles)
     scout_routes(app, scout, _refuse_foreign)
+    summary_routes(app, summaries, _refuse_foreign)
 
     async def answer(question: ChatQuestion, facts: str, sample: bool, workspace: str | None) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:

@@ -30,6 +30,8 @@ from yaqzan.core.policy import Ledger
 from yaqzan.core.store import (
     AgentRows,
     AllSealedSecrets,
+    Briefings,
+    DailySummaries,
     KillSwitchRows,
     NewAgent,
     PasskeyRow,
@@ -127,6 +129,8 @@ async def _fill_every_table(url: str) -> None:
         await ScoutRuns(here).start(
             uuid4(), repo="owner/walled", model="local-gemma", by=CHAIRMAN, at=NOW, stale_before=NOW
         )
+        await DailySummaries(here).put(NOW.date(), {"walled": True}, made_at=NOW)
+        await Briefings(db.scoped(TENANT)).open(NOW.date(), title="Briefing", message="Walled.", made_at=NOW)
 
 
 async def _count(url: str, table: str, tenant: UUID, workspace: UUID | None) -> int:

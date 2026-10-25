@@ -4,13 +4,16 @@ One POST of plain text to ``https://<allowlisted host>/<topic>``. The topic is
 a secret (whoever knows it can read the messages), so it is a ``SecretStr``
 and never appears in a url we log, an error or a log line. The text and
 title must already be built from a fixed template (``core.notify``); this
-client only checks their size and that they are single, printable lines.
+client only checks their size and that they are single, printable lines
+(an alert), or several printable lines under :data:`MAX_LINES_BYTES` (the
+morning briefing, :meth:`PushClient.send_lines`; ntfy's own limit is 4096).
 No redirects, no retries: a failed send is reported, never repeated.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from types import TracebackType
 from typing import Self
 
@@ -23,6 +26,7 @@ from yaqzan.core.sdk import get_logger, say, span
 
 NTFY_HOST = "ntfy.sh"
 MAX_MESSAGE_BYTES = 1024
+MAX_LINES_BYTES = 3584
 MAX_TITLE = 120
 _TOPIC = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 _PRIORITY = frozenset({"default", "high"})
@@ -70,10 +74,20 @@ class PushClient:
 
     async def send(self, title: str, message: str, *, priority: str = "default") -> None:
         """Send one alert. Raises ``NetError`` if it was refused or could not be sent."""
+        await self._post(title, _plain_line(message, MAX_MESSAGE_BYTES), priority)
+
+    async def send_lines(self, title: str, lines: Sequence[str], *, priority: str = "default") -> None:
+        """Send one message of several printable lines (the morning briefing). Raises ``NetError``."""
+        body = "\n".join(_plain_line(line, MAX_LINES_BYTES) for line in lines)
+        if not lines or len(body.encode()) > MAX_LINES_BYTES:
+            raise NetError(NetErrorCode.BLOCKED, "a push message must be a few short printable lines")
+        await self._post(title, body, priority)
+
+    async def _post(self, title: str, message: str, priority: str) -> None:
         if priority not in _PRIORITY:
             raise NetError(NetErrorCode.BLOCKED, "unknown push priority")
         headers = {"Title": _plain_line(title, MAX_TITLE), "Priority": priority, "Content-Type": "text/plain"}
-        body = _plain_line(message, MAX_MESSAGE_BYTES).encode()
+        body = message.encode()
         url = f"https://{self._host}/{self._topic.get_secret_value()}"
         attributes = {"server.address": self._host, "http.request.method": "POST"}  # never the topic
         with span(f"POST {self._host}", kind="client", attributes=attributes) as current:
