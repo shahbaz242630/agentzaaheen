@@ -7,12 +7,14 @@ What it does:
     spans become RED metrics (:class:`RedMetrics`: rate, errors, duration, each
     series with a trace exemplar), and every redacted log line is queued
     (:class:`LogQueue`) with only its allow-listed fields.
+    :class:`LogFile` keeps every redacted line on this machine for 30 days,
+    one file a day (ADR-034), whether or not anything is sent.
     :func:`encode_spans` is the last step before sending spans: it keeps only
     the allowed attributes, redacts every string and drops status text.
 
 Public interface:
     ``start_tracing``, ``Tracing``, ``TelemetrySender``, ``encode_spans``,
-    ``RedMetrics``, ``LogQueue``, ``LOG_FIELDS``, ``METRIC_KEYS``.
+    ``RedMetrics``, ``LogQueue``, ``LogFile``, ``LOG_FIELDS``, ``METRIC_KEYS``.
 
 How to test:
     ``uv run pytest tests/unit/test_telemetry.py tests/unit/test_telemetry_red_logs.py``
@@ -25,6 +27,7 @@ Must never:
 """
 
 from yaqzan.core.telemetry.encode import encode_spans
+from yaqzan.core.telemetry.logfile import LogFile
 from yaqzan.core.telemetry.logs import LOG_FIELDS, LogQueue
 from yaqzan.core.telemetry.metrics import METRIC_KEYS, RedMetrics
 from yaqzan.core.telemetry.tracing import TelemetrySender, Tracing, start_tracing
@@ -32,6 +35,7 @@ from yaqzan.core.telemetry.tracing import TelemetrySender, Tracing, start_tracin
 __all__ = [
     "LOG_FIELDS",
     "METRIC_KEYS",
+    "LogFile",
     "LogQueue",
     "RedMetrics",
     "TelemetrySender",

@@ -198,6 +198,12 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="Some {kind} for the log store were dropped and not sent.",
         explains="reason",
     ),
+    "log_file_full": LogEvent(
+        "warning",
+        what="Today's log file is full ({bytes} bytes), so the rest of today's lines are not kept in it.",
+        why="Far more log lines than usual were written today.",
+        next="Look at the lines just before this one for what kept repeating; a new file starts tomorrow.",
+    ),
     "push_sent": LogEvent(
         "info",
         what="A phone alert was sent ({bytes} bytes, priority {priority}).",
