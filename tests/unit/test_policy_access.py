@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from yaqzan.core.policy import (
+from agentzaaheen.core.policy import (
     INCREASES_RISK,
     REDUCES_RISK,
     STEP_UP_MAX_AGE,

@@ -11,13 +11,13 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from agentzaaheen.core.api.uptime import SLOW_MS, uptime_card
+from agentzaaheen.core.metrics import Freshness
+from agentzaaheen.core.net import NetError, NetErrorCode, StatusProbe
+from agentzaaheen.core.sdk import Expect, SiteCheck, SiteRule, StatusAnswer, UptimeReport, check_site, judge
+from agentzaaheen.plugins.connectors.uptime import FakeStatusGetter, UptimeSource
 from tools import dashboard
 from tools.dashboard_uptime import UptimeListError, load_uptime
-from yaqzan.core.api.uptime import SLOW_MS, uptime_card
-from yaqzan.core.metrics import Freshness
-from yaqzan.core.net import NetError, NetErrorCode, StatusProbe
-from yaqzan.core.sdk import Expect, SiteCheck, SiteRule, StatusAnswer, UptimeReport, check_site, judge
-from yaqzan.plugins.connectors.uptime import FakeStatusGetter, UptimeSource
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 SITE = "https://site.example"
@@ -219,7 +219,7 @@ def test_the_probe_reads_only_the_status_and_times_it() -> None:
     assert answer == StatusAnswer(status=200, elapsed_ms=250)
     (request,) = seen
     assert (request.method, str(request.url)) == ("GET", "https://site.example/health")
-    assert request.headers["User-Agent"] == "Yaqzan-uptime/1"
+    assert request.headers["User-Agent"] == "AgentZaaheen-uptime/1"
     assert "authorization" not in {k.lower() for k in request.headers}
 
 

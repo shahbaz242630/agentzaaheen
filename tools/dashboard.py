@@ -52,21 +52,21 @@ in ``--briefing-zone`` (default Asia/Dubai) (``tools.dashboard_summaries``).
 With ``--briefing-ping-env NAME`` each sent briefing pings that Healthchecks
 check, which alerts the phone when no briefing arrives. With ``--log-dir DIR``
 every log line (redacted, as on screen) is also kept in DIR, one file a day,
-for 30 days, and the Logs page reads them (ADR-034; on the laptop: ``~/AppData/Local/Yaqzan/logs``).
+for 30 days, and the Logs page reads them (ADR-034; on the laptop: ``~/AppData/Local/AgentZaaheen/logs``).
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
     uv run python -m tools.dashboard [--port 8765]
     uv run python -m tools.dashboard --paddle-key-env PADDLE_LIVE_API_KEY_ZAAHEEN
-    uv run python -m tools.dashboard --github-token-env GITHUB_READ_TOKEN_YAQZAN
+    uv run python -m tools.dashboard --github-token-env GITHUB_READ_TOKEN_AGENTZAAHEEN
     uv run python -m tools.dashboard --model-url http://127.0.0.1:8766
     uv run python -m tools.dashboard --bundles ~/.claude/plugins
     uv run python -m tools.dashboard --switches     # after: uv run python -m tools.laptop_db up
     uv run python -m tools.dashboard --switches --enrol-passkey   # once, to set up the passkey
-    uv run python -m tools.dashboard --uptime projects/uptime.yaml --ntfy-topic-env YAQZAN_NTFY_TOPIC
+    uv run python -m tools.dashboard --uptime projects/uptime.yaml --ntfy-topic-env AGENTZAAHEEN_NTFY_TOPIC
     uv run python -m tools.dashboard --supabase projects/supabase.yaml
     uv run python -m tools.dashboard --model-url http://127.0.0.1:8766 --fixes projects/fixes.yaml
-    uv run python -m tools.dashboard --log-dir ~/AppData/Local/Yaqzan/logs   # keep 30 days of logs
+    uv run python -m tools.dashboard --log-dir ~/AppData/Local/AgentZaaheen/logs   # keep 30 days of logs
     uv run python -m tools.dashboard --export-contract   # refresh the UI's contract fixture
 """
 
@@ -88,6 +88,21 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import SecretStr
 
+from agentzaaheen.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
+from agentzaaheen.core.api.code import CARD_ID as CODE_CARD
+from agentzaaheen.core.api.registry import RegistryPage, registry_page, uses_from_cards
+from agentzaaheen.core.api.uptime import CARD_ID as UPTIME_CARD
+from agentzaaheen.core.api.workspaces import WorkspaceDirectory
+from agentzaaheen.core.auth import Site
+from agentzaaheen.core.llm_gateway import Tool
+from agentzaaheen.core.net import HEALTHCHECKS_PING_HOST, ModelClient, NetError, NetPolicy, check_ping_url
+from agentzaaheen.core.policy import Standing
+from agentzaaheen.core.registry import Registry, load_registry
+from agentzaaheen.core.registry.roles import RoleLibrary, load_roles
+from agentzaaheen.core.scheduler import DEFAULT_ZONE
+from agentzaaheen.core.sdk import SiteRule, span
+from agentzaaheen.core.store import ScoutRun, WorkspaceRow
+from agentzaaheen.core.telemetry import LogFile, LogFolder
 from tools import laptop_db
 from tools.chat_tools import LOCAL_MODEL_ID, Switched, model_chat, tools_for
 from tools.dashboard_adding import LaptopAdding
@@ -108,26 +123,11 @@ from tools.dashboard_switches import LaptopSwitches, Prepare, connect, off_conne
 from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options, tracing_from
 from tools.dashboard_uptime import ntfy_topic, start_watch, uptime_list, uptime_portfolio
 from tools.fix_guides import Project, fixes_list
-from yaqzan.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
-from yaqzan.core.api.code import CARD_ID as CODE_CARD
-from yaqzan.core.api.registry import RegistryPage, registry_page, uses_from_cards
-from yaqzan.core.api.uptime import CARD_ID as UPTIME_CARD
-from yaqzan.core.api.workspaces import WorkspaceDirectory
-from yaqzan.core.auth import Site
-from yaqzan.core.llm_gateway import Tool
-from yaqzan.core.net import HEALTHCHECKS_PING_HOST, ModelClient, NetError, NetPolicy, check_ping_url
-from yaqzan.core.policy import Standing
-from yaqzan.core.registry import Registry, load_registry
-from yaqzan.core.registry.roles import RoleLibrary, load_roles
-from yaqzan.core.scheduler import DEFAULT_ZONE
-from yaqzan.core.sdk import SiteRule, span
-from yaqzan.core.store import ScoutRun, WorkspaceRow
-from yaqzan.core.telemetry import LogFile, LogFolder
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
 CONTRACT_FIXTURE = UI_ROOT / "src" / "contract" / "sample.json"
-PLUGINS_ROOT = UI_ROOT.parent.parent / "src" / "yaqzan" / "plugins"
+PLUGINS_ROOT = UI_ROOT.parent.parent / "src" / "agentzaaheen" / "plugins"
 # The role packs stay off GitHub (docs/ is local only); on the server they live in their own folder.
 ROLES_ROOT = UI_ROOT.parent.parent / "docs" / "hr" / "roles"
 CONTRACT_TIME = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
@@ -374,7 +374,7 @@ def _preflight(ns: argparse.Namespace, static_dir: Path) -> int | None:
     try:
         zoneinfo.ZoneInfo(ns.briefing_zone)
     except (zoneinfo.ZoneInfoNotFoundError, ValueError):
-        print(f"dashboard: {ns.briefing_zone!r} is not a time zone Yaqzan knows (try Asia/Dubai).")
+        print(f"dashboard: {ns.briefing_zone!r} is not a time zone Agent Zaaheen knows (try Asia/Dubai).")
         return 1
     if ns.enrol_passkey and not ns.switches:
         print("dashboard: --enrol-passkey needs --switches (the passkey is kept in the laptop database).")

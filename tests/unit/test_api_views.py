@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from yaqzan.core.api import SamplePortfolio
-from yaqzan.core.api.views import (
+from agentzaaheen.core.api import SamplePortfolio
+from agentzaaheen.core.api.views import (
     Card,
     Count,
     Metric,
@@ -16,7 +16,7 @@ from yaqzan.core.api.views import (
     ProjectDetail,
     ProjectSummary,
 )
-from yaqzan.core.metrics import Freshness
+from agentzaaheen.core.metrics import Freshness
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 

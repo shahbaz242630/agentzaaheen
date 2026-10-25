@@ -43,7 +43,7 @@ const DAY: SummaryDay = { day: "2026-10-25", made_at: NOW, line: "Could not read
 const BRIEFING: Briefing = {
   day: "2026-10-25",
   made_at: "2026-10-25T03:00:00Z",
-  title: "Yaqzan briefing, Sun 25 Oct",
+  title: "Agent Zaaheen briefing, Sun 25 Oct",
   message: "2 projects; 1 need a look.\nSage: Needs you now.\nDetails on the dashboard.",
   state: "sent",
   sent_at: "2026-10-25T03:00:02Z",
@@ -156,7 +156,7 @@ describe("the morning briefings", () => {
     const panel = await screen.findByRole("region", { name: "Morning briefings" });
     expect(await within(panel).findByText(/^Sent to your phone/)).toBeInTheDocument();
     expect(within(panel).getAllByText(/Sage: Needs you now\./)).toHaveLength(3); // each day keeps its words
-    expect(within(panel).getByText(/Not sent: ntfy did not answer in time\. Yaqzan tries again/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Not sent: ntfy did not answer in time\. Agent Zaaheen tries again/)).toBeInTheDocument();
     expect(within(panel).getByText("Kept here only: no phone (ntfy) topic is set up")).toBeInTheDocument();
   });
 

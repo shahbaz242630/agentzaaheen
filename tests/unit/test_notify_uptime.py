@@ -10,11 +10,18 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.net import NetError, NetErrorCode, PushClient
+from agentzaaheen.core.notify import Alert, UptimeWatch, deliver
+from agentzaaheen.core.sdk import (
+    SiteRule,
+    SourceError,
+    SourceErrorCode,
+    StatusAnswer,
+    UptimeReport,
+    check_site,
+)
 from tests.tracing import recorded
 from tools.dashboard_uptime import UptimeLive, start_watch
-from yaqzan.core.net import NetError, NetErrorCode, PushClient
-from yaqzan.core.notify import Alert, UptimeWatch, deliver
-from yaqzan.core.sdk import SiteRule, SourceError, SourceErrorCode, StatusAnswer, UptimeReport, check_site
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 TOPIC = SecretStr("abcdefghijklmnop" + "qrstuvwx")  # a made-up topic, 24 characters
@@ -39,7 +46,7 @@ def test_already_down_at_the_first_round_is_reported_once() -> None:
     assert alert == Alert(
         project_id="eva",
         down=True,
-        title="Yaqzan: Eva is down",
+        title="Agent Zaaheen: Eva is down",
         message="1 of 2 addresses down (page not found). Details on the dashboard.",
         priority="high",
     )
@@ -53,7 +60,7 @@ def test_a_new_failure_needs_two_checks_in_a_row() -> None:
     assert watch.observe({"zaaheen": report(a=200, b=200)}) == []  # recovered before the alert: still quiet
     assert watch.observe({"zaaheen": report(a=200, b=None)}) == []
     (alert,) = watch.observe({"zaaheen": report(a=503, b=None)})
-    assert alert.title == "Yaqzan: Zaaheen is down"
+    assert alert.title == "Agent Zaaheen: Zaaheen is down"
     # b is alerted (second fail in a row); a has failed once, so it counts as down but is not yet the reason.
     assert alert.message == "2 of 2 addresses down (did not answer). Details on the dashboard."
 
@@ -62,7 +69,7 @@ def test_back_up_is_said_once() -> None:
     watch = UptimeWatch(NAMES)
     watch.observe({"eva": report(a=404, b=500)})
     (alert,) = watch.observe({"eva": report(a=200, b=500)})
-    assert (alert.down, alert.title, alert.priority) == (False, "Yaqzan: Eva is back up", "default")
+    assert (alert.down, alert.title, alert.priority) == (False, "Agent Zaaheen: Eva is back up", "default")
     assert alert.message == "1 address answering again; 1 of 2 up now."
     assert watch.observe({"eva": report(a=200, b=500)}) == []
 
@@ -87,7 +94,7 @@ def test_a_wrong_answer_has_its_own_words() -> None:
 
 def test_an_unknown_project_uses_its_id_and_the_threshold_is_checked() -> None:
     (alert,) = UptimeWatch({}).observe({"nearby": report(a=500)})
-    assert alert.title == "Yaqzan: nearby is down"
+    assert alert.title == "Agent Zaaheen: nearby is down"
     with pytest.raises(ValueError, match="at least one"):
         UptimeWatch(NAMES, threshold=0)
 
@@ -106,10 +113,10 @@ def test_a_push_is_one_post_of_plain_text_to_the_secret_topic() -> None:
         seen.append(request)
         return httpx.Response(200, json={"id": "x"})
 
-    asyncio.run(push(serve).send("Yaqzan: Eva is down", "1 of 2 addresses down.", priority="high"))
+    asyncio.run(push(serve).send("Agent Zaaheen: Eva is down", "1 of 2 addresses down.", priority="high"))
     (request,) = seen
     assert (request.method, str(request.url)) == ("POST", f"https://ntfy.sh/{TOPIC.get_secret_value()}")
-    assert (request.headers["Title"], request.headers["Priority"]) == ("Yaqzan: Eva is down", "high")
+    assert (request.headers["Title"], request.headers["Priority"]) == ("Agent Zaaheen: Eva is down", "high")
     assert request.content == b"1 of 2 addresses down."
 
 
@@ -140,9 +147,11 @@ def test_the_briefing_goes_as_one_post_of_several_lines() -> None:
         seen.append(request)
         return httpx.Response(200)
 
-    asyncio.run(push(serve).send_lines("Yaqzan briefing, Sun 25 Oct", ["2 projects.", "Details here."]))
+    asyncio.run(
+        push(serve).send_lines("Agent Zaaheen briefing, Sun 25 Oct", ["2 projects.", "Details here."])
+    )
     (request,) = seen
-    assert request.headers["Title"] == "Yaqzan briefing, Sun 25 Oct"
+    assert request.headers["Title"] == "Agent Zaaheen briefing, Sun 25 Oct"
     assert request.content == b"2 projects.\nDetails here."
 
 
@@ -161,7 +170,7 @@ def test_odd_briefings_are_refused_before_sending(lines: list[str]) -> None:
         raise AssertionError("nothing may be sent")
 
     with pytest.raises(NetError) as caught:
-        asyncio.run(push(serve).send_lines("Yaqzan briefing", lines))
+        asyncio.run(push(serve).send_lines("Agent Zaaheen briefing", lines))
     assert caught.value.net_code is NetErrorCode.BLOCKED
 
 
@@ -312,8 +321,8 @@ def test_a_failed_round_does_not_end_the_rechecking(capsys: pytest.CaptureFixtur
 
 def test_start_watch_needs_a_usable_topic(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     rules = {"eva": (SiteRule(url=A),)}
-    assert start_watch(rules, NAMES, {}, "YAQZAN_NTFY_TOPIC", clock=Clock()) is None
-    assert "YAQZAN_NTFY_TOPIC is not set" in capsys.readouterr().out
+    assert start_watch(rules, NAMES, {}, "AGENTZAAHEEN_NTFY_TOPIC", clock=Clock()) is None
+    assert "AGENTZAAHEEN_NTFY_TOPIC is not set" in capsys.readouterr().out
     assert start_watch(rules, NAMES, {"T": "has space"}, "T", clock=Clock()) is None
 
 
@@ -346,7 +355,7 @@ def test_a_round_is_one_trace_holding_every_probe() -> None:
         (alert,) = asyncio.run(live.round())
     assert alert.down
     round_span = spans.named("uptime round")
-    assert (round_span.attributes or {})["yaqzan.count"] == 1
+    assert (round_span.attributes or {})["agentzaaheen.count"] == 1
     probes = [s for s in spans.spans if s.name.startswith("probe ")]
     assert probes
     assert round_span.context is not None

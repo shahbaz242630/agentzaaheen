@@ -193,7 +193,7 @@ def test_the_chat_answers_through_the_model_server(ui: Path, capsys: pytest.Capt
     response = client.post(
         "/api/workspaces/zaaheen/chat",
         json={"model_id": chat_tools.LOCAL_MODEL_ID, "question": "How is revenue?"},
-        headers={"X-Yaqzan-Request": "1"},
+        headers={"X-AgentZaaheen-Request": "1"},
     )
     assert response.status_code == 200
     assert response.json()["answer"] == "MRR is USD 1240.00 (sample)."
@@ -215,7 +215,7 @@ def test_a_stopped_model_server_is_reported_not_hidden(ui: Path) -> None:
     response = TestClient(apps[0], base_url="http://127.0.0.1").post(
         "/api/chat",
         json={"model_id": chat_tools.LOCAL_MODEL_ID, "question": "hi"},
-        headers={"X-Yaqzan-Request": "1"},
+        headers={"X-AgentZaaheen-Request": "1"},
     )
     assert response.status_code == 502
     assert response.json() == {"detail": "net.unavailable"}

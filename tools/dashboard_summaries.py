@@ -30,9 +30,9 @@ from zoneinfo import ZoneInfo
 import httpx
 from pydantic import SecretStr, ValidationError
 
-from yaqzan.core.api import Portfolio
-from yaqzan.core.api.agents import WorkspaceAgentsOut
-from yaqzan.core.api.summary import (
+from agentzaaheen.core.api import Portfolio
+from agentzaaheen.core.api.agents import WorkspaceAgentsOut
+from agentzaaheen.core.api.summary import (
     AgentsFact,
     AlertsFact,
     DailySummary,
@@ -42,15 +42,15 @@ from yaqzan.core.api.summary import (
     read_summary,
     summarise,
 )
-from yaqzan.core.api.workspaces import WorkspaceDirectory
-from yaqzan.core.llm_gateway.scout import ScoutReport
-from yaqzan.core.net import HeartbeatClient, PushClient
-from yaqzan.core.notify import Alert
-from yaqzan.core.policy import SummaryControl
-from yaqzan.core.scheduler import Plan, local_day, plan, window_start
-from yaqzan.core.scheduler.briefing import Briefed
-from yaqzan.core.sdk import SourceError, get_logger, say
-from yaqzan.core.store import BriefingRow, ScoutRun, StoreError, SummaryRow, WorkspaceRow
+from agentzaaheen.core.api.workspaces import WorkspaceDirectory
+from agentzaaheen.core.llm_gateway.scout import ScoutReport
+from agentzaaheen.core.net import HeartbeatClient, PushClient
+from agentzaaheen.core.notify import Alert
+from agentzaaheen.core.policy import SummaryControl
+from agentzaaheen.core.scheduler import Plan, local_day, plan, window_start
+from agentzaaheen.core.scheduler.briefing import Briefed
+from agentzaaheen.core.sdk import SourceError, get_logger, say
+from agentzaaheen.core.store import BriefingRow, ScoutRun, StoreError, SummaryRow, WorkspaceRow
 
 CHECK_EVERY_S = 60.0
 RETRY_AFTER = timedelta(minutes=15)
@@ -127,7 +127,7 @@ class LaptopSummaries:
         self._gathered: date | None = None
         self._next_try: datetime | None = None
         self._task: asyncio.Task[None] | None = None
-        self._log = get_logger("yaqzan.summaries")
+        self._log = get_logger("agentzaaheen.summaries")
 
     # ---- what the routes read
 

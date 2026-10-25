@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from yaqzan.core.metrics import Freshness, freshness
+from agentzaaheen.core.metrics import Freshness, freshness
 
 NOW = datetime(2026, 10, 18, 12, tzinfo=UTC)
 HOUR = timedelta(hours=1)

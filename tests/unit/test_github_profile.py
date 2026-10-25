@@ -12,11 +12,17 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.net import JsonClient, NetPolicy
+from agentzaaheen.core.sdk import (
+    MAX_CODE_BYTES,
+    MAX_MANIFEST_BYTES,
+    RepoProfile,
+    SourceError,
+    SourceErrorCode,
+)
+from agentzaaheen.core.store import WorkspaceRow
+from agentzaaheen.plugins.connectors.github import ALLOWED_HOSTS, API_HEADERS, BASE_URL, GitHubProfile, Head
 from tools.dashboard_profile import LaptopProfiles
-from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.sdk import MAX_CODE_BYTES, MAX_MANIFEST_BYTES, RepoProfile, SourceError, SourceErrorCode
-from yaqzan.core.store import WorkspaceRow
-from yaqzan.plugins.connectors.github import ALLOWED_HOSTS, API_HEADERS, BASE_URL, GitHubProfile, Head
 
 REPO = "owner/shop"
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)

@@ -161,7 +161,7 @@ async function readJson(url: string, token: string, deps: Deps): Promise<Read> {
       method: "GET",
       redirect: "manual",
       signal: AbortSignal.timeout(READ_TIMEOUT_MS),
-      headers: { authorization: `Bearer ${token}`, "user-agent": "yaqzan-checker (read only)" },
+      headers: { authorization: `Bearer ${token}`, "user-agent": "agentzaaheen-checker (read only)" },
     });
     if (response.status !== 200) {
       await response.body?.cancel();

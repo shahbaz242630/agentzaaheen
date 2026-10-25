@@ -13,8 +13,8 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from yaqzan.core.net import CLAUDE_HOST, ClaudeClient, ClaudeReply, NetError, NetErrorCode
-from yaqzan.core.net.claude import API_VERSION
+from agentzaaheen.core.net import CLAUDE_HOST, ClaudeClient, ClaudeReply, NetError, NetErrorCode
+from agentzaaheen.core.net.claude import API_VERSION
 
 FAKE_KEY = "test-claude-" + "k" * 24  # built here, never a real key
 PINNED = frozenset({"claude-opus-5-5", "claude-sonnet-5-5"})

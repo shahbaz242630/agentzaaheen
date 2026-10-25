@@ -8,10 +8,10 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.broker import BrokerError, BrokerErrorCode, open_credential, save_credential
+from agentzaaheen.core.store import AllSealedSecrets, CredentialDates, SlotKey, StoreError, StoreErrorCode
+from agentzaaheen.core.vault import CredentialSlot, Keyring, MasterKey, VaultError, VaultErrorCode
 from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
-from yaqzan.core.broker import BrokerError, BrokerErrorCode, open_credential, save_credential
-from yaqzan.core.store import AllSealedSecrets, CredentialDates, SlotKey, StoreError, StoreErrorCode
-from yaqzan.core.vault import CredentialSlot, Keyring, MasterKey, VaultError, VaultErrorCode
 
 TENANT = uuid4()
 PROJECT = uuid4()

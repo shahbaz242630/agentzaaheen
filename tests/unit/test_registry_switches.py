@@ -5,7 +5,15 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from yaqzan.core.registry import Kind, State, StoredSwitch, by_item, may_request, may_switch_off, state_of
+from agentzaaheen.core.registry import (
+    Kind,
+    State,
+    StoredSwitch,
+    by_item,
+    may_request,
+    may_switch_off,
+    state_of,
+)
 
 FILES = "a" * 64
 CHANGED = "b" * 64

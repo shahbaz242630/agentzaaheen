@@ -34,13 +34,13 @@ const EMPTY: Record<Shelf, Record<Kind, string>> = {
     plugin: "Plugins from outside are view only for now; see Discover.",
   },
   discover: {
-    connector: "Every connector Yaqzan has is on.",
-    skill: "Every skill Yaqzan has is on.",
+    connector: "Every connector Agent Zaaheen has is on.",
+    skill: "Every skill Agent Zaaheen has is on.",
     plugin: "No plugins found. Start the dashboard with --bundles DIR to show plugin bundles from a folder.",
   },
 };
 
-// Yours: what Yaqzan may use now. Discover: everything else it has found.
+// Yours: what Agent Zaaheen may use now. Discover: everything else it has found.
 const ON_SHELF: Record<Shelf, (state: ItemState) => boolean> = {
   yours: (state) => state === "on",
   discover: (state) => state !== "on",
@@ -159,8 +159,8 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
         </h1>
         <p className="mt-1 text-muted">
           {page.switches
-            ? "The connectors, skills and plugins Yaqzan can use. Switch off anything you don't want used; switching something on always comes to you for approval."
-            : "The connectors, skills and plugins Yaqzan can use. Read-only for now: start the dashboard with --switches to change what is on."}
+            ? "The connectors, skills and plugins Agent Zaaheen can use. Switch off anything you don't want used; switching something on always comes to you for approval."
+            : "The connectors, skills and plugins Agent Zaaheen can use. Read-only for now: start the dashboard with --switches to change what is on."}
         </p>
       </header>
 
@@ -242,7 +242,7 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
       {shelf === "discover" && (
         <p className="flex items-center gap-2 text-sm text-muted">
           <Compass className="size-4 text-faint" aria-hidden="true" />
-          Everything Yaqzan has found that is not on. Asking to switch one on comes to you for approval.
+          Everything Agent Zaaheen has found that is not on. Asking to switch one on comes to you for approval.
         </p>
       )}
       {shelf === "yours" && problems.length > 0 && (

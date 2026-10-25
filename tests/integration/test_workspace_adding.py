@@ -15,10 +15,8 @@ from uuid import UUID
 import asyncpg
 import pytest
 
-from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
-from tests.integration.test_policy_agents import ME
-from yaqzan.core.policy import Channel, LifecycleVerdict, Role, WorkspaceControl, slug_of
-from yaqzan.core.store import (
+from agentzaaheen.core.policy import Channel, LifecycleVerdict, Role, WorkspaceControl, slug_of
+from agentzaaheen.core.store import (
     AgentRows,
     AuditRows,
     Database,
@@ -28,6 +26,8 @@ from yaqzan.core.store import (
     WorkspaceRows,
     WorkspaceSources,
 )
+from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
+from tests.integration.test_policy_agents import ME
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000a1")
 OTHER_TENANT = UUID("00000000-0000-4000-8000-0000000000a2")
@@ -198,7 +198,7 @@ def test_the_database_itself_refuses_a_shared_repository_and_a_second_link(test_
             conn = await connect_as(test_db.app_url, TENANT, workspace)
             try:
                 await conn.execute(
-                    "INSERT INTO yaqzan.workspace_sources"
+                    "INSERT INTO agentzaaheen.workspace_sources"
                     " (tenant_id, project_id, kind, ref, added_by, added_at)"
                     " VALUES ($1, $2, 'github', $3, 'user:chairman', $4)",
                     TENANT,

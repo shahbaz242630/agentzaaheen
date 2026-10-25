@@ -62,7 +62,7 @@ export async function statusOf(url: string, deps: Deps): Promise<number | null> 
       method: "GET",
       redirect: "manual",
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { "user-agent": "yaqzan-checker (status only)" },
+      headers: { "user-agent": "agentzaaheen-checker (status only)" },
     });
     await response.body?.cancel();
     return response.status;

@@ -10,16 +10,16 @@ Commands:
     status    say whether it is running
 
 Safety, the same as the dev database:
-    - It only ever touches the one container named ``yaqzan-laptop-db`` that
-      carries our label, and its own volume ``yaqzan-laptop-data``.
+    - It only ever touches the one container named ``agentzaaheen-laptop-db`` that
+      carries our label, and its own volume ``agentzaaheen-laptop-data``.
     - It refuses to start when Docker has less than ``dev_db.MIN_FREE_MB`` free,
       and is capped at ``dev_db.MEMORY_LIMIT_MB``.
     - It listens on 127.0.0.1 only, with a random password, a read-only root
       filesystem, no Linux capabilities and a non-root user.
 
 :func:`prepare` (used by ``tools.dashboard --switches``) sets up the
-``yaqzan`` database (:func:`set_up`): an owner role that applies the migrations, and a login
-role for the dashboard that is a member of the least-privilege ``yaqzan_app``
+``agentzaaheen`` database (:func:`set_up`): an owner role that applies the migrations, and a login
+role for the dashboard that is a member of the least-privilege ``agentzaaheen_app``
 role. Their passwords are derived from the container's own password, so
 nothing new is stored anywhere. It also makes sure the laptop's one tenant
 and its five workspaces exist, one per project (ADR-039): :data:`LAPTOP_TENANT`
@@ -43,8 +43,7 @@ from uuid import UUID, uuid5
 import asyncpg
 from pydantic import SecretStr
 
-from tools import dev_db
-from yaqzan.core.store import (
+from agentzaaheen.core.store import (
     Database,
     DatabaseSettings,
     WorkspaceRow,
@@ -52,19 +51,22 @@ from yaqzan.core.store import (
     WorkspaceSources,
     migrate,
 )
+from tools import dev_db
 
-NAME = "yaqzan-laptop-db"
+NAME = "agentzaaheen-laptop-db"
 LABEL_VALUE = "laptop-db"
-VOLUME = "yaqzan-laptop-data"
+VOLUME = "agentzaaheen-laptop-data"
 PORT = 55433
-DATABASE = "yaqzan"
-OWNER = "yaqzan_owner"
-APP = "yaqzan_dashboard"
+DATABASE = "agentzaaheen"
+OWNER = "agentzaaheen_owner"
+APP = "agentzaaheen_dashboard"
 EXIT_OK = dev_db.EXIT_OK
 EXIT_ERROR = dev_db.EXIT_ERROR
 EXIT_LOW_MEMORY = dev_db.EXIT_LOW_MEMORY
 
 _NAMESPACE = UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8")  # the URL namespace
+# The ids are made from fixed text that keeps the old name for good: change it and every id changes,
+# and the saved switches, passkey and workspaces would belong to a tenant no one uses.
 LAPTOP_TENANT = uuid5(_NAMESPACE, "yaqzan:laptop")
 LAPTOP_WORKSPACES = tuple(
     WorkspaceRow(workspace_id=uuid5(_NAMESPACE, f"yaqzan:laptop:workspace:{slug}"), slug=slug, name=name)
@@ -147,6 +149,24 @@ def derived_password(admin_password: str, role: str) -> str:
     return hashlib.blake2b(role.encode(), key=admin_password.encode()[:64], digest_size=24).hexdigest()
 
 
+# The product was called Yaqzan until 25 Oct 2026: a laptop database made then has these names.
+_OLD_ROLES = {"yaqzan_owner": OWNER, "yaqzan_dashboard": APP, "yaqzan_app": "agentzaaheen_app"}
+_OLD_DATABASE = "yaqzan"
+
+
+async def adopt_old_names(conn: asyncpg.Connection[asyncpg.Record], database: str = DATABASE) -> None:
+    """Rename the old roles and database to today's names, once (the schema is renamed by ``migrate``)."""
+    for old, new in _OLD_ROLES.items():
+        names = await conn.fetch("SELECT rolname FROM pg_roles WHERE rolname = ANY($1::text[])", [old, new])
+        if {r["rolname"] for r in names} == {old}:
+            await conn.execute(f"ALTER ROLE {old} RENAME TO {new}")  # constants, never user input
+    found = await conn.fetch(
+        "SELECT datname FROM pg_database WHERE datname = ANY($1::text[])", [_OLD_DATABASE, database]
+    )
+    if {r["datname"] for r in found} == {_OLD_DATABASE}:
+        await conn.execute(f'ALTER DATABASE "{_OLD_DATABASE}" RENAME TO "{database}"')
+
+
 async def _ensure_role(
     conn: asyncpg.Connection[asyncpg.Record], name: str, options: str, password: str
 ) -> None:
@@ -178,6 +198,7 @@ async def set_up(admin: str, database: str = DATABASE) -> SecretStr:
     app_password = derived_password(admin_password, APP)
     conn = await asyncpg.connect(admin)
     try:
+        await adopt_old_names(conn, database)
         await _ensure_role(conn, OWNER, "LOGIN CREATEROLE NOSUPERUSER", owner_password)
         if not await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", database):
             await conn.execute(f'CREATE DATABASE "{database}" OWNER {OWNER}')
@@ -191,14 +212,14 @@ async def set_up(admin: str, database: str = DATABASE) -> SecretStr:
     conn = await asyncpg.connect(admin)
     try:
         await _ensure_role(conn, APP, "LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB", app_password)
-        await conn.execute(f"GRANT yaqzan_app TO {APP}")
+        await conn.execute(f"GRANT agentzaaheen_app TO {APP}")
     finally:
         await conn.close()
     url = SecretStr(_url(admin, APP, app_password, database))
     app = await Database.open(DatabaseSettings(dsn=url))
     try:
         workspaces = WorkspaceRows(app.scoped(LAPTOP_TENANT))
-        await workspaces.add_tenant("Yaqzan")
+        await workspaces.add_tenant("Agent Zaaheen")
         for workspace in LAPTOP_WORKSPACES:
             await workspaces.add(workspace)
         await _connect_repos(app, await workspaces.workspaces())

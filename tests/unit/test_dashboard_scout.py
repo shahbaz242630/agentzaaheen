@@ -15,15 +15,15 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.api.app import REQUEST_HEADER
+from agentzaaheen.core.api.scout import Asked, scout_view
+from agentzaaheen.core.policy import ScoutControl, ScoutVerdict
+from agentzaaheen.core.registry.roles import RoleLibrary, RolePack
+from agentzaaheen.core.sdk import SourceError, SourceErrorCode
+from agentzaaheen.core.store import ScoutRun, StoreError, StoreErrorCode, WorkspaceRow
 from tools.dashboard_profile import LaptopProfiles
 from tools.dashboard_scout import CRASHED, LaptopScout
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.api.app import REQUEST_HEADER
-from yaqzan.core.api.scout import Asked, scout_view
-from yaqzan.core.policy import ScoutControl, ScoutVerdict
-from yaqzan.core.registry.roles import RoleLibrary, RolePack
-from yaqzan.core.sdk import SourceError, SourceErrorCode
-from yaqzan.core.store import ScoutRun, StoreError, StoreErrorCode, WorkspaceRow
 
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 REPO = "owner/shop"

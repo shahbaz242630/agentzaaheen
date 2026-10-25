@@ -9,12 +9,12 @@ from uuid import uuid4
 import httpx
 from fastapi.testclient import TestClient
 
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.api.app import REQUEST_HEADER
-from yaqzan.core.api.removal import purpose
-from yaqzan.core.auth import PasskeyError
-from yaqzan.core.policy import LifecycleVerdict, Removal
-from yaqzan.core.store import Archived, StoreError, StoreErrorCode, WorkspaceRow
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.api.app import REQUEST_HEADER
+from agentzaaheen.core.api.removal import purpose
+from agentzaaheen.core.auth import PasskeyError
+from agentzaaheen.core.policy import LifecycleVerdict, Removal
+from agentzaaheen.core.store import Archived, StoreError, StoreErrorCode, WorkspaceRow
 
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}

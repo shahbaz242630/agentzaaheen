@@ -15,10 +15,10 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.api.app import REQUEST_HEADER
-from yaqzan.core.llm_gateway import ChatReply
-from yaqzan.core.sdk import SourceError, SourceErrorCode
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.api.app import REQUEST_HEADER
+from agentzaaheen.core.llm_gateway import ChatReply
+from agentzaaheen.core.sdk import SourceError, SourceErrorCode
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}

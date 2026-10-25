@@ -1,4 +1,4 @@
-"""Everything in or through Yaqzan is logged (ADR-034, slice 2): one log point at each shared door.
+"""Everything in or through Agent Zaaheen is logged (ADR-034, slice 2): one log point at each shared door.
 
 The doors are the few places everything passes: the API, every outside call, every
 database write, chat tool runs, the Customize page's decisions, alerts, scheduled jobs
@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SRC = ROOT / "src" / "yaqzan"
+SRC = ROOT / "src" / "agentzaaheen"
 STORE = SRC / "core" / "store"
 _WRITES = {"INSERT", "UPDATE", "DELETE"}
 

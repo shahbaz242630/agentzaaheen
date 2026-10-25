@@ -11,8 +11,7 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 
-from tests.integration.conftest import ScratchDb, open_db, run
-from yaqzan.core.policy import (
+from agentzaaheen.core.policy import (
     AuditDraft,
     AuditOutcome,
     ChainAnchor,
@@ -21,8 +20,16 @@ from yaqzan.core.policy import (
     Ledger,
     load_kill_switches,
 )
-from yaqzan.core.store import AuditRow, AuditRows, KillSwitchRows, StoreError, StoreErrorCode, SwitchScope
-from yaqzan.core.store import audit as store_audit
+from agentzaaheen.core.store import (
+    AuditRow,
+    AuditRows,
+    KillSwitchRows,
+    StoreError,
+    StoreErrorCode,
+    SwitchScope,
+)
+from agentzaaheen.core.store import audit as store_audit
+from tests.integration.conftest import ScratchDb, open_db, run
 
 NOW = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 TENANT = UUID("00000000-0000-4000-8000-000000000001")
@@ -123,7 +130,7 @@ def test_edited_row_is_caught(test_db: ScratchDb) -> None:
     run(
         _as_superuser_without_triggers(
             test_db.admin_url,
-            "UPDATE yaqzan.audit_log SET reason_code = 'gate.tool_not_allowed' WHERE seq = 3",
+            "UPDATE agentzaaheen.audit_log SET reason_code = 'gate.tool_not_allowed' WHERE seq = 3",
         )
     )
     report = run(_verify(test_db.app_url))
@@ -133,7 +140,7 @@ def test_edited_row_is_caught(test_db: ScratchDb) -> None:
 
 def test_deleted_row_is_caught(test_db: ScratchDb) -> None:
     run(_fill(test_db.app_url, 5))
-    run(_as_superuser_without_triggers(test_db.admin_url, "DELETE FROM yaqzan.audit_log WHERE seq = 2"))
+    run(_as_superuser_without_triggers(test_db.admin_url, "DELETE FROM agentzaaheen.audit_log WHERE seq = 2"))
     report = run(_verify(test_db.app_url))
     assert not report.ok
     assert report.bad_seq == 2
@@ -142,7 +149,9 @@ def test_deleted_row_is_caught(test_db: ScratchDb) -> None:
 def test_cut_off_tail_is_caught_by_the_anchor(test_db: ScratchDb) -> None:
     run(_fill(test_db.app_url, 5))
     anchor = run(_verify(test_db.app_url)).head
-    run(_as_superuser_without_triggers(test_db.admin_url, "DELETE FROM yaqzan.audit_log WHERE seq >= 4"))
+    run(
+        _as_superuser_without_triggers(test_db.admin_url, "DELETE FROM agentzaaheen.audit_log WHERE seq >= 4")
+    )
     assert run(_verify(test_db.app_url)).ok  # without the outside copy, a clean cut looks fine
     report = run(_verify(test_db.app_url, anchor))
     assert not report.ok
@@ -153,7 +162,7 @@ def test_row_that_is_no_longer_a_valid_entry_is_reported_not_raised(test_db: Scr
     run(_fill(test_db.app_url, 3))
     run(
         _as_superuser_without_triggers(
-            test_db.admin_url, "UPDATE yaqzan.audit_log SET actor = 'nobody' WHERE seq = 2"
+            test_db.admin_url, "UPDATE agentzaaheen.audit_log SET actor = 'nobody' WHERE seq = 2"
         )
     )
     report = run(_verify(test_db.app_url))
@@ -167,7 +176,7 @@ def test_first_row_invalid_reports_genesis_head(test_db: ScratchDb) -> None:
     run(_fill(test_db.app_url, 1))
     run(
         _as_superuser_without_triggers(
-            test_db.admin_url, "UPDATE yaqzan.audit_log SET actor = 'x' WHERE seq = 1"
+            test_db.admin_url, "UPDATE agentzaaheen.audit_log SET actor = 'x' WHERE seq = 1"
         )
     )
     report = run(_verify(test_db.app_url))

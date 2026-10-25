@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from yaqzan.core.scheduler import local_day, plan, window_start
+from agentzaaheen.core.scheduler import local_day, plan, window_start
 
 DUBAI = ZoneInfo("Asia/Dubai")
 LONDON = ZoneInfo("Europe/London")

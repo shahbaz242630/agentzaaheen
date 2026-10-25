@@ -7,15 +7,15 @@ import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from agentzaaheen.core.llm_gateway import Tool
+from agentzaaheen.core.policy import Standing
+from agentzaaheen.core.registry import Kind, State, load_registry
+from agentzaaheen.core.telemetry import LogFolder, LogPage, LogQuery
+from agentzaaheen.core.telemetry.logfile import file_name
 from tools import chat_tools
 from tools.log_tool import READ_LOGS_SKILL, log_lines_text, read_logs_tool
-from yaqzan.core.llm_gateway import Tool
-from yaqzan.core.policy import Standing
-from yaqzan.core.registry import Kind, State, load_registry
-from yaqzan.core.telemetry import LogFolder, LogPage, LogQuery
-from yaqzan.core.telemetry.logfile import file_name
 
-PLUGINS = Path(__file__).resolve().parents[2] / "src" / "yaqzan" / "plugins"
+PLUGINS = Path(__file__).resolve().parents[2] / "src" / "agentzaaheen" / "plugins"
 TODAY = date(2026, 10, 25)
 NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 REPOS = {"zaaheen": "acme/zaaheen", "eva": "acme/eva"}
@@ -138,5 +138,5 @@ def test_the_chat_gets_the_tool_only_while_the_skill_is_on_and_logs_are_kept(tmp
 def test_the_skill_is_in_the_catalogue_and_opens(tmp_path: Path) -> None:
     tool, skills = chat_tools.skill_tool(load_registry(PLUGINS), PLUGINS)
     assert tool is not None
-    assert "- read-logs: Read Yaqzan's own log lines" in skills
-    assert run(tool, READ_LOGS_SKILL).startswith("# Read Yaqzan's logs")
+    assert "- read-logs: Read Agent Zaaheen's own log lines" in skills
+    assert run(tool, READ_LOGS_SKILL).startswith("# Read Agent Zaaheen's logs")

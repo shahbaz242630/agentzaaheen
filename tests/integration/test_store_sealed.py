@@ -7,9 +7,17 @@ from uuid import uuid4
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.store import AllSealedSecrets, SealedRow, SealedSecrets, SlotKey
+from agentzaaheen.core.vault import (
+    CredentialSlot,
+    Keyring,
+    MasterKey,
+    SealedSecret,
+    open_secret,
+    rewrap,
+    seal,
+)
 from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
-from yaqzan.core.store import AllSealedSecrets, SealedRow, SealedSecrets, SlotKey
-from yaqzan.core.vault import CredentialSlot, Keyring, MasterKey, SealedSecret, open_secret, rewrap, seal
 
 TENANT = uuid4()
 PROJECT = uuid4()
@@ -81,7 +89,7 @@ def test_plaintext_never_reaches_the_table(test_db: ScratchDb) -> None:
             )
             async with db.scoped(TENANT, PROJECT).connection() as conn:
                 dump = await conn.fetchval(
-                    "SELECT string_agg(t::text, '|')::bytea FROM yaqzan.sealed_secrets t"
+                    "SELECT string_agg(t::text, '|')::bytea FROM agentzaaheen.sealed_secrets t"
                 )
                 return bytes(dump)
 

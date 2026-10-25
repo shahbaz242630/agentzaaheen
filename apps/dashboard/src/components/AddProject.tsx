@@ -14,7 +14,7 @@ const REASON: Record<string, string> = {
   "workspaces.name_taken": "A project with that name exists (or did once). Choose another name.",
   "workspaces.repo_taken": "Another project already reads that repository.",
   "workspaces.repo_not_covered":
-    "Yaqzan's read-only GitHub token can't read that repository. Add it to the token on GitHub first.",
+    "Agent Zaaheen's read-only GitHub token can't read that repository. Add it to the token on GitHub first.",
   "source.unavailable": "GitHub did not answer. Please try again in a minute.",
 };
 
@@ -146,7 +146,7 @@ function AddProjectForm({ onClose, onAdded }: Props & { onClose: () => void }) {
         <label htmlFor={`${id}-repo`} className="text-sm font-medium text-ink">
           GitHub repository (read-only)
         </label>
-        {repos.state === "loading" && <p className="text-sm text-muted">Reading the repositories Yaqzan can see…</p>}
+        {repos.state === "loading" && <p className="text-sm text-muted">Reading the repositories Agent Zaaheen can see…</p>}
         {repos.state === "failed" && (
           <p className="text-sm text-muted">
             The list of repositories could not be read. You can still add the project without one.
@@ -175,7 +175,7 @@ function AddProjectForm({ onClose, onAdded }: Props & { onClose: () => void }) {
               ))}
             </select>
             <p className="text-sm text-muted">
-              Only repositories Yaqzan's read-only token covers are listed. For another one, add it to the token on
+              Only repositories Agent Zaaheen's read-only token covers are listed. For another one, add it to the token on
               GitHub first.
             </p>
           </>

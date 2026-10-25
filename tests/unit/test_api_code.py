@@ -6,11 +6,11 @@ from datetime import timedelta
 
 import pytest
 
+from agentzaaheen.core.api.code import code_card, failed_code_card
+from agentzaaheen.core.api.views import Card, Count, NotKnown, Tone
+from agentzaaheen.core.metrics import Freshness
+from agentzaaheen.core.sdk import BuildState, RepoHealth
 from tests.fixtures.github_world import EXPECTED, HEAD_SHA, NOW, when
-from yaqzan.core.api.code import code_card, failed_code_card
-from yaqzan.core.api.views import Card, Count, NotKnown, Tone
-from yaqzan.core.metrics import Freshness
-from yaqzan.core.sdk import BuildState, RepoHealth
 
 HOUR = timedelta(hours=1)
 

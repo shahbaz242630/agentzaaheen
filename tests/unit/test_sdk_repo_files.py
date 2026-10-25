@@ -7,7 +7,14 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from yaqzan.core.sdk import MAX_FILE_CHARS, MAX_TOTAL_CHARS, RepoBundle, RepoFile, is_secret_path, pick_files
+from agentzaaheen.core.sdk import (
+    MAX_FILE_CHARS,
+    MAX_TOTAL_CHARS,
+    RepoBundle,
+    RepoFile,
+    is_secret_path,
+    pick_files,
+)
 
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 
@@ -81,8 +88,8 @@ def _bundle(**change: object) -> RepoBundle:
 
 
 def test_a_bundle_says_which_cited_paths_do_not_exist() -> None:
-    assert _bundle().missing(["src/a.ts", "apps/yaqzan/plugins/x.py", "README.md"]) == (
-        "apps/yaqzan/plugins/x.py",
+    assert _bundle().missing(["src/a.ts", "apps/agentzaaheen/plugins/x.py", "README.md"]) == (
+        "apps/agentzaaheen/plugins/x.py",
     )
 
 

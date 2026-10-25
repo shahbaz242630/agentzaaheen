@@ -8,12 +8,12 @@ from uuid import uuid4
 import httpx
 from fastapi.testclient import TestClient
 
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.api.adding import RepoOption
-from yaqzan.core.api.app import REQUEST_HEADER
-from yaqzan.core.policy import Added, LifecycleVerdict, slug_of
-from yaqzan.core.sdk import SourceError, SourceErrorCode
-from yaqzan.core.store import StoreError, StoreErrorCode, WorkspaceRow
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.api.adding import RepoOption
+from agentzaaheen.core.api.app import REQUEST_HEADER
+from agentzaaheen.core.policy import Added, LifecycleVerdict, slug_of
+from agentzaaheen.core.sdk import SourceError, SourceErrorCode
+from agentzaaheen.core.store import StoreError, StoreErrorCode, WorkspaceRow
 
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}

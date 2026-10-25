@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from yaqzan.core.llm_gateway import (
+from agentzaaheen.core.llm_gateway import (
     Answer,
     CloudAsk,
     FixedNames,
@@ -23,8 +23,9 @@ from yaqzan.core.llm_gateway import (
     SpendLedger,
     Use,
 )
-from yaqzan.core.net import ClaudeReply, NetError, NetErrorCode
-from yaqzan.core.sdk import DataClass, ModelLevel, install_log_sink
+from agentzaaheen.core.net import ClaudeReply, NetError, NetErrorCode
+from agentzaaheen.core.sdk import DataClass, ModelLevel, install_log_sink
+from tests.fixtures.name_prints import PRINTER
 
 OCT = datetime(2026, 10, 25, 9, 0, tzinfo=UTC)
 PACK = PromptPart("You are the Head of Engineering. You only read and draft.", DataClass.INTERNAL)
@@ -72,7 +73,9 @@ class FakeDoor:
 
 def setup(door: FakeDoor) -> tuple[CloudAsk, SpendLedger]:
     ledger = SpendLedger(MemoryBook(), clock=lambda: OCT)
-    return CloudAsk(ModelGate(ledger, FixedNames(KnownNames(["Fatima Al Mansoori"]))), door), ledger
+    return CloudAsk(
+        ModelGate(ledger, FixedNames(KnownNames.of(["Fatima Al Mansoori"], PRINTER))), door
+    ), ledger
 
 
 def ask(
@@ -155,7 +158,7 @@ def test_an_unreachable_claude_is_did_not_run_with_no_cost_and_no_weaker_answer(
 ) -> None:
     door = FakeDoor(NetError(NetErrorCode.RATE_LIMITED, "busy", status=529))
     asker, ledger = setup(door)
-    assert ask(asker) == Answer("model.unreachable")
+    assert ask(asker) == Answer("model.unreachable", reason="net.rate_limited", status=529)
     assert len(door.calls) == 1  # asked once, never retried, never handed to another model
     assert asyncio.run(ledger.allows(Use.HEADS, 0)).spent_micro == 0
     assert lines[-1]["event"] == "model_cloud_call_failed"

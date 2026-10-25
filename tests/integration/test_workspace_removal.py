@@ -18,11 +18,7 @@ from uuid import UUID
 import asyncpg
 import pytest
 
-from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
-from tests.integration.test_policy_agents import ME, TENANT
-from tests.integration.test_store_records import run_record
-from tests.unit.test_registry_roles import pack
-from yaqzan.core.policy import (
+from agentzaaheen.core.policy import (
     AgentControl,
     AgentVerdict,
     Channel,
@@ -30,8 +26,8 @@ from yaqzan.core.policy import (
     Role,
     WorkspaceControl,
 )
-from yaqzan.core.registry.roles import RoleLibrary, load_roles
-from yaqzan.core.store import (
+from agentzaaheen.core.registry.roles import RoleLibrary, load_roles
+from agentzaaheen.core.store import (
     AgentRows,
     AuditRows,
     DailySummaries,
@@ -45,6 +41,10 @@ from yaqzan.core.store import (
     WorkspaceRows,
     WorkspaceSources,
 )
+from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
+from tests.integration.test_policy_agents import ME, TENANT
+from tests.integration.test_store_records import run_record
+from tests.unit.test_registry_roles import pack
 
 EVA = UUID("00000000-0000-4000-8000-0000000000f2")
 ZAAHEEN = UUID("00000000-0000-4000-8000-0000000000f3")
@@ -117,7 +117,7 @@ async def _counts(admin_url: str, workspace: UUID) -> dict[str, int]:
     try:
         return {
             # ``t`` comes from the fixed list above, never from outside.
-            t: await conn.fetchval(f"SELECT count(*) FROM yaqzan.{t} WHERE project_id = $1", workspace)  # noqa: S608
+            t: await conn.fetchval(f"SELECT count(*) FROM agentzaaheen.{t} WHERE project_id = $1", workspace)  # noqa: S608
             for t in PROJECT_TABLES
         }
     finally:
@@ -274,7 +274,7 @@ def test_every_move_needs_the_chairman_with_a_fresh_passkey(test_db: ScratchDb) 
         # Archived without a step-up, or by the system.
         [
             (
-                "UPDATE yaqzan.workspaces SET state = 'archived',"
+                "UPDATE agentzaaheen.workspaces SET state = 'archived',"
                 " state_changed_by = 'user:chairman'"
                 " WHERE workspace_id = $1",
                 EVA,
@@ -282,8 +282,8 @@ def test_every_move_needs_the_chairman_with_a_fresh_passkey(test_db: ScratchDb) 
         ],
         [
             (
-                "UPDATE yaqzan.workspaces SET state = 'archived',"
-                " state_changed_by = 'system:yaqzan',"
+                "UPDATE agentzaaheen.workspaces SET state = 'archived',"
+                " state_changed_by = 'system:agentzaaheen',"
                 " step_up_at = now()"
                 " WHERE workspace_id = $1",
                 EVA,
@@ -292,7 +292,7 @@ def test_every_move_needs_the_chairman_with_a_fresh_passkey(test_db: ScratchDb) 
         # Straight from active to deleted: it must be archived first.
         [
             (
-                "UPDATE yaqzan.workspaces SET state = 'deleted',"
+                "UPDATE agentzaaheen.workspaces SET state = 'deleted',"
                 " state_changed_by = 'user:chairman',"
                 " step_up_at = now()"
                 " WHERE workspace_id = $1",
@@ -302,14 +302,14 @@ def test_every_move_needs_the_chairman_with_a_fresh_passkey(test_db: ScratchDb) 
         # The same step-up used for two moves.
         [
             (
-                "UPDATE yaqzan.workspaces SET state = 'archived',"
+                "UPDATE agentzaaheen.workspaces SET state = 'archived',"
                 " state_changed_by = 'user:chairman',"
                 " step_up_at = '2026-10-24T09:00:00Z'"
                 " WHERE workspace_id = $1",
                 EVA,
             ),
             (
-                "UPDATE yaqzan.workspaces SET state = 'active',"
+                "UPDATE agentzaaheen.workspaces SET state = 'active',"
                 " state_changed_by = 'user:chairman',"
                 " step_up_at = '2026-10-24T09:00:00Z'"
                 " WHERE workspace_id = $1",
@@ -319,32 +319,32 @@ def test_every_move_needs_the_chairman_with_a_fresh_passkey(test_db: ScratchDb) 
         # Deleting an active workspace through the function.
         [
             (
-                "SELECT yaqzan.erase_workspace($1, 'user:chairman', now(), now())",
+                "SELECT agentzaaheen.erase_workspace($1, 'user:chairman', now(), now())",
                 EVA,
             ),
         ],
         # Deleting another workspace than the one this connection is for.
         [
             (
-                "SELECT yaqzan.erase_workspace($1, 'user:chairman', now(), now())",
+                "SELECT agentzaaheen.erase_workspace($1, 'user:chairman', now(), now())",
                 ZAAHEEN,
             ),
         ],
         # A deleted workspace never comes back.
         [
             (
-                "UPDATE yaqzan.workspaces SET state = 'archived',"
+                "UPDATE agentzaaheen.workspaces SET state = 'archived',"
                 " state_changed_by = 'user:chairman',"
                 " step_up_at = now() - interval '1 minute'"
                 " WHERE workspace_id = $1",
                 EVA,
             ),
             (
-                "SELECT yaqzan.erase_workspace($1, 'user:chairman', now(), now())",
+                "SELECT agentzaaheen.erase_workspace($1, 'user:chairman', now(), now())",
                 EVA,
             ),
             (
-                "UPDATE yaqzan.workspaces SET state = 'active',"
+                "UPDATE agentzaaheen.workspaces SET state = 'active',"
                 " state_changed_by = 'user:chairman',"
                 " step_up_at = now() + interval '1 minute'"
                 " WHERE workspace_id = $1",
@@ -373,7 +373,7 @@ def test_the_app_cannot_delete_history_except_through_the_function(test_db: Scra
     async def body() -> None:
         conn = await connect_as(test_db.app_url, TENANT, EVA)
         try:
-            await conn.execute("DELETE FROM yaqzan.runs WHERE project_id = $1", EVA)
+            await conn.execute("DELETE FROM agentzaaheen.runs WHERE project_id = $1", EVA)
         finally:
             await conn.close()
 

@@ -28,15 +28,15 @@ import httpx
 import yaml
 from pydantic import SecretStr, ValidationError
 
+from agentzaaheen.core.api import Portfolio
+from agentzaaheen.core.api.overlay import CardMaker, OverlayPortfolio
+from agentzaaheen.core.api.uptime import CARD_ID, uptime_card
+from agentzaaheen.core.api.views import Card
+from agentzaaheen.core.net import PushClient, StatusProbe
+from agentzaaheen.core.notify import Alert, UptimeWatch, deliver
+from agentzaaheen.core.sdk import SiteRule, UptimeReport, get_logger, say, span
+from agentzaaheen.plugins.connectors.uptime import UptimeSource
 from tools.dashboard_sources import ListNotUsableError
-from yaqzan.core.api import Portfolio
-from yaqzan.core.api.overlay import CardMaker, OverlayPortfolio
-from yaqzan.core.api.uptime import CARD_ID, uptime_card
-from yaqzan.core.api.views import Card
-from yaqzan.core.net import PushClient, StatusProbe
-from yaqzan.core.notify import Alert, UptimeWatch, deliver
-from yaqzan.core.sdk import SiteRule, UptimeReport, get_logger, say, span
-from yaqzan.plugins.connectors.uptime import UptimeSource
 
 # Re-checked every 5 minutes while the dashboard runs (ADR-031); "unknown" if no check for two hours.
 UPTIME_SCHEDULE = timedelta(hours=1)
@@ -117,7 +117,7 @@ class UptimeLive:
         self._interval_s = interval_s
         self._watch = UptimeWatch(names)
         self._stop = threading.Event()
-        self._log = get_logger("yaqzan.uptime")
+        self._log = get_logger("agentzaaheen.uptime")
         self.latest: dict[str, UptimeReport] = {}
 
     async def round(self) -> list[Alert]:
@@ -126,7 +126,7 @@ class UptimeLive:
             reports = await read_uptime(self._rules, self._clock(), self._transport)
             self.latest = {**self.latest, **reports}
             alerts = self._watch.observe(reports)
-            current.set_attribute("yaqzan.count", len(alerts))
+            current.set_attribute("agentzaaheen.count", len(alerts))
             if alerts and self._on_alerts is not None:
                 self._on_alerts(alerts)
             if alerts and self._topic is not None:
@@ -141,7 +141,7 @@ class UptimeLive:
 
     def start(self) -> threading.Thread:
         """Re-check in the background until :meth:`stop` (a daemon thread: it ends with the dashboard)."""
-        thread = threading.Thread(target=self._run, name="yaqzan-uptime", daemon=True)
+        thread = threading.Thread(target=self._run, name="agentzaaheen-uptime", daemon=True)
         thread.start()
         return thread
 
@@ -214,7 +214,7 @@ def uptime_list(path: Path | None, projects: Collection[str]) -> dict[str, tuple
     """The local uptime list given with ``--uptime`` (empty without one); a broken list is said and raised."""
     if path is None:
         return {}
-    log = get_logger("yaqzan.settings")
+    log = get_logger("agentzaaheen.settings")
     try:
         found = load_uptime(path, projects)
     except UptimeListError as exc:

@@ -43,11 +43,11 @@ from typing import Annotated, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
+from agentzaaheen.core.api import SamplePortfolio
+from agentzaaheen.core.llm_gateway import Tool
+from agentzaaheen.core.sdk import get_logger, say
+from agentzaaheen.core.sdk.uptime import MAX_PART, PART
 from tools.dashboard_sources import ListNotUsableError
-from yaqzan.core.api import SamplePortfolio
-from yaqzan.core.llm_gateway import Tool
-from yaqzan.core.sdk import get_logger, say
-from yaqzan.core.sdk.uptime import MAX_PART, PART
 
 MAX_FILE_BYTES = 128 * 1024
 MAX_TEXT = 300
@@ -158,7 +158,7 @@ def fixes_list(path: Path | None, projects: Collection[str]) -> dict[str, Projec
     """The guides given with ``--fixes`` (empty without one); a broken file is said and raised."""
     if path is None:
         return {}
-    log = get_logger("yaqzan.settings")
+    log = get_logger("agentzaaheen.settings")
     try:
         found = load_fixes(path, projects)
     except FixGuideError as exc:

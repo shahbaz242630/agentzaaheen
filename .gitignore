@@ -1,11 +1,11 @@
-# Yaqzan: this repository holds CODE ONLY (ADR-014).
+# Agent Zaaheen: this repository holds CODE ONLY (ADR-014).
 # Docs, plans, handoffs, research, runbooks, project configs and secrets
 # live outside this repo and must never be committed.
 
 # --- never commit: documentation and admin material ---
 *.md
-!src/yaqzan/plugins/skills/**/SKILL.md
-!src/yaqzan/plugins/agents/**/prompt.md
+!src/agentzaaheen/plugins/skills/**/SKILL.md
+!src/agentzaaheen/plugins/agents/**/prompt.md
 docs/
 research/
 runbooks/
@@ -31,7 +31,7 @@ BRD*
 *.age
 *secret*
 *credential*
-!src/yaqzan/core/vault/**
+!src/agentzaaheen/core/vault/**
 service-account*.json
 *.local.*
 

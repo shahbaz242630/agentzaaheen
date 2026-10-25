@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from agentzaaheen.core.metrics import SliKind
 from tools.slo_list import SloListError, describe, load_slos, main
-from yaqzan.core.metrics import SliKind
 
 PROJECTS = {"sandoq-kin", "eva"}
 

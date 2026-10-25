@@ -14,14 +14,14 @@ import httpx
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from agentzaaheen.core.api.adding import RepoOption
+from agentzaaheen.core.policy import Added, LifecycleVerdict
+from agentzaaheen.core.store import Database, DatabaseSettings, WorkspaceSources
 from tests.integration.conftest import Server, run
 from tests.integration.test_dashboard_switches import OURS, _switches, laptop_url, start, ui
 from tools import laptop_db
 from tools.dashboard_adding import LaptopAdding
 from tools.dashboard_switches import LaptopSwitches
-from yaqzan.core.api.adding import RepoOption
-from yaqzan.core.policy import Added, LifecycleVerdict
-from yaqzan.core.store import Database, DatabaseSettings, WorkspaceSources
 
 __all__ = ["laptop_url", "ui"]  # pytest fixtures shared with the switches tests
 

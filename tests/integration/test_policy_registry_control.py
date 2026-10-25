@@ -13,11 +13,11 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from agentzaaheen.core.policy import Channel, Ledger, RegistryControl, Role, Standing, Verdict
+from agentzaaheen.core.registry import Connector, Kind, Layout, Plugin, Registry, Skill, State
+from agentzaaheen.core.registry.models import Invocation
+from agentzaaheen.core.sdk import ToolLevel
 from tests.integration.conftest import ScratchDb, connect_as, open_db, run
-from yaqzan.core.policy import Channel, Ledger, RegistryControl, Role, Standing, Verdict
-from yaqzan.core.registry import Connector, Kind, Layout, Plugin, Registry, Skill, State
-from yaqzan.core.registry.models import Invocation
-from yaqzan.core.sdk import ToolLevel
 
 TENANT = uuid4()
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
@@ -68,7 +68,7 @@ def audit(test_db: ScratchDb) -> list[tuple[str, str, str, str | None]]:
             conn = await connect_as(test_db.app_url, TENANT)
             try:
                 rows = await conn.fetch(
-                    "SELECT action, outcome, reason_code, target_ref FROM yaqzan.audit_log"
+                    "SELECT action, outcome, reason_code, target_ref FROM agentzaaheen.audit_log"
                     " WHERE tenant_id = $1 ORDER BY seq",
                     TENANT,
                 )
@@ -214,14 +214,15 @@ def test_an_approval_lapses_when_the_files_change(test_db: ScratchDb) -> None:
         conn = await connect_as(test_db.app_url, TENANT)
         try:
             await conn.execute(
-                "INSERT INTO yaqzan.registry_requests (id, tenant_id, kind, item_id, fingerprint, status,"
+                "INSERT INTO agentzaaheen.registry_requests (id, tenant_id, kind, item_id,"
+                " fingerprint, status,"
                 " requested_by, requested_at, decided_by, decided_at, step_up_at)"
                 " VALUES ($1, $2, 'skill', 'triage-failing-build', $3, 'approved', 'user:chairman', now(),"
                 " 'user:chairman', now(), now())",
                 approved, TENANT, FILES,
             )  # fmt: skip
             await conn.execute(
-                "INSERT INTO yaqzan.registry_switches (tenant_id, kind, item_id, enabled, fingerprint,"
+                "INSERT INTO agentzaaheen.registry_switches (tenant_id, kind, item_id, enabled, fingerprint,"
                 " request_id, changed_by, changed_at)"
                 " VALUES ($1, 'skill', 'triage-failing-build', true, $2, $3, 'user:chairman', now())",
                 TENANT, FILES, approved,

@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 
 import httpx
 
-from yaqzan.core.sdk import BuildState, RepoHealth
+from agentzaaheen.core.sdk import BuildState, RepoHealth
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 REPO = "acme-labs/widget"

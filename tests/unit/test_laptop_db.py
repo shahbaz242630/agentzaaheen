@@ -151,3 +151,11 @@ def test_main_dispatches(monkeypatch: pytest.MonkeyPatch, capsys: pytest.Capture
     assert laptop_db.main(["status"]) == 0
     assert calls == ["up", "stop"]
     assert "laptop-db: running" in capsys.readouterr().out
+
+
+def test_the_laptop_ids_never_change_even_after_the_rename() -> None:
+    # Made from fixed text with the old name: a new id would orphan the saved passkey and switches.
+    assert str(laptop_db.LAPTOP_TENANT) == "38a6867d-7e01-5e36-b8b8-aec6144d2dbb"
+    assert {w.slug: str(w.workspace_id) for w in laptop_db.LAPTOP_WORKSPACES}["zaaheen"] == (
+        "5753fb4a-63cd-52de-8681-78d1d78d6e9f"
+    )

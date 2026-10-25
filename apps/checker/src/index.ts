@@ -1,4 +1,4 @@
-// Yaqzan's external uptime checker (ADR-032): a Cloudflare Worker run every minute by cron.
+// Agent Zaaheen's external uptime checker (ADR-032): a Cloudflare Worker run every minute by cron.
 //
 // Each run checks every address twice (at 0 s and 30 s). A failure is re-checked 10 s later
 // and counts only if that fails too, so a site that goes down is known within about a minute.

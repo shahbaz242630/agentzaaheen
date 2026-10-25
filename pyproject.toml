@@ -1,7 +1,7 @@
 [project]
-name = "yaqzan"
+name = "agentzaaheen"
 version = "0.0.1"
-description = "Yaqzan: an AI operations team that watches a portfolio of products 24/7."
+description = "Agent Zaaheen: an AI operations team that watches a portfolio of products 24/7."
 requires-python = ">=3.12"
 # No licence: all rights reserved (ADR-013).
 dependencies = [
@@ -38,7 +38,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/yaqzan"]
+packages = ["src/agentzaaheen"]
 
 [tool.uv]
 # Supply-chain cooldown (Rulebook §4): never resolve releases newer than this.
@@ -74,6 +74,8 @@ ignore = [
     "PLR0913", "PLR0917",    # fixture builders take one argument per field they vary
 ]
 "tools/**" = ["T201"]
+# A past migration's SQL is frozen history: its text (under the old name) must match what was recorded.
+"src/agentzaaheen/core/store/migrations/m0*.py" = ["E501"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -92,7 +94,7 @@ exclude = ["tests/gate_proofs/fixtures/"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-q --strict-markers --cov=yaqzan --cov=tools --cov-branch --cov-report=term-missing --cov-report=json"
+addopts = "-q --strict-markers --cov=agentzaaheen --cov=tools --cov-branch --cov-report=term-missing --cov-report=json"
 norecursedirs = [".*", "*.egg", "build", "dist", "node_modules", ".venv", "tests/gate_proofs/fixtures"]
 filterwarnings = [
     "error",
@@ -111,63 +113,63 @@ exclude_also = ["if __name__ == .__main__.:"]
 # ---------------------------------------------------------------- import-linter
 # Module boundaries (Rulebook §2.2). CI fails if any of these break.
 [tool.importlinter]
-root_package = "yaqzan"
+root_package = "agentzaaheen"
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "The core never imports a plugin"
 type = "forbidden"
-source_modules = ["yaqzan.core"]
-forbidden_modules = ["yaqzan.plugins"]
+source_modules = ["agentzaaheen.core"]
+forbidden_modules = ["agentzaaheen.plugins"]
 
 [[tool.importlinter.contracts]]
 name = "Plugins depend only on the SDK, never on core internals"
 type = "forbidden"
-source_modules = ["yaqzan.plugins"]
+source_modules = ["agentzaaheen.plugins"]
 forbidden_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
-    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker", "yaqzan.core.registry", "yaqzan.core.auth",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector",
+    "agentzaaheen.core.metrics", "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.net",
+    "agentzaaheen.core.broker", "agentzaaheen.core.registry", "agentzaaheen.core.auth",
 ]
 
 [[tool.importlinter.contracts]]
 name = "The SDK is the bottom layer: it imports no other core module"
 type = "forbidden"
-source_modules = ["yaqzan.core.sdk"]
+source_modules = ["agentzaaheen.core.sdk"]
 forbidden_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
-    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker", "yaqzan.core.registry", "yaqzan.core.auth",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector",
+    "agentzaaheen.core.metrics", "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.net",
+    "agentzaaheen.core.broker", "agentzaaheen.core.registry", "agentzaaheen.core.auth",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Plugin families are independent of each other"
 type = "independence"
 modules = [
-    "yaqzan.plugins.connectors", "yaqzan.plugins.agents",
-    "yaqzan.plugins.skills", "yaqzan.plugins.detectors",
+    "agentzaaheen.plugins.connectors", "agentzaaheen.plugins.agents",
+    "agentzaaheen.plugins.skills", "agentzaaheen.plugins.detectors",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Only the vault may see secrets; nothing else imports it except the policy layer"
 type = "forbidden"
 source_modules = [
-    "yaqzan.core.api", "yaqzan.core.runner", "yaqzan.core.scheduler", "yaqzan.core.detector",
-    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.store",
+    "agentzaaheen.core.api", "agentzaaheen.core.runner", "agentzaaheen.core.scheduler", "agentzaaheen.core.detector",
+    "agentzaaheen.core.metrics", "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.store",
 ]
-forbidden_modules = ["yaqzan.core.vault"]
+forbidden_modules = ["agentzaaheen.core.vault"]
 
 [[tool.importlinter.contracts]]
 name = "Only the vault uses cryptography (no DIY crypto elsewhere, SP-7)"
 type = "forbidden"
 source_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.detector", "yaqzan.core.metrics",
-    "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.sdk", "yaqzan.plugins",
-    "yaqzan.core.registry", "yaqzan.core.auth",
-    "yaqzan.core.telemetry",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.detector", "agentzaaheen.core.metrics",
+    "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.sdk", "agentzaaheen.plugins",
+    "agentzaaheen.core.registry", "agentzaaheen.core.auth",
+    "agentzaaheen.core.telemetry",
 ]
 forbidden_modules = ["cryptography"]
 allow_indirect_imports = true
@@ -176,11 +178,11 @@ allow_indirect_imports = true
 name = "Only the SDK's redacting logger uses structlog (one logger, SECURITY 9)"
 type = "forbidden"
 source_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
-    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.plugins",
-    "yaqzan.core.registry", "yaqzan.core.auth",
-    "yaqzan.core.telemetry",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector",
+    "agentzaaheen.core.metrics", "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.plugins",
+    "agentzaaheen.core.registry", "agentzaaheen.core.auth",
+    "agentzaaheen.core.telemetry",
 ]
 forbidden_modules = ["structlog"]
 allow_indirect_imports = true
@@ -188,23 +190,23 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "The store sits below everything but the SDK (Rulebook 2.2: dependencies point one way)"
 type = "forbidden"
-source_modules = ["yaqzan.core.store"]
+source_modules = ["agentzaaheen.core.store"]
 forbidden_modules = [
-    "yaqzan.core.api", "yaqzan.core.scheduler", "yaqzan.core.runner", "yaqzan.core.policy",
-    "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector", "yaqzan.core.metrics",
-    "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker",
+    "agentzaaheen.core.api", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner", "agentzaaheen.core.policy",
+    "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector", "agentzaaheen.core.metrics",
+    "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.net",
+    "agentzaaheen.core.broker",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Only the store talks to the database driver (nothing else reads tables, Rulebook 2.2)"
 type = "forbidden"
 source_modules = [
-    "yaqzan.core.api", "yaqzan.core.scheduler", "yaqzan.core.runner", "yaqzan.core.policy",
-    "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector", "yaqzan.core.metrics",
-    "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.sdk", "yaqzan.plugins",
-    "yaqzan.core.registry", "yaqzan.core.auth",
-    "yaqzan.core.telemetry",
+    "agentzaaheen.core.api", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner", "agentzaaheen.core.policy",
+    "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector", "agentzaaheen.core.metrics",
+    "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.sdk", "agentzaaheen.plugins",
+    "agentzaaheen.core.registry", "agentzaaheen.core.auth",
+    "agentzaaheen.core.telemetry",
 ]
 forbidden_modules = ["asyncpg"]
 allow_indirect_imports = true
@@ -213,11 +215,11 @@ allow_indirect_imports = true
 name = "Only the network module talks HTTP (one outbound client with an allowlist, SECURITY NET-1)"
 type = "forbidden"
 source_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
-    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.sdk", "yaqzan.plugins",
-    "yaqzan.core.registry", "yaqzan.core.auth",
-    "yaqzan.core.telemetry",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector",
+    "agentzaaheen.core.metrics", "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.sdk", "agentzaaheen.plugins",
+    "agentzaaheen.core.registry", "agentzaaheen.core.auth",
+    "agentzaaheen.core.telemetry",
 ]
 forbidden_modules = ["httpx", "httpcore", "urllib3", "http", "socket", "ssl"]
 allow_indirect_imports = true
@@ -226,63 +228,63 @@ allow_indirect_imports = true
 name = "Only the API serves the web (one place with routes, headers and the host allowlist)"
 type = "forbidden"
 source_modules = [
-    "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner", "yaqzan.core.policy",
-    "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector", "yaqzan.core.metrics",
-    "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net", "yaqzan.core.broker",
-    "yaqzan.core.sdk", "yaqzan.plugins",
-    "yaqzan.core.registry", "yaqzan.core.auth",
-    "yaqzan.core.telemetry",
+    "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner", "agentzaaheen.core.policy",
+    "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector", "agentzaaheen.core.metrics",
+    "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.net", "agentzaaheen.core.broker",
+    "agentzaaheen.core.sdk", "agentzaaheen.plugins",
+    "agentzaaheen.core.registry", "agentzaaheen.core.auth",
+    "agentzaaheen.core.telemetry",
 ]
 forbidden_modules = ["fastapi", "starlette", "uvicorn"]
 
 [[tool.importlinter.contracts]]
 name = "The network module never opens credentials: keys reach it only as secret headers"
 type = "forbidden"
-source_modules = ["yaqzan.core.net"]
-forbidden_modules = ["yaqzan.core.broker"]
+source_modules = ["agentzaaheen.core.net"]
+forbidden_modules = ["agentzaaheen.core.broker"]
 
 [[tool.importlinter.contracts]]
 name = "Metrics are pure code over SDK shapes: no database, network, policy or plugins"
 type = "forbidden"
-source_modules = ["yaqzan.core.metrics"]
+source_modules = ["agentzaaheen.core.metrics"]
 forbidden_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
-    "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector",
+    "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.net",
+    "agentzaaheen.core.broker",
 ]
 
 [[tool.importlinter.contracts]]
 name = "The registry only reads files: no database, network, vault, policy or web (ADR-027)"
 type = "forbidden"
-source_modules = ["yaqzan.core.registry"]
+source_modules = ["agentzaaheen.core.registry"]
 forbidden_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
-    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector",
+    "agentzaaheen.core.metrics", "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.net",
+    "agentzaaheen.core.broker",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Passkeys only check signatures: no database, network, vault, policy or web (ADR-SEC-007)"
 type = "forbidden"
-source_modules = ["yaqzan.core.auth"]
+source_modules = ["agentzaaheen.core.auth"]
 forbidden_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
-    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker", "yaqzan.core.registry",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector",
+    "agentzaaheen.core.metrics", "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.net",
+    "agentzaaheen.core.broker", "agentzaaheen.core.registry",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Only the auth module speaks WebAuthn (one place checks passkeys, ADR-SEC-007)"
 type = "forbidden"
 source_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
-    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker", "yaqzan.core.registry", "yaqzan.core.sdk", "yaqzan.plugins",
-    "yaqzan.core.telemetry",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector",
+    "agentzaaheen.core.metrics", "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.net",
+    "agentzaaheen.core.broker", "agentzaaheen.core.registry", "agentzaaheen.core.sdk", "agentzaaheen.plugins",
+    "agentzaaheen.core.telemetry",
 ]
 forbidden_modules = ["webauthn"]
 allow_indirect_imports = true
@@ -291,10 +293,10 @@ allow_indirect_imports = true
 name = "Only the SDK and telemetry touch OpenTelemetry (others use core.sdk.span, ADR-032)"
 type = "forbidden"
 source_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
-    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker", "yaqzan.core.registry", "yaqzan.core.auth", "yaqzan.plugins",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector",
+    "agentzaaheen.core.metrics", "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.net",
+    "agentzaaheen.core.broker", "agentzaaheen.core.registry", "agentzaaheen.core.auth", "agentzaaheen.plugins",
 ]
 forbidden_modules = ["opentelemetry"]
 allow_indirect_imports = true
@@ -302,12 +304,12 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "Telemetry only encodes spans: no database, network, vault, policy or web (ADR-032)"
 type = "forbidden"
-source_modules = ["yaqzan.core.telemetry"]
+source_modules = ["agentzaaheen.core.telemetry"]
 forbidden_modules = [
-    "yaqzan.core.api", "yaqzan.core.store", "yaqzan.core.scheduler", "yaqzan.core.runner",
-    "yaqzan.core.policy", "yaqzan.core.llm_gateway", "yaqzan.core.vault", "yaqzan.core.detector",
-    "yaqzan.core.metrics", "yaqzan.core.notify", "yaqzan.core.voice", "yaqzan.core.net",
-    "yaqzan.core.broker", "yaqzan.core.registry", "yaqzan.core.auth", "yaqzan.plugins",
+    "agentzaaheen.core.api", "agentzaaheen.core.store", "agentzaaheen.core.scheduler", "agentzaaheen.core.runner",
+    "agentzaaheen.core.policy", "agentzaaheen.core.llm_gateway", "agentzaaheen.core.vault", "agentzaaheen.core.detector",
+    "agentzaaheen.core.metrics", "agentzaaheen.core.notify", "agentzaaheen.core.voice", "agentzaaheen.core.net",
+    "agentzaaheen.core.broker", "agentzaaheen.core.registry", "agentzaaheen.core.auth", "agentzaaheen.plugins",
 ]
 
 # ---------------------------------------------------------------- bandit
@@ -315,4 +317,4 @@ forbidden_modules = [
 exclude_dirs = ["tests", ".venv"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["yaqzan", "tools"]
+known-first-party = ["agentzaaheen", "tools"]

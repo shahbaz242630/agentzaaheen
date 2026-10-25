@@ -10,21 +10,27 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from tests.fixtures import paddle_world as world
-from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
-from tests.tracing import recorded
-from yaqzan.core.metrics import CountAndAmounts, Freshness, Unknown
-from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.scheduler import CURSOR_OVERLAP, RevenueSnapshot, SyncOutcome, revenue_snapshot, sync_revenue
-from yaqzan.core.sdk import RevenueBatch, SourceErrorCode
-from yaqzan.core.store import Database, RevenueRows, SyncState
-from yaqzan.plugins.connectors.paddle import (
+from agentzaaheen.core.metrics import CountAndAmounts, Freshness, Unknown
+from agentzaaheen.core.net import JsonClient, NetPolicy
+from agentzaaheen.core.scheduler import (
+    CURSOR_OVERLAP,
+    RevenueSnapshot,
+    SyncOutcome,
+    revenue_snapshot,
+    sync_revenue,
+)
+from agentzaaheen.core.sdk import RevenueBatch, SourceErrorCode
+from agentzaaheen.core.store import Database, RevenueRows, SyncState
+from agentzaaheen.plugins.connectors.paddle import (
     ALLOWED_HOSTS,
     API_VERSION_HEADER,
     SANDBOX_BASE_URL,
     FakePaddleSource,
     PaddleSource,
 )
+from tests.fixtures import paddle_world as world
+from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
+from tests.tracing import recorded
 
 TENANT = UUID("00000000-0000-4000-8000-000000000001")
 PROJECT = UUID("00000000-0000-4000-8000-0000000000aa")
@@ -238,9 +244,9 @@ def test_each_sync_is_one_span_with_its_count_or_its_failure(test_db: ScratchDb)
     good, bad = [s for s in spans.spans if s.name == "sync revenue paddle"]
     expected = len(world.EXPECTED_SUBSCRIPTIONS) + len(world.EXPECTED_PAYMENTS) + len(world.EXPECTED_REFUNDS)
     assert dict(good.attributes or {}) == {
-        "yaqzan.source": "paddle",
-        "yaqzan.project": str(PROJECT),
-        "yaqzan.count": expected,
+        "agentzaaheen.source": "paddle",
+        "agentzaaheen.project": str(PROJECT),
+        "agentzaaheen.count": expected,
     }
     assert (bad.attributes or {})["error.type"] == "source.auth"
     assert good.context is not None

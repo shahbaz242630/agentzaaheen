@@ -10,12 +10,12 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.llm_gateway import Tool
+from agentzaaheen.core.registry import load_registry
 from tests.fixtures import github_log_world as world
 from tools import chat_tools
-from yaqzan.core.llm_gateway import Tool
-from yaqzan.core.registry import load_registry
 
-PLUGINS = Path(__file__).resolve().parents[2] / "src" / "yaqzan" / "plugins"
+PLUGINS = Path(__file__).resolve().parents[2] / "src" / "agentzaaheen" / "plugins"
 FAKE_TOKEN = "github_pat_" + "x" * 30  # built here, never a real token
 
 

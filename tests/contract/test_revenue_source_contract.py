@@ -16,16 +16,16 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from tests.fixtures import paddle_world as world
-from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.sdk import RevenueBatch, RevenueSource, SourceError, SourceErrorCode
-from yaqzan.plugins.connectors.paddle import (
+from agentzaaheen.core.net import JsonClient, NetPolicy
+from agentzaaheen.core.sdk import RevenueBatch, RevenueSource, SourceError, SourceErrorCode
+from agentzaaheen.plugins.connectors.paddle import (
     ALLOWED_HOSTS,
     API_VERSION_HEADER,
     SANDBOX_BASE_URL,
     FakePaddleSource,
     PaddleSource,
 )
+from tests.fixtures import paddle_world as world
 
 FAKE_KEY = "pdl_sdbx_apikey_" + "z" * 20  # built here, never a real key
 
@@ -249,3 +249,27 @@ def test_fake_can_be_told_to_fail_and_records_calls() -> None:
     assert caught.value.code is SourceErrorCode.UNAVAILABLE
     assert fake.calls == [since]
     assert fake.source == "paddle"
+
+
+def test_customer_names_are_read_only_from_customers_and_never_with_revenue() -> None:
+    paddle = world.PaddleWorld()
+
+    async def body() -> list[str]:
+        http = JsonClient(
+            SANDBOX_BASE_URL,
+            policy=NetPolicy(allowed_hosts=ALLOWED_HOSTS),
+            headers=API_VERSION_HEADER,
+            secret_headers={"Authorization": SecretStr(f"Bearer {FAKE_KEY}")},
+            transport=httpx.MockTransport(paddle.serve),
+        )
+        async with http:
+            return await PaddleSource(http).customer_names()
+
+    names = asyncio.run(body())
+    assert sorted(names) == [
+        "Fatima Al Mansoori",
+        "Grace",
+        "Zoë O'Brien",
+    ]  # no name: skipped
+    assert {(r.method, r.url.path) for r in paddle.requests} == {("GET", "/customers")}
+    assert len(paddle.requests) == 2  # 4 customers, 2 per page

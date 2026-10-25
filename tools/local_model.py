@@ -12,7 +12,7 @@ The dashboard then talks to it through the core's model client:
     uv run python -m tools.dashboard --model-url http://127.0.0.1:8766   # terminal 2
 
 The server binary and model live outside the repo, under
-``%LOCALAPPDATA%/Yaqzan/llm`` (checksum-verified when downloaded).
+``%LOCALAPPDATA%/AgentZaaheen/llm`` (checksum-verified when downloaded).
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ import httpx
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8766
-LLM_HOME = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Yaqzan" / "llm"
+LLM_HOME = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Agent Zaaheen" / "llm"
 DEFAULT_SERVER = (
     LLM_HOME / "llama-b11624" / ("llama-server.exe" if sys.platform == "win32" else "llama-server")
 )

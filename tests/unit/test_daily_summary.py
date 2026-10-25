@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from yaqzan.core.api.summary import (
+from agentzaaheen.core.api.summary import (
     MAX_MESSAGE_BYTES,
     AgentsFact,
     AlertsFact,
@@ -24,7 +24,7 @@ from yaqzan.core.api.summary import (
     read_summary,
     summarise,
 )
-from yaqzan.core.api.views import (
+from agentzaaheen.core.api.views import (
     Card,
     Count,
     Entry,
@@ -36,7 +36,7 @@ from yaqzan.core.api.views import (
     ProjectSummary,
     Tone,
 )
-from yaqzan.core.metrics import Freshness
+from agentzaaheen.core.metrics import Freshness
 
 DAY = date(2026, 10, 25)
 NOW = datetime(2026, 10, 25, 1, 0, tzinfo=UTC)  # 05:00 in Dubai
@@ -189,7 +189,7 @@ def test_the_briefing_puts_the_worst_first_and_says_when_it_is_late() -> None:
     )
     bad = summary(detail(card("code", "Code", entries=(Entry(text="x", tone=Tone.ALERT),))))
     title, lines = briefing([fine, bad], day=DAY, local_time="10:02", late=True)
-    assert title == "Yaqzan briefing, Sun 25 Oct"
+    assert title == "Agent Zaaheen briefing, Sun 25 Oct"
     assert lines[0] == "Made late, at 10:02: the dashboard was not running at the usual time."
     assert lines[1] == "2 projects; 1 need a look."
     assert lines[2].startswith("Shop: Needs you now")

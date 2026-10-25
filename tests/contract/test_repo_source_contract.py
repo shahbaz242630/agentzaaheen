@@ -15,16 +15,16 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from tests.fixtures import github_world as world
-from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.sdk import RepoHealth, RepoSource, SourceError, SourceErrorCode
-from yaqzan.plugins.connectors.github import (
+from agentzaaheen.core.net import JsonClient, NetPolicy
+from agentzaaheen.core.sdk import RepoHealth, RepoSource, SourceError, SourceErrorCode
+from agentzaaheen.plugins.connectors.github import (
     ALLOWED_HOSTS,
     API_HEADERS,
     BASE_URL,
     FakeGitHubSource,
     GitHubSource,
 )
+from tests.fixtures import github_world as world
 
 FAKE_TOKEN = "github_pat_" + "z" * 30  # built here, never a real token
 

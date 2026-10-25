@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 import httpx
 
-from yaqzan.core.sdk import FailedStepLog, make_failed_step_log
+from agentzaaheen.core.sdk import FailedStepLog, make_failed_step_log
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 REPO = "acme-labs/widget"

@@ -28,11 +28,9 @@ from uuid import UUID
 import httpx
 from pydantic import SecretStr
 
-from tools.dashboard_adding import with_github
-from tools.dashboard_profile import LaptopProfiles, Repos
-from yaqzan.core.api.scout import Asked
-from yaqzan.core.llm_gateway import ChatModel
-from yaqzan.core.llm_gateway.scout import (
+from agentzaaheen.core.api.scout import Asked
+from agentzaaheen.core.llm_gateway import ChatModel
+from agentzaaheen.core.llm_gateway.scout import (
     SCOUT_TEMPERATURE,
     SCOUT_TOKENS,
     RoleBrief,
@@ -40,11 +38,13 @@ from yaqzan.core.llm_gateway.scout import (
     check_answer,
     scout_messages,
 )
-from yaqzan.core.policy import Channel, Role, ScoutControl, ScoutVerdict
-from yaqzan.core.registry.roles import RoleLibrary
-from yaqzan.core.sdk import RepoBundle, RepoProfile, SourceError, get_logger, say
-from yaqzan.core.store import ScoutRun, StoreError, WorkspaceRow
-from yaqzan.plugins.connectors.github import GitHubFiles
+from agentzaaheen.core.policy import Channel, Role, ScoutControl, ScoutVerdict
+from agentzaaheen.core.registry.roles import RoleLibrary
+from agentzaaheen.core.sdk import RepoBundle, RepoProfile, SourceError, get_logger, say
+from agentzaaheen.core.store import ScoutRun, StoreError, WorkspaceRow
+from agentzaaheen.plugins.connectors.github import GitHubFiles
+from tools.dashboard_adding import with_github
+from tools.dashboard_profile import LaptopProfiles, Repos
 
 CRASHED = "scout.crashed"
 
@@ -76,7 +76,7 @@ class LaptopScout:
         self._transport = transport
         self._turns = asyncio.Lock()  # one model answer at a time
         self._running: set[asyncio.Task[None]] = set()
-        self._log = get_logger("yaqzan.scout")
+        self._log = get_logger("agentzaaheen.scout")
 
     @property
     def connected(self) -> bool:

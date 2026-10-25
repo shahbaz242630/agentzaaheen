@@ -5,7 +5,7 @@ import { ApiError, api, type ChatAnswer, type ModelChoice } from "../api";
 
 interface Message {
   id: number;
-  from: "you" | "yaqzan";
+  from: "you" | "agentzaaheen";
   text: string;
   pending?: boolean;
 }
@@ -79,7 +79,7 @@ export function ChatPanel({ models, projectId, projectName }: Props) {
   }, [messages]);
 
   function reply(id: number, text: string) {
-    setMessages((previous) => previous.map((m) => (m.id === id ? { id, from: "yaqzan", text } : m)));
+    setMessages((previous) => previous.map((m) => (m.id === id ? { id, from: "agentzaaheen", text } : m)));
   }
 
   function send(text: string) {
@@ -88,12 +88,12 @@ export function ChatPanel({ models, projectId, projectName }: Props) {
     const asked: Message = { id: nextId.current++, from: "you", text: question };
     setDraft("");
     if (model?.available !== true) {
-      const answer: Message = { id: nextId.current++, from: "yaqzan", text: notConnectedReply(model, projectName) };
+      const answer: Message = { id: nextId.current++, from: "agentzaaheen", text: notConnectedReply(model, projectName) };
       setMessages((previous) => [...previous, asked, answer]);
       return;
     }
     const id = nextId.current++;
-    setMessages((previous) => [...previous, asked, { id, from: "yaqzan", text: "Thinking…", pending: true }]);
+    setMessages((previous) => [...previous, asked, { id, from: "agentzaaheen", text: "Thinking…", pending: true }]);
     setWaiting(true);
     api
       .ask(projectId, model.id, question)
@@ -111,11 +111,11 @@ export function ChatPanel({ models, projectId, projectName }: Props) {
   }
 
   return (
-    <section aria-label="Ask Yaqzan" className="flex h-full min-h-0 flex-col">
+    <section aria-label="Ask Agent Zaaheen" className="flex h-full min-h-0 flex-col">
       <header className="flex flex-col gap-3 border-b border-line px-5 py-4">
         <div className="flex items-center gap-2">
           <Bot className="size-5 text-brand" aria-hidden="true" />
-          <h2 className="font-semibold text-ink">Ask Yaqzan</h2>
+          <h2 className="font-semibold text-ink">Ask Agent Zaaheen</h2>
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor={selectId} className="text-xs text-muted">
@@ -178,7 +178,7 @@ export function ChatPanel({ models, projectId, projectName }: Props) {
                 message.pending === true ? "animate-pulse text-muted" : "",
               ].join(" ")}
             >
-              <span className="sr-only">{message.from === "you" ? "You: " : "Yaqzan: "}</span>
+              <span className="sr-only">{message.from === "you" ? "You: " : "Agent Zaaheen: "}</span>
               {message.text}
             </p>
           ))

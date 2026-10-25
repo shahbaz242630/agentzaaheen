@@ -9,10 +9,9 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from tests.fixtures import paddle_world as world
-from yaqzan.core import metrics
-from yaqzan.core.metrics import CountAndAmounts, Unknown
-from yaqzan.core.sdk import (
+from agentzaaheen.core import metrics
+from agentzaaheen.core.metrics import CountAndAmounts, Unknown
+from agentzaaheen.core.sdk import (
     BillingCycle,
     Interval,
     PaymentStatus,
@@ -20,6 +19,7 @@ from yaqzan.core.sdk import (
     Subscription,
     SubscriptionStatus,
 )
+from tests.fixtures import paddle_world as world
 
 START = datetime(2026, 10, 1, tzinfo=UTC)
 END = datetime(2026, 11, 1, tzinfo=UTC)

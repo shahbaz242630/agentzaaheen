@@ -124,7 +124,7 @@ export function App() {
       <header className="flex items-center justify-between border-b border-line bg-panel px-5 py-3">
         <div className="flex items-center gap-2.5">
           <img src="/favicon.svg" alt="" className="size-7" />
-          <span className="text-lg font-semibold tracking-tight text-ink">Yaqzan</span>
+          <span className="text-lg font-semibold tracking-tight text-ink">Agent Zaaheen</span>
           <span lang="ar" dir="rtl" className="text-lg text-muted">
             يقظان
           </span>

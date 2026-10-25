@@ -25,13 +25,12 @@ import httpx
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
-from tools.dashboard_sources import ListNotUsableError
-from yaqzan.core.api import Portfolio
-from yaqzan.core.api.backend import CARD_ID, backend_card, failed_backend_card
-from yaqzan.core.api.overlay import CardMaker, OverlayPortfolio
-from yaqzan.core.api.views import Card
-from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.sdk import (
+from agentzaaheen.core.api import Portfolio
+from agentzaaheen.core.api.backend import CARD_ID, backend_card, failed_backend_card
+from agentzaaheen.core.api.overlay import CardMaker, OverlayPortfolio
+from agentzaaheen.core.api.views import Card
+from agentzaaheen.core.net import JsonClient, NetPolicy
+from agentzaaheen.core.sdk import (
     PROJECT_REF,
     BackendHealth,
     SourceError,
@@ -40,7 +39,8 @@ from yaqzan.core.sdk import (
     get_logger,
     say,
 )
-from yaqzan.plugins.connectors import supabase
+from agentzaaheen.plugins.connectors import supabase
+from tools.dashboard_sources import ListNotUsableError
 
 # Read once at start: treated as an hourly source, so it shows "unknown" after two hours.
 SUPABASE_SCHEDULE = timedelta(hours=1)
@@ -166,7 +166,7 @@ def supabase_list(path: Path | None, projects: Collection[str]) -> dict[str, Sup
     """The local list given with ``--supabase`` (empty without one); a broken list is said and raised."""
     if path is None:
         return {}
-    log = get_logger("yaqzan.settings")
+    log = get_logger("agentzaaheen.settings")
     try:
         found = load_supabase(path, projects)
     except SupabaseListError as exc:

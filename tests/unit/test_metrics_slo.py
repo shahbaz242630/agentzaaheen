@@ -9,7 +9,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from yaqzan.core.metrics import (
+from agentzaaheen.core.metrics import (
     BURN_RULES,
     BURN_WINDOWS,
     Counts,
@@ -21,7 +21,7 @@ from yaqzan.core.metrics import (
     burn_rate,
     compliance,
 )
-from yaqzan.core.sdk import Severity
+from agentzaaheen.core.sdk import Severity
 
 T995 = Fraction(995, 1000)
 DAYS28 = timedelta(days=28)

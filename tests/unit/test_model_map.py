@@ -6,10 +6,10 @@ from decimal import Decimal
 
 import pytest
 
-from yaqzan.core.llm_gateway import MODELS, Usage
-from yaqzan.core.llm_gateway.model_map import Price, cost_micro_usd, usd
-from yaqzan.core.registry.roles import level_of
-from yaqzan.core.sdk import ModelLevel
+from agentzaaheen.core.llm_gateway import MODELS, Usage
+from agentzaaheen.core.llm_gateway.model_map import Price, cost_micro_usd, usd
+from agentzaaheen.core.registry.roles import level_of
+from agentzaaheen.core.sdk import ModelLevel
 
 
 def test_each_level_runs_on_its_pinned_model() -> None:

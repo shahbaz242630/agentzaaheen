@@ -6,8 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from tests.fixtures.soft_authenticator import SoftAuthenticator
-from yaqzan.core.auth import (
+from agentzaaheen.core.auth import (
     CHALLENGE_TTL,
     Challenges,
     KnownPasskey,
@@ -19,6 +18,7 @@ from yaqzan.core.auth import (
     verify_approval,
     verify_enrol,
 )
+from tests.fixtures.soft_authenticator import SoftAuthenticator
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 SITE = Site(origin="http://localhost:8765")
@@ -41,7 +41,7 @@ def enrolled(device: SoftAuthenticator) -> KnownPasskey:
 
 def test_set_up_asks_this_laptop_for_a_verified_passkey() -> None:
     options = enrol_options(SITE, b"c" * 32, [b"x" * 16])
-    assert options["rp"] == {"name": "Yaqzan", "id": "localhost"}
+    assert options["rp"] == {"name": "Agent Zaaheen", "id": "localhost"}
     selection = options["authenticatorSelection"]
     assert selection == {"authenticatorAttachment": "platform", "residentKey": "preferred",
                          "requireResidentKey": False, "userVerification": "required"}  # fmt: skip

@@ -15,8 +15,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 
-from yaqzan.core.llm_gateway import Tool
-from yaqzan.core.telemetry import LogFolder, LogPage, LogQuery
+from agentzaaheen.core.llm_gateway import Tool
+from agentzaaheen.core.telemetry import LogFolder, LogPage, LogQuery
 
 # The registry id of the skill this tool belongs to (its SKILL.md folder).
 READ_LOGS_SKILL = "read-logs"
@@ -61,7 +61,7 @@ def read_logs_tool(logs: LogFolder | None, projects: Iterable[str]) -> Tool | No
 
     return Tool(
         name="read_logs",
-        description="Read one project's warnings and errors of today and yesterday from Yaqzan's own logs.",
+        description="Read one project's warnings and errors of today and yesterday from our own logs.",
         choices=choices,
         run=run,
         trusted=False,

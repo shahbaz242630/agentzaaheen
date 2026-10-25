@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from yaqzan.core.sdk import (
+from agentzaaheen.core.sdk import (
     MAX_LOG_CHARS,
     MAX_LOG_LINES,
     FailedStepLog,

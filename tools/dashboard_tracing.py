@@ -17,9 +17,9 @@ from importlib.metadata import version
 import httpx
 from pydantic import SecretStr
 
+from agentzaaheen.core.net import NetError, OtlpSender
+from agentzaaheen.core.telemetry import Tracing, start_tracing
 from tools.dashboard_sources import usable_secret
-from yaqzan.core.net import NetError, OtlpSender
-from yaqzan.core.telemetry import Tracing, start_tracing
 
 
 def add_tracing_options(parser: argparse.ArgumentParser) -> None:
@@ -55,4 +55,4 @@ def tracing_from(
         print(f"dashboard: tracing not started ({exc.reason_code}); check --otel-endpoint and --otel-user.")
         raise TracingNotStartedError from None
     print("dashboard: traces go to the trace store (send-only token; dropped if the store is down).")
-    return start_tracing(sender, version=version("yaqzan"))
+    return start_tracing(sender, version=version("agentzaaheen"))

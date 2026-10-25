@@ -10,13 +10,13 @@ from typing import Any
 
 import pytest
 
-from yaqzan.core.sdk import KNOWN_CODES, LOG_EVENTS, LogEvent, explain, get_logger, say
-from yaqzan.core.sdk.events import SAID, placeholders
-from yaqzan.core.telemetry.logs import LOG_FIELDS
+from agentzaaheen.core.sdk import KNOWN_CODES, LOG_EVENTS, LogEvent, explain, get_logger, say
+from agentzaaheen.core.sdk.events import SAID, placeholders
+from agentzaaheen.core.telemetry.logs import LOG_FIELDS
 
 ROOT = Path(__file__).resolve().parents[2]
 CODE = [p for d in ("src", "tools") for p in sorted((ROOT / d).rglob("*.py"))]
-CATALOGUE = ROOT / "src" / "yaqzan" / "core" / "sdk" / "events.py"
+CATALOGUE = ROOT / "src" / "agentzaaheen" / "core" / "sdk" / "events.py"
 LEVELS = {"debug", "info", "warning", "error", "exception", "critical", "msg"}
 
 

@@ -21,11 +21,11 @@ from datetime import datetime
 import httpx
 from pydantic import SecretStr
 
+from agentzaaheen.core.api.profile import Checked
+from agentzaaheen.core.sdk import RepoProfile, SourceError, get_logger, say
+from agentzaaheen.core.store import WorkspaceRow
+from agentzaaheen.plugins.connectors.github import GitHubProfile, Head
 from tools.dashboard_adding import with_github
-from yaqzan.core.api.profile import Checked
-from yaqzan.core.sdk import RepoProfile, SourceError, get_logger, say
-from yaqzan.core.store import WorkspaceRow
-from yaqzan.plugins.connectors.github import GitHubProfile, Head
 
 # The repository each workspace reads, by its address (``LaptopSwitches.repos_in_use`` or the fixed list).
 Repos = Callable[[], Awaitable[Mapping[str, str]]]
@@ -47,7 +47,7 @@ class LaptopProfiles:
         self._transport = transport
         self._known: dict[str, tuple[Head, RepoProfile]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
-        self._log = get_logger("yaqzan.profile")
+        self._log = get_logger("agentzaaheen.profile")
 
     @property
     def connected(self) -> bool:

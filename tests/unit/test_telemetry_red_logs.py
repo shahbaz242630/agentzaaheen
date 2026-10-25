@@ -16,18 +16,18 @@ import pytest
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.trace import SpanContext, SpanKind
 
-from yaqzan.core.sdk import get_logger, install_log_sink, install_tracing, span
-from yaqzan.core.telemetry import LOG_FIELDS, LogQueue, RedMetrics, start_tracing
-from yaqzan.core.telemetry import tracing as tracing_module
-from yaqzan.core.telemetry.encode import MAX_TEXT
-from yaqzan.core.telemetry.logs import BATCH_SIZE, encode_logs, encode_record
-from yaqzan.core.telemetry.metrics import BOUNDS, CLIENT, MAX_SERIES, OPERATION, SERVER
-from yaqzan.core.telemetry.tracing import METRICS_EVERY_S, _Pump
+from agentzaaheen.core.sdk import get_logger, install_log_sink, install_tracing, span
+from agentzaaheen.core.telemetry import LOG_FIELDS, LogQueue, RedMetrics, start_tracing
+from agentzaaheen.core.telemetry import tracing as tracing_module
+from agentzaaheen.core.telemetry.encode import MAX_TEXT
+from agentzaaheen.core.telemetry.logs import BATCH_SIZE, encode_logs, encode_record
+from agentzaaheen.core.telemetry.metrics import BOUNDS, CLIENT, MAX_SERIES, OPERATION, SERVER
+from agentzaaheen.core.telemetry.tracing import METRICS_EVERY_S, _Pump
 
 FAKE_TOKEN = "gh" + "p_" + "A" * 36
 TRACE_ID = "ab" * 16
 SPAN_ID = "cd" * 8
-RESOURCE = {"service.name": "yaqzan", "host.name": "the-laptop"}
+RESOURCE = {"service.name": "agentzaaheen", "host.name": "the-laptop"}
 
 
 def as_dict(pairs: Any) -> dict[str, Any]:  # walking a JSON body
@@ -117,7 +117,7 @@ def test_only_allowed_fields_leave() -> None:
     line = {
         "event": "chat_tool_used",
         "level": "info",
-        "component": "yaqzan.chat",
+        "component": "agentzaaheen.chat",
         "tool": "revenue",
         "bytes": 12,
         "path": "C:/Users/someone/secret.txt",
@@ -211,8 +211,8 @@ def test_logs_body_shape() -> None:
     assert encode_logs([], RESOURCE) == {"resourceLogs": []}
     body: Any = encode_logs([encode_record({"event": "e"}, 1)], RESOURCE)
     [entry] = body["resourceLogs"]
-    assert as_dict(entry["resource"]["attributes"]) == {"service.name": {"stringValue": "yaqzan"}}
-    assert entry["scopeLogs"][0]["scope"]["name"] == "yaqzan"
+    assert as_dict(entry["resource"]["attributes"]) == {"service.name": {"stringValue": "agentzaaheen"}}
+    assert entry["scopeLogs"][0]["scope"]["name"] == "agentzaaheen"
     assert len(entry["scopeLogs"][0]["logRecords"]) == 1
 
 
@@ -242,7 +242,7 @@ def points(red: RedMetrics, now_ns: int = 99) -> dict[str, list[Any]]:
     assert body is not None
     json.dumps(body, allow_nan=False)
     [entry] = body["resourceMetrics"]
-    assert as_dict(entry["resource"]["attributes"]) == {"service.name": {"stringValue": "yaqzan"}}
+    assert as_dict(entry["resource"]["attributes"]) == {"service.name": {"stringValue": "agentzaaheen"}}
     [scope] = entry["scopeMetrics"]
     out: dict[str, list[Any]] = {}
     for metric in scope["metrics"]:
@@ -264,7 +264,7 @@ def test_each_kind_of_span_gets_its_metric() -> None:
         "http.response.status_code": 200,
     }
     red.on_end(finished("GET /api/workspaces", 0.02, kind=SpanKind.SERVER, attributes=server_attrs))
-    client_attrs = {"server.address": "api.paddle.com", "yaqzan.attempts": 2, "yaqzan.count": 9}
+    client_attrs = {"server.address": "api.paddle.com", "agentzaaheen.attempts": 2, "agentzaaheen.count": 9}
     red.on_end(finished("GET api.paddle.com", 0.3, kind=SpanKind.CLIENT, attributes=client_attrs))
     red.on_end(finished("db transaction", 0.001, attributes={"db.system.name": "postgresql"}))
     got = points(red)
@@ -282,7 +282,7 @@ def test_each_kind_of_span_gets_its_metric() -> None:
     [operation] = got[OPERATION]
     assert as_dict(operation["attributes"]) == {
         "db.system.name": {"stringValue": "postgresql"},
-        "yaqzan.operation": {"stringValue": "db transaction"},
+        "agentzaaheen.operation": {"stringValue": "db transaction"},
     }
 
 
@@ -422,7 +422,7 @@ def test_a_log_line_inside_a_span_ships_with_its_trace() -> None:
     with span("request", kind="server") as current:
         get_logger("t", sink=io.StringIO()).warning("revenue_sync_failed", reason="net.timeout", path="/x")
         ids = current.get_span_context()
-    get_logger("yaqzan.net.otlp", sink=io.StringIO()).warning("telemetry_dropped", reason="net.auth")
+    get_logger("agentzaaheen.net.otlp", sink=io.StringIO()).warning("telemetry_dropped", reason="net.auth")
     tracing.shutdown()
     get_logger("t", sink=io.StringIO()).info("after_shutdown")
     [record] = sender.log_records()
@@ -441,7 +441,11 @@ def test_a_log_line_inside_a_span_ships_with_its_trace() -> None:
 def test_counts_never_split_a_series() -> None:
     red = RedMetrics(0)
     for count in (1, 2, 3):
-        attrs = {"server.address": "api.paddle.com", "yaqzan.count": count, "yaqzan.attempts": count}
+        attrs = {
+            "server.address": "api.paddle.com",
+            "agentzaaheen.count": count,
+            "agentzaaheen.attempts": count,
+        }
         red.on_end(finished("GET api.paddle.com", 0.01, kind=SpanKind.CLIENT, attributes=attrs))
     [point] = points(red)[CLIENT]
     assert point["count"] == "3"

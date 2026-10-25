@@ -6,10 +6,20 @@ from datetime import UTC, datetime
 
 import pytest
 
-from yaqzan.core.api import SamplePortfolio
-from yaqzan.core.api.facts import money_text, portfolio_facts, project_facts, uses_sample
-from yaqzan.core.api.views import Card, Count, Entry, Metric, Money, NotKnown, Percent, ProjectDetail, Tone
-from yaqzan.core.metrics import Freshness
+from agentzaaheen.core.api import SamplePortfolio
+from agentzaaheen.core.api.facts import money_text, portfolio_facts, project_facts, uses_sample
+from agentzaaheen.core.api.views import (
+    Card,
+    Count,
+    Entry,
+    Metric,
+    Money,
+    NotKnown,
+    Percent,
+    ProjectDetail,
+    Tone,
+)
+from agentzaaheen.core.metrics import Freshness
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 

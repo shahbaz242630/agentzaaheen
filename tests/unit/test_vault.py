@@ -13,10 +13,11 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import SecretStr
 
-from yaqzan.core.vault import (
+from agentzaaheen.core.vault import (
     CredentialSlot,
     Keyring,
     MasterKey,
+    NamePrinter,
     SealedSecret,
     VaultError,
     VaultErrorCode,
@@ -25,8 +26,8 @@ from yaqzan.core.vault import (
     rewrap,
     seal,
 )
-from yaqzan.core.vault.envelope import MAX_SECRET_BYTES
-from yaqzan.core.vault.keys import check_private_mode, parse_key_text
+from agentzaaheen.core.vault.envelope import MAX_SECRET_BYTES
+from agentzaaheen.core.vault.keys import check_private_mode, parse_key_text
 
 SECRET = "read-only-api-value-0123456789"
 
@@ -128,7 +129,7 @@ def test_empty_and_oversized_secrets_are_refused(ring: Keyring) -> None:
 
 def test_non_utf8_plaintext_is_reported_not_crashed() -> None:
     # Build a sealed value whose plaintext is invalid UTF-8, using the same construction.
-    from yaqzan.core.vault import envelope  # noqa: PLC0415  # private helpers, this test only
+    from agentzaaheen.core.vault import envelope  # noqa: PLC0415  # private helpers, this test only
 
     key = MasterKey.generate("k1")
     keys = Keyring([key], current_id="k1")
@@ -195,10 +196,10 @@ def test_key_file_round_trip(tmp_path: Path) -> None:
     "text",
     [
         "",
-        "yaqzan-master-v1 k1",
+        "agentzaaheen-master-v1 k1",
         "other-header k1 AAAA",
-        "yaqzan-master-v1 k1 not*base64!",
-        "yaqzan-master-v1 k1 é",
+        "agentzaaheen-master-v1 k1 not*base64!",
+        "agentzaaheen-master-v1 k1 é",
     ],
 )
 def test_bad_key_text_is_refused_without_echoing_it(text: str) -> None:
@@ -268,3 +269,11 @@ def test_sealed_secret_survives_a_json_round_trip(ring: Keyring) -> None:
     restored = SealedSecret.model_validate_json(sealed.model_dump_json())
     assert restored == sealed
     assert open_secret(restored, where, ring).get_secret_value() == SECRET
+
+
+def test_a_name_printer_never_shows_its_key() -> None:
+    key = MasterKey("names-1", bytes(range(32)))
+    printer = NamePrinter(key)
+    assert repr(printer) == str(printer) == "NamePrinter(key_id='names-1', key=<hidden>)"
+    assert printer("grace") == printer("grace") != printer("mark")
+    assert printer("grace") != NamePrinter(MasterKey("names-2", bytes(32)))("grace")

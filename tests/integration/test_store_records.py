@@ -8,8 +8,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
-from yaqzan.core.sdk import (
+from agentzaaheen.core.sdk import (
     Action,
     ActionLevel,
     ActionStatus,
@@ -24,7 +23,8 @@ from yaqzan.core.sdk import (
     Severity,
     Trust,
 )
-from yaqzan.core.store import MAX_PAGE, Records, StoreError, StoreErrorCode
+from agentzaaheen.core.store import MAX_PAGE, Records, StoreError, StoreErrorCode
+from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 
 NOW = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 TENANT = UUID("00000000-0000-4000-8000-000000000001")
@@ -291,7 +291,8 @@ def test_database_rules_back_up_the_sdk_rules(test_db: ScratchDb) -> None:
             await Records(db.scoped(TENANT, PROJECT)).add_run(parent)
             async with db.scoped(TENANT, PROJECT).connection() as conn:
                 await conn.execute(
-                    "INSERT INTO yaqzan.actions (id, tenant_id, project_id, run_id, tool, level, payload,"
+                    "INSERT INTO agentzaaheen.actions (id, tenant_id, project_id, run_id, tool,"
+                    " level, payload,"
                     " target_kind, target_ref, data_classes, leak_check_passed, idempotency_key, status)"
                     " VALUES ($1, $2, $3, $4, 'email.send', 'act', '{}', 'ticket', 't:1', '{}', false, 'k',"
                     " 'approved')",

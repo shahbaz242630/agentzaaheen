@@ -9,14 +9,14 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.api.app import REQUEST_HEADER
-from yaqzan.core.api.registry import PasskeyStatus, RegistryPage, registry_page
-from yaqzan.core.auth import PasskeyError
-from yaqzan.core.policy import Pending, Standing, Verdict
-from yaqzan.core.registry import Kind, Layout, Plugin, Registry, Skill, State
-from yaqzan.core.registry.models import Invocation
-from yaqzan.core.store import StoreError, StoreErrorCode
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.api.app import REQUEST_HEADER
+from agentzaaheen.core.api.registry import PasskeyStatus, RegistryPage, registry_page
+from agentzaaheen.core.auth import PasskeyError
+from agentzaaheen.core.policy import Pending, Standing, Verdict
+from agentzaaheen.core.registry import Kind, Layout, Plugin, Registry, Skill, State
+from agentzaaheen.core.registry.models import Invocation
+from agentzaaheen.core.store import StoreError, StoreErrorCode
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}

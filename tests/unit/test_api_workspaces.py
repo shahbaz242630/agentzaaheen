@@ -6,8 +6,8 @@ from uuid import uuid4
 
 import pytest
 
-from yaqzan.core.api.workspaces import WorkspaceDirectory
-from yaqzan.core.store import WorkspaceRow
+from agentzaaheen.core.api.workspaces import WorkspaceDirectory
+from agentzaaheen.core.store import WorkspaceRow
 
 
 def row(slug: str) -> WorkspaceRow:

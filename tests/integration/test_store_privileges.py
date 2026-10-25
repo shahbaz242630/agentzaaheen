@@ -9,10 +9,10 @@ import asyncpg
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.policy import Ledger
+from agentzaaheen.core.store import Database, DatabaseSettings, StoreError, StoreErrorCode, migrate
 from tests.integration.conftest import OWNER, ScratchDb, drop_database, empty_database, open_db, run
 from tests.integration.test_policy_ledger import TENANT, draft
-from yaqzan.core.policy import Ledger
-from yaqzan.core.store import Database, DatabaseSettings, StoreError, StoreErrorCode, migrate
 
 
 async def _app_executes(url: str, statement: str) -> None:
@@ -25,21 +25,21 @@ async def _app_executes(url: str, statement: str) -> None:
 @pytest.mark.parametrize(
     "statement",
     [
-        "UPDATE yaqzan.audit_log SET reason_code = 'x.y'",
-        "DELETE FROM yaqzan.audit_log",
-        "TRUNCATE yaqzan.audit_log",
-        "UPDATE yaqzan.events SET trust = 'trusted'",
-        "DELETE FROM yaqzan.runs",
-        "UPDATE yaqzan.actions SET status = 'approved'",
-        "DELETE FROM yaqzan.kill_switches",
-        "DELETE FROM yaqzan.revenue_subscriptions",
-        "DELETE FROM yaqzan.revenue_payments",
-        "DELETE FROM yaqzan.revenue_refunds",
-        "DELETE FROM yaqzan.source_syncs",
-        "TRUNCATE yaqzan.revenue_payments",
-        "INSERT INTO yaqzan.schema_migrations (version, name, checksum) VALUES (99, 'x', 'y')",
-        "CREATE TABLE yaqzan.sneaky (id int)",
-        "ALTER TABLE yaqzan.audit_log DISABLE TRIGGER ALL",
+        "UPDATE agentzaaheen.audit_log SET reason_code = 'x.y'",
+        "DELETE FROM agentzaaheen.audit_log",
+        "TRUNCATE agentzaaheen.audit_log",
+        "UPDATE agentzaaheen.events SET trust = 'trusted'",
+        "DELETE FROM agentzaaheen.runs",
+        "UPDATE agentzaaheen.actions SET status = 'approved'",
+        "DELETE FROM agentzaaheen.kill_switches",
+        "DELETE FROM agentzaaheen.revenue_subscriptions",
+        "DELETE FROM agentzaaheen.revenue_payments",
+        "DELETE FROM agentzaaheen.revenue_refunds",
+        "DELETE FROM agentzaaheen.source_syncs",
+        "TRUNCATE agentzaaheen.revenue_payments",
+        "INSERT INTO agentzaaheen.schema_migrations (version, name, checksum) VALUES (99, 'x', 'y')",
+        "CREATE TABLE agentzaaheen.sneaky (id int)",
+        "ALTER TABLE agentzaaheen.audit_log DISABLE TRIGGER ALL",
         "SET session_replication_role = replica",
     ],
 )
@@ -52,9 +52,9 @@ def test_app_role_is_refused(test_db: ScratchDb, statement: str) -> None:
 @pytest.mark.parametrize(
     "statement",
     [
-        "UPDATE yaqzan.audit_log SET reason_code = 'x.y'",
-        "DELETE FROM yaqzan.audit_log",
-        "TRUNCATE yaqzan.audit_log",
+        "UPDATE agentzaaheen.audit_log SET reason_code = 'x.y'",
+        "DELETE FROM agentzaaheen.audit_log",
+        "TRUNCATE agentzaaheen.audit_log",
     ],
 )
 def test_even_the_owner_cannot_change_audit_rows(test_db: ScratchDb, statement: str) -> None:
@@ -70,7 +70,7 @@ def test_runtime_role_has_no_dangerous_attributes(test_db: ScratchDb) -> None:
         try:
             return await conn.fetchrow(
                 "SELECT rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolreplication, rolcanlogin"
-                " FROM pg_roles WHERE rolname = 'yaqzan_app'"
+                " FROM pg_roles WHERE rolname = 'agentzaaheen_app'"
             )
         finally:
             await conn.close()
@@ -88,7 +88,7 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         try:
             rows = await conn.fetch(
                 "SELECT table_name, privilege_type FROM information_schema.role_table_grants"
-                " WHERE grantee = 'yaqzan_app' AND table_schema = 'yaqzan'"
+                " WHERE grantee = 'agentzaaheen_app' AND table_schema = 'agentzaaheen'"
             )
         finally:
             await conn.close()
@@ -124,6 +124,8 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "scout_runs": read_add,  # plus UPDATE on how a run moves and ends (column grants)
         "daily_summaries": read_add,  # plus UPDATE on made_at and facts: a day made again replaces it
         "briefings": read_add,  # plus UPDATE on whether it was sent (column grants)
+        "model_calls": read_add,  # a cost is added, never changed: a cap can only fill up
+        "customer_name_prints": read_add,  # fingerprints only; removed only with the workspace
     }
 
 
@@ -141,13 +143,13 @@ def test_existing_unsafe_app_role_is_refused(test_db: ScratchDb) -> None:
         async with open_db(test_db.server.url(OWNER, test_db.server.owner_password, name)) as db:
             await migrate(db)
 
-    run(admin("ALTER ROLE yaqzan_app BYPASSRLS"))
+    run(admin("ALTER ROLE agentzaaheen_app BYPASSRLS"))
     try:
         with pytest.raises(StoreError) as caught:
             run(body())
         assert caught.value.code is StoreErrorCode.FAILED
     finally:
-        run(admin("ALTER ROLE yaqzan_app NOBYPASSRLS"))
+        run(admin("ALTER ROLE agentzaaheen_app NOBYPASSRLS"))
         drop_database(test_db.server, name)
 
 
@@ -157,7 +159,7 @@ def test_sealed_secrets_table_has_no_place_for_plaintext(test_db: ScratchDb) -> 
         try:
             rows = await conn.fetch(
                 "SELECT column_name, data_type FROM information_schema.columns"
-                " WHERE table_schema = 'yaqzan' AND table_name = 'sealed_secrets'"
+                " WHERE table_schema = 'agentzaaheen' AND table_name = 'sealed_secrets'"
             )
             return {row["column_name"]: row["data_type"] for row in rows}
         finally:
@@ -185,8 +187,9 @@ def test_every_table_carries_a_tenant(test_db: ScratchDb) -> None:
         try:
             rows = await conn.fetch(
                 "SELECT t.table_name FROM information_schema.tables t"
-                " WHERE t.table_schema = 'yaqzan' AND t.table_name <> 'schema_migrations'"
-                " AND NOT EXISTS (SELECT 1 FROM information_schema.columns c WHERE c.table_schema = 'yaqzan'"
+                " WHERE t.table_schema = 'agentzaaheen' AND t.table_name <> 'schema_migrations'"
+                " AND NOT EXISTS (SELECT 1 FROM information_schema.columns c WHERE c.table_schema ="
+                " 'agentzaaheen'"
                 " AND c.table_name = t.table_name AND c.column_name = 'tenant_id')"
             )
             return [row["table_name"] for row in rows]
@@ -198,7 +201,7 @@ def test_every_table_carries_a_tenant(test_db: ScratchDb) -> None:
 
 def test_wrong_password_is_unavailable_and_leaks_nothing(test_db: ScratchDb) -> None:
     wrong = secrets.token_hex(8)
-    bad = test_db.server.url("yaqzan_app_test", wrong, test_db.name)
+    bad = test_db.server.url("agentzaaheen_app_test", wrong, test_db.name)
 
     async def body() -> None:
         await Database.open(DatabaseSettings(dsn=SecretStr(bad), connect_timeout_s=5))

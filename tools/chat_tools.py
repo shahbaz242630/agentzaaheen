@@ -32,17 +32,24 @@ from pathlib import Path
 import httpx
 from pydantic import SecretStr
 
+from agentzaaheen.core.api import ChatBackend
+from agentzaaheen.core.llm_gateway import ChatModel, ChatReply, FactChat, Inspect, Tool, catalogue
+from agentzaaheen.core.net import DownloadPolicy, JsonClient, ModelClient, NetError, NetPolicy
+from agentzaaheen.core.policy import Standing
+from agentzaaheen.core.registry import (
+    Invocation,
+    ItemError,
+    Kind,
+    Registry,
+    load_registry,
+    skill_instructions,
+)
+from agentzaaheen.core.sdk import FailedStepLog, get_logger, say
+from agentzaaheen.core.store import StoreError
+from agentzaaheen.core.telemetry import LogFolder
+from agentzaaheen.plugins.connectors import github
 from tools.fix_guides import Project, fix_guide_tool
 from tools.log_tool import READ_LOGS_SKILL, read_logs_tool
-from yaqzan.core.api import ChatBackend
-from yaqzan.core.llm_gateway import ChatModel, ChatReply, FactChat, Inspect, Tool, catalogue
-from yaqzan.core.net import DownloadPolicy, JsonClient, ModelClient, NetError, NetPolicy
-from yaqzan.core.policy import Standing
-from yaqzan.core.registry import Invocation, ItemError, Kind, Registry, load_registry, skill_instructions
-from yaqzan.core.sdk import FailedStepLog, get_logger, say
-from yaqzan.core.store import StoreError
-from yaqzan.core.telemetry import LogFolder
-from yaqzan.plugins.connectors import github
 
 Clock = Callable[[], datetime]
 # The model menu entry the local model trial connects (see SamplePortfolio.models).
@@ -50,7 +57,7 @@ LOCAL_MODEL_ID = "local-gemma"
 # The registry id of the connector that ``failed_build_log`` reads through (its plugin.yaml).
 GITHUB_CONNECTOR = "github"
 CHANGED_SKILL = (
-    "This skill was not opened: its files changed (or went missing) since Yaqzan started, "
+    "This skill was not opened: its files changed (or went missing) since Agent Zaaheen started, "
     "so it has not been reviewed in this form. Answer without it and say so."
 )
 
@@ -74,7 +81,7 @@ class SwitchedChat:
         self._model = model
         self._switched = switched
         self._inspect = inspect
-        self._log = get_logger("yaqzan.chat", model=LOCAL_MODEL_ID)
+        self._log = get_logger("agentzaaheen.chat", model=LOCAL_MODEL_ID)
 
     async def ask(self, question: str, facts: str, workspace: str | None = None) -> ChatReply:
         """Answer with the tools of the items that are on; with none if the switches can't be read."""
@@ -137,7 +144,7 @@ def skill_tool(
 
     tool = Tool(
         name="load_skill",
-        description="Open a skill's instructions (Yaqzan's own playbook).",
+        description="Open a skill's instructions (Agent Zaaheen's own playbook).",
         choices=tuple(reviewed),
         run=run,
         trusted=True,

@@ -18,11 +18,11 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import SpanContext, SpanKind, Status, StatusCode
 
+from agentzaaheen.core.sdk import ALLOWED_ATTRIBUTES, span
+from agentzaaheen.core.telemetry import encode_spans, start_tracing
+from agentzaaheen.core.telemetry.encode import MAX_TEXT, attributes
+from agentzaaheen.core.telemetry.tracing import _Exporter
 from tests.tracing import Recorded, recorded
-from yaqzan.core.sdk import ALLOWED_ATTRIBUTES, span
-from yaqzan.core.telemetry import encode_spans, start_tracing
-from yaqzan.core.telemetry.encode import MAX_TEXT, attributes
-from yaqzan.core.telemetry.tracing import _Exporter
 
 FAKE_TOKEN = "gh" + "p_" + "A" * 36
 
@@ -75,45 +75,45 @@ def test_a_root_span_has_no_parent(spans: Recorded) -> None:
 
 def test_only_allowed_attributes_leave(spans: Recorded) -> None:
     with span("work") as current:
-        current.set_attribute("yaqzan.count", 3)
+        current.set_attribute("agentzaaheen.count", 3)
         current.set_attribute("customer.email", "someone@example.com")
         current.set_attribute("url.full", "https://api.example.com/x?token=abc")
     keys = set(as_dict(only_span(encode_spans(spans.spans))["attributes"]))
-    assert keys == {"yaqzan.count"}
+    assert keys == {"agentzaaheen.count"}
 
 
 def test_strings_are_redacted_and_cut(spans: Recorded) -> None:
     with span(f"named {FAKE_TOKEN}") as current:
-        current.set_attribute("yaqzan.reason", f"bearer {FAKE_TOKEN}")
-        current.set_attribute("yaqzan.source", "x" * 1000)
+        current.set_attribute("agentzaaheen.reason", f"bearer {FAKE_TOKEN}")
+        current.set_attribute("agentzaaheen.source", "x" * 1000)
     encoded = only_span(encode_spans(spans.spans))
     text = json.dumps(encoded)
     assert FAKE_TOKEN not in text
     values = as_dict(encoded["attributes"])
-    assert values["yaqzan.source"] == {"stringValue": "x" * MAX_TEXT}
+    assert values["agentzaaheen.source"] == {"stringValue": "x" * MAX_TEXT}
     assert "[REDACTED]" in str(encoded["name"])
 
 
 def test_a_secret_split_by_the_cut_is_still_redacted() -> None:
     # Cut first, 16 of the token's characters would survive, too few for its pattern to match.
-    pairs = attributes({"yaqzan.reason": "x" * (MAX_TEXT - 21) + " " + FAKE_TOKEN}, ALLOWED_ATTRIBUTES)
+    pairs = attributes({"agentzaaheen.reason": "x" * (MAX_TEXT - 21) + " " + FAKE_TOKEN}, ALLOWED_ATTRIBUTES)
     assert "AAAAAAAA" not in json.dumps(pairs)
 
 
 def test_each_kind_of_value_is_encoded_and_others_dropped() -> None:
     values = {
-        "yaqzan.count": 7,
-        "yaqzan.elapsed_ms": 1.5,
-        "yaqzan.attempt": True,
-        "yaqzan.reason": "ok",
-        "yaqzan.source": ("a", "b"),
-        "yaqzan.project": math.nan,
+        "agentzaaheen.count": 7,
+        "agentzaaheen.elapsed_ms": 1.5,
+        "agentzaaheen.attempt": True,
+        "agentzaaheen.reason": "ok",
+        "agentzaaheen.source": ("a", "b"),
+        "agentzaaheen.project": math.nan,
     }
     assert as_dict(attributes(values, ALLOWED_ATTRIBUTES)) == {
-        "yaqzan.count": {"intValue": "7"},
-        "yaqzan.elapsed_ms": {"doubleValue": 1.5},
-        "yaqzan.attempt": {"boolValue": True},
-        "yaqzan.reason": {"stringValue": "ok"},
+        "agentzaaheen.count": {"intValue": "7"},
+        "agentzaaheen.elapsed_ms": {"doubleValue": 1.5},
+        "agentzaaheen.attempt": {"boolValue": True},
+        "agentzaaheen.reason": {"stringValue": "ok"},
     }
 
 
@@ -126,22 +126,22 @@ def test_a_failed_span_keeps_its_code_never_its_text(spans: Recorded) -> None:
 
 def test_events_keep_their_name_and_allowed_attributes(spans: Recorded) -> None:
     with span("work") as current:
-        current.add_event("retry", {"yaqzan.attempt": 2, "body": "the vendor said no"})
+        current.add_event("retry", {"agentzaaheen.attempt": 2, "body": "the vendor said no"})
     [encoded_event] = only_span(encode_spans(spans.spans))["events"]
     assert encoded_event["name"] == "retry"
-    assert as_dict(encoded_event["attributes"]) == {"yaqzan.attempt": {"intValue": "2"}}
+    assert as_dict(encoded_event["attributes"]) == {"agentzaaheen.attempt": {"intValue": "2"}}
 
 
 def test_only_our_resource_keys_leave() -> None:
     exporter = InMemorySpanExporter()
-    resource = Resource.create({"service.name": "yaqzan", "host.name": "the-laptop"})
+    resource = Resource.create({"service.name": "agentzaaheen", "host.name": "the-laptop"})
     provider = TracerProvider(resource=resource)
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     with provider.get_tracer("t").start_as_current_span("s"):
         pass
     body: Any = encode_spans(exporter.get_finished_spans())
     [entry] = body["resourceSpans"]
-    assert as_dict(entry["resource"]["attributes"]) == {"service.name": {"stringValue": "yaqzan"}}
+    assert as_dict(entry["resource"]["attributes"]) == {"service.name": {"stringValue": "agentzaaheen"}}
     assert entry["scopeSpans"][0]["scope"] == {"name": "t", "version": ""}
 
 
@@ -207,7 +207,7 @@ def test_start_tracing_sends_every_span_on_shutdown() -> None:
     [entry] = sent["resourceSpans"]
     assert as_dict(entry["resource"]["attributes"]) == {
         "deployment.environment.name": {"stringValue": "laptop"},
-        "service.name": {"stringValue": "yaqzan"},
+        "service.name": {"stringValue": "agentzaaheen"},
         "service.version": {"stringValue": "9.9.9"},
     }
     assert entry["scopeSpans"][0]["spans"][0]["name"] == "request"
@@ -220,7 +220,7 @@ def test_a_refused_send_is_dropped_quietly() -> None:
     tracing = start_tracing(sender, version="1")
     with span("request"):
         pass
-    tracing.shutdown()  # no exception: telemetry never breaks Yaqzan
+    tracing.shutdown()  # no exception: telemetry never breaks Agent Zaaheen
     assert len(sender.bodies) == 1
     assert tracing.provider is not None
 

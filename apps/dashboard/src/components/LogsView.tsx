@@ -10,7 +10,7 @@ import {
 } from "../api";
 
 // The Logs page (ADR-034 slice 3): every kept log line says what happened, why, and what to do next.
-// Every sentence was written by Yaqzan's own templates; this page only lays them out and filters them.
+// Every sentence was written by Agent Zaaheen's own templates; this page only lays them out and filters them.
 
 const FIELD =
   "min-h-11 w-full rounded-lg border border-line bg-panel px-3 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
@@ -103,7 +103,7 @@ export function LogsView({ workspaces }: Props) {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Logs</h1>
         <p className="mt-1 text-sm text-muted">
-          Everything Yaqzan did, newest first, in plain English: what happened,
+          Everything Agent Zaaheen did, newest first, in plain English: what happened,
           why, and what to do next. Kept on this laptop for 30 days, with
           secrets and personal details removed.
         </p>
@@ -250,7 +250,7 @@ function LogsBody({
     return (
       <p className="text-sm text-muted">
         Logs are not kept yet. Start the dashboard with{" "}
-        <code>--log-dir ~/AppData/Local/Yaqzan/logs</code> to keep them.
+        <code>--log-dir ~/AppData/Local/AgentZaaheen/logs</code> to keep them.
       </p>
     );
   }

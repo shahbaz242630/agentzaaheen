@@ -10,7 +10,7 @@ const LINE: LogLine = {
   timestamp: "2026-10-25T09:30:00Z",
   level: "warning",
   event: "uptime_round_failed",
-  component: "yaqzan.uptime",
+  component: "agentzaaheen.uptime",
   what: "The uptime check for Zaaheen could not run.",
   why: "The network timed out after 8 seconds.",
   next: "It retries in 5 minutes; look only if it fails 3 times.",

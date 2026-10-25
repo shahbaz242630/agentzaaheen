@@ -1,4 +1,4 @@
-"""Record Yaqzan's spans in memory for a test (no network, nothing global changed)."""
+"""Record Agent Zaaheen's spans in memory for a test (no network, nothing global changed)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from yaqzan.core.sdk import install_tracing
+from agentzaaheen.core.sdk import install_tracing
 
 
 class Recorded:

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from yaqzan.core.sdk import BuildState, RepoHealth
+from agentzaaheen.core.sdk import BuildState, RepoHealth
 
 NOW = datetime(2026, 10, 20, 12, tzinfo=UTC)
 SHA = "c" * 40

@@ -11,12 +11,12 @@ from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from uuid import UUID
 
+from agentzaaheen.core.api.removal import DashboardRemoval, Step, purpose
+from agentzaaheen.core.policy import LifecycleVerdict, PasskeyApprovals, RegistryControl, WorkspaceControl
+from agentzaaheen.core.store import WorkspaceRow
 from tests.fixtures.soft_authenticator import SoftAuthenticator
 from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from tests.integration.test_passkey_approvals import CODE, SITE, Clock, enrol, registry
-from yaqzan.core.api.removal import DashboardRemoval, Step, purpose
-from yaqzan.core.policy import LifecycleVerdict, PasskeyApprovals, RegistryControl, WorkspaceControl
-from yaqzan.core.store import WorkspaceRow
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000e1")
 EVA = UUID("00000000-0000-4000-8000-0000000000e2")

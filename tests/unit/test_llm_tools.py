@@ -7,10 +7,10 @@ from collections.abc import Mapping, Sequence
 
 import pytest
 
-from yaqzan.core.llm_gateway import ChatReply, FactChat, Tool, catalogue
-from yaqzan.core.llm_gateway.chat import LAST_STEP
-from yaqzan.core.llm_gateway.tools import parse_call, strip_calls, tools_prompt, wrap_result
-from yaqzan.core.sdk import SourceError, SourceErrorCode
+from agentzaaheen.core.llm_gateway import ChatReply, FactChat, Tool, catalogue
+from agentzaaheen.core.llm_gateway.chat import LAST_STEP
+from agentzaaheen.core.llm_gateway.tools import parse_call, strip_calls, tools_prompt, wrap_result
+from agentzaaheen.core.sdk import SourceError, SourceErrorCode
 
 
 def block(name: str, arg: str) -> str:

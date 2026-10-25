@@ -39,7 +39,7 @@ const LANGUAGE_COLOUR: Record<string, string> = {
   "Jupyter Notebook": "#da5b0b",
 };
 const OTHER_COLOUR = "#9ca3af";
-// The connector category for Yaqzan's own checks (uptime): not an outside provider of the project.
+// The connector category for Agent Zaaheen's own checks (uptime): not an outside provider of the project.
 const OWN_CHECKS = "Health";
 const MAX_SHOWN = 8; // languages named in the legend; the rest are "Other"
 
@@ -80,7 +80,7 @@ export function slices(languages: Profile["languages"]): { name: string; share_b
 
 interface Props {
   slug: string;
-  // The Customize page's connectors: which providers Yaqzan itself reads for this workspace.
+  // The Customize page's connectors: which providers Agent Zaaheen itself reads for this workspace.
   registry: RegistryPage | null | "failed";
 }
 
@@ -135,7 +135,7 @@ function Body({ loaded, slug, registry }: { loaded: Load } & Props) {
       </p>
     );
   }
-  // Outside services Yaqzan itself reads for this workspace (its connectors; not its own health checks).
+  // Outside services Agent Zaaheen itself reads for this workspace (its connectors; not its own health checks).
   const connectors =
     registry !== null && registry !== "failed"
       ? registry.connectors.filter(
@@ -155,7 +155,7 @@ function Body({ loaded, slug, registry }: { loaded: Load } & Props) {
       <Providers providers={profile.providers} watched={watched} />
       {elsewhere.length > 0 && (
         <p className="text-sm text-muted">
-          Yaqzan also watches {elsewhere.join(", ")} for this project. The code in this repository does not call{" "}
+          Agent Zaaheen also watches {elsewhere.join(", ")} for this project. The code in this repository does not call{" "}
           {elsewhere.length === 1 ? "it" : "them"}, so it is connected some other way.
         </p>
       )}
@@ -211,7 +211,7 @@ function Providers({ providers, watched }: { providers: Profile["providers"]; wa
                   <span className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium text-ink">{p.name}</span>
                     {watched.has(p.id) ? (
-                      <span className="rounded-full bg-ok-soft px-2 py-0.5 text-xs text-ink">Yaqzan watches it</span>
+                      <span className="rounded-full bg-ok-soft px-2 py-0.5 text-xs text-ink">Agent Zaaheen watches it</span>
                     ) : (
                       <span className="rounded-full bg-raised px-2 py-0.5 text-xs text-muted">Not watched yet</span>
                     )}

@@ -15,8 +15,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import SecretBytes, SecretStr
 
-from yaqzan.core.sdk import REDACTED, contains_sensitive, get_logger, redact, redact_text
-from yaqzan.core.sdk.log import is_sensitive_key
+from agentzaaheen.core.sdk import REDACTED, contains_sensitive, get_logger, redact, redact_text
+from agentzaaheen.core.sdk.log import is_sensitive_key
 
 
 def _fake(prefix: str, body_char: str, length: int) -> str:
@@ -75,7 +75,7 @@ def test_privacy_canary_nothing_secret_reaches_the_log() -> None:
         log.info("secret objects", value=SecretStr("s3cr3t-value"), raw=SecretBytes(b"bytes-value"))
         log.info("customer wrote", sender="jane.doe@example.com", card=CARD)
         log.info("callback", url="https://api.example.com/cb?token=abc123def&page=2")
-        log.info("db", dsn="postgres://admin:pa55word@db.internal:5432/yaqzan")
+        log.info("db", dsn="postgres://admin:pa55word@db.internal:5432/agentzaaheen")
         try:
             raise RuntimeError(f"upstream rejected {CANARIES['llm']}")
         except RuntimeError:

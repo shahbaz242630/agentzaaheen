@@ -6,10 +6,17 @@ from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.api.profile import Checked
-from yaqzan.core.sdk import Language, Provider, ProviderCategory, RepoProfile, SourceError, SourceErrorCode
-from yaqzan.core.store import StoreError, StoreErrorCode, WorkspaceRow
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.api.profile import Checked
+from agentzaaheen.core.sdk import (
+    Language,
+    Provider,
+    ProviderCategory,
+    RepoProfile,
+    SourceError,
+    SourceErrorCode,
+)
+from agentzaaheen.core.store import StoreError, StoreErrorCode, WorkspaceRow
 
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 LATER = datetime(2026, 10, 24, 9, 5, tzinfo=UTC)

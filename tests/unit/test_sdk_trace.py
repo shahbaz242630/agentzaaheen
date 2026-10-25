@@ -16,10 +16,10 @@ import pytest
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind, StatusCode
 
+from agentzaaheen.core.net import NetError, NetErrorCode
+from agentzaaheen.core.sdk import error_type, event, failed, get_logger, note, span, trace_ids, traceparent
+from agentzaaheen.core.store import StoreError, StoreErrorCode
 from tests.tracing import Recorded, recorded
-from yaqzan.core.net import NetError, NetErrorCode
-from yaqzan.core.sdk import error_type, event, failed, get_logger, note, span, trace_ids, traceparent
-from yaqzan.core.store import StoreError, StoreErrorCode
 
 TRACEPARENT = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$")
 
@@ -31,9 +31,9 @@ def spans() -> Iterator[Recorded]:
 
 
 def test_without_a_provider_spans_are_no_ops_with_no_ids() -> None:
-    with span("nothing", attributes={"yaqzan.count": 1}) as current:
-        note("yaqzan.count", 2)
-        event("retry", {"yaqzan.attempt": 1})
+    with span("nothing", attributes={"agentzaaheen.count": 1}) as current:
+        note("agentzaaheen.count", 2)
+        event("retry", {"agentzaaheen.attempt": 1})
         assert not current.is_recording()
         assert trace_ids() is None
         assert traceparent() is None
@@ -42,7 +42,7 @@ def test_without_a_provider_spans_are_no_ops_with_no_ids() -> None:
 def test_a_span_keeps_its_name_kind_and_attributes(spans: Recorded) -> None:
     with span("GET api.example.com", kind="client", attributes={"server.address": "api.example.com"}):
         note("http.response.status_code", 200)
-        event("retry", {"yaqzan.attempt": 1, "yaqzan.reason": "http_503"})
+        event("retry", {"agentzaaheen.attempt": 1, "agentzaaheen.reason": "http_503"})
     done = spans.named("GET api.example.com")
     assert done.kind is SpanKind.CLIENT
     assert dict(done.attributes or {}) == {
@@ -50,7 +50,7 @@ def test_a_span_keeps_its_name_kind_and_attributes(spans: Recorded) -> None:
         "http.response.status_code": 200,
     }
     assert [(e.name, dict(e.attributes or {})) for e in done.events] == [
-        ("retry", {"yaqzan.attempt": 1, "yaqzan.reason": "http_503"})
+        ("retry", {"agentzaaheen.attempt": 1, "agentzaaheen.reason": "http_503"})
     ]
     assert done.status.status_code is StatusCode.UNSET
 

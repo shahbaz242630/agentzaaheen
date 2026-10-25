@@ -309,7 +309,7 @@ describe("the chat with the local model connected", () => {
     await ask("How is revenue?");
     expect(await screen.findByText("MRR is $1,240.")).toBeInTheDocument();
     expect(calls[0]?.method).toBe("POST");
-    expect(calls[0]?.headers).toMatchObject({ "Content-Type": "application/json", "X-Yaqzan-Request": "1" });
+    expect(calls[0]?.headers).toMatchObject({ "Content-Type": "application/json", "X-AgentZaaheen-Request": "1" });
     expect(JSON.parse(calls[0]?.body as string)).toEqual({
       model_id: "local-gemma",
       question: "How is revenue?",

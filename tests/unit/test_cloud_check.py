@@ -8,15 +8,17 @@ from uuid import uuid4
 
 import pytest
 
-from yaqzan.core.llm_gateway.cloud_check import (
+from agentzaaheen.core.llm_gateway.cloud_check import (
     MAX_CHECKED_CHARS,
     Found,
     KnownNames,
+    PrintKind,
     PromptPart,
     customer_data_in,
     part_from,
+    prints_of,
 )
-from yaqzan.core.sdk import (
+from agentzaaheen.core.sdk import (
     BillingCycle,
     DataClass,
     Evidence,
@@ -28,14 +30,17 @@ from yaqzan.core.sdk import (
     SubscriptionStatus,
     Trust,
 )
+from agentzaaheen.core.vault import PRINT_BYTES, MasterKey, NamePrinter
+from tests.fixtures.name_prints import PRINTER
 
 OPS = PromptPart(
     "Zaaheen: 3 builds failed on 2026-10-25 at 07:00; MRR USD 58.50, up 12% (run 4821, PR #52).",
     DataClass.INTERNAL,
 )
-NO_NAMES = KnownNames([])
-CUSTOMERS = KnownNames(
-    ["Fatima Al Mansoori", "Zoë O'Brien", "Renée Dubois", "محمد علي", "Jo", "Ali", "Grace", "Mark", "سارة"]
+NO_NAMES = KnownNames.empty()
+CUSTOMERS = KnownNames.of(
+    ["Fatima Al Mansoori", "Zoë O'Brien", "Renée Dubois", "محمد علي", "Jo", "Ali", "Grace", "Mark", "سارة"],
+    PRINTER,
 )
 
 
@@ -125,8 +130,30 @@ def test_an_empty_name_list_is_a_real_answer_not_a_missing_one() -> None:
     assert customer_data_in([OPS], NO_NAMES) is None
 
 
+def test_only_fingerprints_are_kept_never_the_names() -> None:
+    prints = prints_of(["Fatima Al Mansoori", "Grace"], PRINTER)
+    assert {p.kind for p in prints} == {PrintKind.FULL, PrintKind.FIRST, PrintKind.SINGLE}
+    kept = b"".join(p.print for p in prints)
+    for word in ("fatima", "mansoori", "grace", "Fatima", "Grace"):
+        assert word.encode() not in kept
+    assert all(len(p.print) == PRINT_BYTES for p in prints)
+
+
+def test_prints_made_with_another_key_match_nothing() -> None:
+    other = NamePrinter(MasterKey("other-names", bytes(32)))
+    stolen = KnownNames(prints_of(["Fatima Al Mansoori", "Grace"], other), PRINTER)
+    assert (
+        customer_data_in([PromptPart("Fatima Al Mansoori and Grace wrote.", DataClass.INTERNAL)], stolen)
+        is None
+    )
+
+
+def test_the_same_name_written_differently_gives_the_same_fingerprint() -> None:
+    assert prints_of(["Zoë O'Brien"], PRINTER) == prints_of(["ZOE o brien"], PRINTER)
+
+
 def test_a_long_name_list_still_checks_quickly() -> None:
-    names = KnownNames(f"Customer Number{i} Example" for i in range(20_000))
+    names = KnownNames.of((f"Customer Number{i} Example" for i in range(20_000)), PRINTER)
     text = "ordinary words " * 100_000
     started = time.monotonic()
     assert not names.found_in(text)

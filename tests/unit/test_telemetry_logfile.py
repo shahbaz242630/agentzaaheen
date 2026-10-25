@@ -12,10 +12,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from agentzaaheen.core.sdk import get_logger, install_log_sink, say
+from agentzaaheen.core.telemetry import LogFile
+from agentzaaheen.core.telemetry.logfile import KEEP_DAYS, file_day, file_name
 from tools import dashboard
-from yaqzan.core.sdk import get_logger, install_log_sink, say
-from yaqzan.core.telemetry import LogFile
-from yaqzan.core.telemetry.logfile import KEEP_DAYS, file_day, file_name
 
 FAKE_TOKEN = "ghp_" + "a" * 36  # built here, never a real token
 DAY = datetime(2026, 10, 25, 9, 30, tzinfo=UTC)
@@ -49,7 +49,7 @@ def test_each_line_is_kept_in_todays_file_after_redaction(tmp_path: Path) -> Non
     say(log(), "push_sent", bytes=12, priority="high")
     get_logger("t", sink=io.StringIO()).info("odd", reason=f"bearer {FAKE_TOKEN}")
     kept.stop()
-    [first, second] = lines(tmp_path / "yaqzan-2026-10-25.jsonl")
+    [first, second] = lines(tmp_path / "agentzaaheen-2026-10-25.jsonl")
     assert first["event"] == "push_sent"
     assert first["what"] == "A phone alert was sent (12 bytes, priority high)."
     assert first["level"] == "info"
@@ -74,8 +74,8 @@ def test_a_new_day_starts_a_new_file(tmp_path: Path) -> None:
     clock.now = DAY + timedelta(days=1)
     say(log(), "push_sent", bytes=2, priority="low")
     kept.stop()
-    assert len(lines(tmp_path / "yaqzan-2026-10-25.jsonl")) == 1
-    assert len(lines(tmp_path / "yaqzan-2026-10-26.jsonl")) == 1
+    assert len(lines(tmp_path / "agentzaaheen-2026-10-25.jsonl")) == 1
+    assert len(lines(tmp_path / "agentzaaheen-2026-10-26.jsonl")) == 1
 
 
 def test_the_day_is_the_utc_day_whatever_the_clock_zone(tmp_path: Path) -> None:
@@ -84,7 +84,7 @@ def test_the_day_is_the_utc_day_whatever_the_clock_zone(tmp_path: Path) -> None:
     say(log(), "push_sent", bytes=1, priority="low")
     kept.stop()
     [path] = tmp_path.iterdir()
-    assert path.name == "yaqzan-2026-10-25.jsonl"
+    assert path.name == "agentzaaheen-2026-10-25.jsonl"
 
 
 def test_files_older_than_30_days_are_deleted_and_nothing_else(tmp_path: Path) -> None:
@@ -147,11 +147,11 @@ def test_nothing_is_kept_once_stopped(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("name", "day"),
     [
-        ("yaqzan-2026-10-25.jsonl", date(2026, 10, 25)),
-        ("yaqzan-2026-13-40.jsonl", None),
-        ("yaqzan-2026-10-25.jsonl.bak", None),
+        ("agentzaaheen-2026-10-25.jsonl", date(2026, 10, 25)),
+        ("agentzaaheen-2026-13-40.jsonl", None),
+        ("agentzaaheen-2026-10-25.jsonl.bak", None),
         ("other-2026-10-25.jsonl", None),
-        ("yaqzan-26-10-25.jsonl", None),
+        ("agentzaaheen-26-10-25.jsonl", None),
     ],
 )
 def test_only_our_own_day_files_are_ours(name: str, day: date | None) -> None:

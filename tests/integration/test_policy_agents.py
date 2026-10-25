@@ -17,12 +17,12 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 
+from agentzaaheen.core.policy import AgentControl, AgentVerdict, Channel, Role, RunRefusal, WorkspaceAgents
+from agentzaaheen.core.registry.roles import RoleLibrary, load_roles
+from agentzaaheen.core.store import AgentRows, AuditRows, Records, RoleVersionRows
 from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
 from tests.integration.test_store_records import run_record
 from tests.unit.test_registry_roles import pack
-from yaqzan.core.policy import AgentControl, AgentVerdict, Channel, Role, RunRefusal, WorkspaceAgents
-from yaqzan.core.registry.roles import RoleLibrary, load_roles
-from yaqzan.core.store import AgentRows, AuditRows, Records, RoleVersionRows
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000e1")
 EVA = UUID("00000000-0000-4000-8000-0000000000e2")
@@ -290,13 +290,14 @@ def test_every_decision_is_audited(test_db: ScratchDb, library: RoleLibrary) -> 
     "statement",
     [
         # Switched on without a new step-up time, by a person.
-        "UPDATE yaqzan.agents SET enabled = true, changed_by = 'user:chairman'",
+        "UPDATE agentzaaheen.agents SET enabled = true, changed_by = 'user:chairman'",
         # Switched on by the system, even with a step-up time.
-        "UPDATE yaqzan.agents SET enabled = true, step_up_at = now(), changed_by = 'system:yaqzan'",
+        "UPDATE agentzaaheen.agents SET enabled = true, step_up_at = now(), changed_by ="
+        " 'system:agentzaaheen'",
         # A first cap without a step-up.
-        "UPDATE yaqzan.agents SET cap_minor = 100",
+        "UPDATE agentzaaheen.agents SET cap_minor = 100",
         # Moved to another role.
-        "UPDATE yaqzan.agents SET role_id = 'sales'",
+        "UPDATE agentzaaheen.agents SET role_id = 'sales'",
     ],
 )
 def test_the_database_refuses_riskier_changes_written_around_the_code(
@@ -325,7 +326,8 @@ def test_the_database_lets_anyone_switch_off_or_lower_a_cap(test_db: ScratchDb, 
         conn = await connect_as(test_db.app_url, TENANT, EVA)
         try:
             await conn.execute(
-                "UPDATE yaqzan.agents SET enabled = false, cap_minor = 10, changed_by = 'system:yaqzan'"
+                "UPDATE agentzaaheen.agents SET enabled = false, cap_minor = 10, changed_by ="
+                " 'system:agentzaaheen'"
             )
         finally:
             await conn.close()
@@ -339,9 +341,9 @@ def test_the_database_refuses_an_agent_created_switched_on(test_db: ScratchDb, l
     async def body() -> None:
         conn = await connect_as(test_db.app_url, TENANT, ZAAHEEN)
         try:
-            version = await conn.fetchval("SELECT version FROM yaqzan.role_versions LIMIT 1")
+            version = await conn.fetchval("SELECT version FROM agentzaaheen.role_versions LIMIT 1")
             await conn.execute(
-                "INSERT INTO yaqzan.agents (tenant_id, project_id, agent_id, role_id, version, enabled,"
+                "INSERT INTO agentzaaheen.agents (tenant_id, project_id, agent_id, role_id, version, enabled,"
                 " model, cap_minor, created_by, created_at, changed_by, changed_at, step_up_at)"
                 " VALUES ($1, $2, $3, 'monitoring', $4, true, 'local-gemma', 100, 'user:chairman', now(),"
                 " 'user:chairman', now(), now())",

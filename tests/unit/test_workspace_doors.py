@@ -14,25 +14,29 @@ import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SRC = ROOT / "src" / "yaqzan"
+SRC = ROOT / "src" / "agentzaaheen"
 
 # Where a workspace handle may be opened, and why.
 DOORS = {
     # Tenant-wide reads go through every workspace of the tenant, one at a time.
-    "src/yaqzan/core/store/sealed.py",
+    "src/agentzaaheen/core/store/sealed.py",
     # The daily key check is a tenant-wide job (the Board's), one workspace at a time.
-    "src/yaqzan/core/scheduler/keys.py",
+    "src/agentzaaheen/core/scheduler/keys.py",
     # Agents: the workspace comes from the API door's address or the job's own saved record (may_run).
-    "src/yaqzan/core/policy/agents.py",
+    "src/agentzaaheen/core/policy/agents.py",
     # Removing a project: the workspace comes from the API door's address (archive) or the archived list.
     # Adding one: the new workspace's id is made right there; its repository list, one workspace at a time.
-    "src/yaqzan/core/policy/workspaces.py",
+    "src/agentzaaheen/core/policy/workspaces.py",
     # The scout: the workspace comes from the API door's address; its runs are saved behind its wall.
-    "src/yaqzan/core/policy/scout.py",
+    "src/agentzaaheen/core/policy/scout.py",
     # Daily summaries: the workspace comes from the server's own list (the morning job) or the API door.
-    "src/yaqzan/core/policy/summaries.py",
+    "src/agentzaaheen/core/policy/summaries.py",
     # The laptop set-up: its own five fixed workspaces, one at a time, to save each one's repository once.
     "tools/laptop_db.py",
+    # Name fingerprints: the customer-data check reads every workspace's, one at a time (tenant-wide).
+    "src/agentzaaheen/core/store/name_prints.py",
+    # Saving name fingerprints: the workspace is the one the Chairman names on the command line.
+    "tools/name_prints.py",
 }
 
 
@@ -49,7 +53,7 @@ def _openers() -> dict[str, int]:
     found: dict[str, int] = {}
     for path in [*SRC.rglob("*.py"), *(ROOT / "tools").rglob("*.py")]:
         rel = path.relative_to(ROOT).as_posix()
-        if rel == "src/yaqzan/core/store/db.py":  # the handle itself
+        if rel == "src/agentzaaheen/core/store/db.py":  # the handle itself
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         count = sum(1 for n in ast.walk(tree) if isinstance(n, ast.Call) and _opens_a_workspace(n))

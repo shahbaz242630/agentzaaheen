@@ -14,9 +14,9 @@ import pytest
 from fastapi.testclient import TestClient
 from opentelemetry.trace import SpanKind, StatusCode
 
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.api.app import REQUEST_HEADER
 from tests.tracing import Recorded, recorded
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.api.app import REQUEST_HEADER
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 TRACEPARENT = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$")
@@ -31,7 +31,7 @@ def spans() -> Iterator[Recorded]:
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
-    (tmp_path / "index.html").write_text("<!doctype html><title>Yaqzan</title>", encoding="utf-8")
+    (tmp_path / "index.html").write_text("<!doctype html><title>Agent Zaaheen</title>", encoding="utf-8")
     return TestClient(create_app(SamplePortfolio(NOW), static_dir=tmp_path), base_url="http://127.0.0.1")
 
 
