@@ -7,8 +7,8 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from agentzaaheen.core.sdk import SDK_VERSION, RevenueBatch, SourceError, SourceErrorCode, SubscriptionStatus
 from tests.fixtures import paddle_world as world
-from yaqzan.core.sdk import SDK_VERSION, RevenueBatch, SourceError, SourceErrorCode, SubscriptionStatus
 
 PAYMENT = world.EXPECTED_PAYMENTS[0]
 REFUND = world.EXPECTED_REFUNDS[0]

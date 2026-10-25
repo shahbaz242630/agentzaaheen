@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from agentzaaheen.core.sdk import BuildState, SourceError, SourceErrorCode
+from agentzaaheen.plugins.connectors.github import mapping
 from tests.fixtures.github_world import HEAD_SHA, OLD_SHA, REPO, at, run, when
-from yaqzan.core.sdk import BuildState, SourceError, SourceErrorCode
-from yaqzan.plugins.connectors.github import mapping
 
 
 def test_no_runs_means_no_build() -> None:

@@ -14,6 +14,69 @@ certifi = "2026-10-20T12:00:00Z"
 filelock = "2026-10-17T17:00:00Z"
 
 [[package]]
+name = "agentzaaheen"
+version = "0.0.1"
+source = { editable = "." }
+dependencies = [
+    { name = "asyncpg" },
+    { name = "cryptography" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "structlog" },
+    { name = "tzdata" },
+    { name = "uvicorn" },
+    { name = "webauthn" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "asyncpg-stubs" },
+    { name = "bandit" },
+    { name = "hypothesis" },
+    { name = "import-linter" },
+    { name = "mypy" },
+    { name = "pip-audit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "types-pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asyncpg", specifier = "==0.32.0" },
+    { name = "cryptography", specifier = "==50.0.2" },
+    { name = "fastapi", specifier = "==0.143.0" },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "opentelemetry-api", specifier = "==1.45.1" },
+    { name = "opentelemetry-sdk", specifier = "==1.45.1" },
+    { name = "pydantic", specifier = "==2.14.1" },
+    { name = "pyyaml", specifier = "==6.0.3" },
+    { name = "structlog", specifier = "==26.1.0" },
+    { name = "tzdata", specifier = "==2026.5" },
+    { name = "uvicorn", specifier = "==0.54.0" },
+    { name = "webauthn", specifier = "==3.0.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "asyncpg-stubs", specifier = "==0.32.0" },
+    { name = "bandit", specifier = "==1.9.4" },
+    { name = "hypothesis", specifier = "==6.169.0" },
+    { name = "import-linter", specifier = "==2.15" },
+    { name = "mypy", specifier = "==2.4.0" },
+    { name = "pip-audit", specifier = "==2.10.1" },
+    { name = "pytest", specifier = "==9.1.1" },
+    { name = "pytest-cov", specifier = "==7.1.0" },
+    { name = "ruff", specifier = "==0.17.0" },
+    { name = "types-pyyaml", specifier = "==6.0.12.20260906" },
+]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1886,67 +1949,4 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1e/e6/31390f9f2226722d758483b2b56822c3ef89ea577523d99d5eaf0220d2fc/webauthn-3.0.1.tar.gz", hash = "sha256:da862342c91fc03fbcf9a89cee7346e55c56f8b93fbaf66cfe8a55e2f0a05f6c", size = 160641, upload-time = "2026-09-25T16:18:37.727Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ea/5e/cc651030a1d43010234247ab4361aac17276f62b185975100ba62aa00cf7/webauthn-3.0.1-py3-none-any.whl", hash = "sha256:9927b2f530773bd1d7f8194cd643a2e634a20995ea31f2d8f7a3e70b11c93e31", size = 73910, upload-time = "2026-09-25T16:18:36.405Z" },
-]
-
-[[package]]
-name = "yaqzan"
-version = "0.0.1"
-source = { editable = "." }
-dependencies = [
-    { name = "asyncpg" },
-    { name = "cryptography" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-sdk" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "structlog" },
-    { name = "tzdata" },
-    { name = "uvicorn" },
-    { name = "webauthn" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "asyncpg-stubs" },
-    { name = "bandit" },
-    { name = "hypothesis" },
-    { name = "import-linter" },
-    { name = "mypy" },
-    { name = "pip-audit" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "asyncpg", specifier = "==0.32.0" },
-    { name = "cryptography", specifier = "==50.0.2" },
-    { name = "fastapi", specifier = "==0.143.0" },
-    { name = "httpx", specifier = "==0.28.1" },
-    { name = "opentelemetry-api", specifier = "==1.45.1" },
-    { name = "opentelemetry-sdk", specifier = "==1.45.1" },
-    { name = "pydantic", specifier = "==2.14.1" },
-    { name = "pyyaml", specifier = "==6.0.3" },
-    { name = "structlog", specifier = "==26.1.0" },
-    { name = "tzdata", specifier = "==2026.5" },
-    { name = "uvicorn", specifier = "==0.54.0" },
-    { name = "webauthn", specifier = "==3.0.1" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "asyncpg-stubs", specifier = "==0.32.0" },
-    { name = "bandit", specifier = "==1.9.4" },
-    { name = "hypothesis", specifier = "==6.169.0" },
-    { name = "import-linter", specifier = "==2.15" },
-    { name = "mypy", specifier = "==2.4.0" },
-    { name = "pip-audit", specifier = "==2.10.1" },
-    { name = "pytest", specifier = "==9.1.1" },
-    { name = "pytest-cov", specifier = "==7.1.0" },
-    { name = "ruff", specifier = "==0.17.0" },
-    { name = "types-pyyaml", specifier = "==6.0.12.20260906" },
 ]

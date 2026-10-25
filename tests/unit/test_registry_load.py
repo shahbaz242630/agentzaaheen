@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from yaqzan.core.registry import Kind, Registry, load_registry
-from yaqzan.core.registry.models import Skill
+from agentzaaheen.core.registry import Kind, Registry, load_registry
+from agentzaaheen.core.registry.models import Skill
 
-PLUGINS = Path(__file__).resolve().parents[2] / "src" / "yaqzan" / "plugins"
+PLUGINS = Path(__file__).resolve().parents[2] / "src" / "agentzaaheen" / "plugins"
 
 
 def write_skill(root: Path, name: str, description: str = "Does a thing.") -> None:
@@ -69,7 +69,7 @@ def test_an_unreadable_folder_becomes_a_problem(tmp_path: Path, monkeypatch: pyt
     def broken(folder: Path) -> Skill:
         raise PermissionError(folder)
 
-    monkeypatch.setattr("yaqzan.core.registry.load.read_skill", broken)
+    monkeypatch.setattr("agentzaaheen.core.registry.load.read_skill", broken)
     problems = load_registry(tmp_path).problems
     assert [(p.code, p.message) for p in problems] == [
         ("registry.unreadable", "the folder could not be read")

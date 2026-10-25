@@ -49,7 +49,7 @@ jobs:
         run: uv run python -m tools.dev_db up
       - name: Tests (database tests must run here, never skip)
         env:
-          YAQZAN_REQUIRE_DB: "1"
+          AGENTZAAHEEN_REQUIRE_DB: "1"
         run: uv run pytest
       - name: Coverage floors per file
         run: uv run python -m tools.coverage_gate

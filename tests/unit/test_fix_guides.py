@@ -9,6 +9,10 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from agentzaaheen.core.api.uptime import uptime_card
+from agentzaaheen.core.notify import UptimeWatch
+from agentzaaheen.core.registry import load_registry
+from agentzaaheen.core.sdk import SiteCheck, SiteRule, StatusAnswer, UptimeReport, check_site
 from tools import fix_guides
 from tools.chat_tools import tools_for
 from tools.dashboard_sources import ListNotUsableError
@@ -21,10 +25,6 @@ from tools.fix_guides import (
     guide_text,
     load_fixes,
 )
-from yaqzan.core.api.uptime import uptime_card
-from yaqzan.core.notify import UptimeWatch
-from yaqzan.core.registry import load_registry
-from yaqzan.core.sdk import SiteCheck, SiteRule, StatusAnswer, UptimeReport, check_site
 
 NOW = datetime(2026, 10, 21, 12, 0, tzinfo=UTC)
 PROJECTS = {"zaaheen", "eva"}
@@ -220,7 +220,7 @@ def test_the_tool_offers_each_part_and_reads_its_guide(tmp_path: Path) -> None:
 
 
 def test_the_chat_gets_the_tool_only_with_guides(tmp_path: Path) -> None:
-    root = Path(__file__).resolve().parents[2] / "src" / "yaqzan" / "plugins"
+    root = Path(__file__).resolve().parents[2] / "src" / "agentzaaheen" / "plugins"
     registry = load_registry(root)
     guides = load_fixes(write(tmp_path, GUIDE), PROJECTS)
     with_guides, _ = tools_for(registry, root, None, {}, lambda: NOW, fixes=guides)

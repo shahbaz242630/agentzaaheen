@@ -8,8 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from tests.fixtures.name_prints import PRINTER
-from yaqzan.core.llm_gateway.cloud_check import (
+from agentzaaheen.core.llm_gateway.cloud_check import (
     MAX_CHECKED_CHARS,
     Found,
     KnownNames,
@@ -19,7 +18,7 @@ from yaqzan.core.llm_gateway.cloud_check import (
     part_from,
     prints_of,
 )
-from yaqzan.core.sdk import (
+from agentzaaheen.core.sdk import (
     BillingCycle,
     DataClass,
     Evidence,
@@ -31,7 +30,8 @@ from yaqzan.core.sdk import (
     SubscriptionStatus,
     Trust,
 )
-from yaqzan.core.vault import PRINT_BYTES, MasterKey, NamePrinter
+from agentzaaheen.core.vault import PRINT_BYTES, MasterKey, NamePrinter
+from tests.fixtures.name_prints import PRINTER
 
 OPS = PromptPart(
     "Zaaheen: 3 builds failed on 2026-10-25 at 07:00; MRR USD 58.50, up 12% (run 4821, PR #52).",

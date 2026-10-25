@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from yaqzan.core.policy import (
+from agentzaaheen.core.policy import (
     AgentPolicy,
     AuditOutcome,
     Budget,
@@ -26,7 +26,7 @@ from yaqzan.core.policy import (
     audit_draft,
     decide,
 )
-from yaqzan.core.sdk import DataClass, ToolLevel, ToolSpec, Trust
+from agentzaaheen.core.sdk import DataClass, ToolLevel, ToolSpec, Trust
 
 NOW = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 PROJECT = uuid4()

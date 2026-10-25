@@ -15,11 +15,9 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 
-from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
-from tests.integration.test_policy_agents import ME
-from yaqzan.core.policy import STALE_AFTER, Role, ScoutControl, ScoutVerdict, WorkspaceControl
-from yaqzan.core.policy.access import Channel
-from yaqzan.core.store import (
+from agentzaaheen.core.policy import STALE_AFTER, Role, ScoutControl, ScoutVerdict, WorkspaceControl
+from agentzaaheen.core.policy.access import Channel
+from agentzaaheen.core.store import (
     INTERRUPTED,
     AuditRows,
     Database,
@@ -28,6 +26,8 @@ from yaqzan.core.store import (
     StoreErrorCode,
     WorkspaceRow,
 )
+from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
+from tests.integration.test_policy_agents import ME
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000c1")
 SHOP_ID = UUID("00000000-0000-4000-8000-0000000000c2")
@@ -97,7 +97,7 @@ def test_a_run_left_by_a_stopped_dashboard_is_closed_as_interrupted(test_db: Scr
             assert new != old
             async with db.scoped(TENANT, SHOP_ID).connection() as conn:
                 row = await conn.fetchrow(
-                    "SELECT state, reason, finished_at FROM yaqzan.scout_runs WHERE run_id = $1", old
+                    "SELECT state, reason, finished_at FROM agentzaaheen.scout_runs WHERE run_id = $1", old
                 )
             assert row is not None
             assert dict(row) == {"state": "failed", "reason": INTERRUPTED, "finished_at": later}
@@ -121,12 +121,13 @@ def test_a_failed_run_keeps_its_reason(test_db: ScratchDb) -> None:
 @pytest.mark.parametrize(
     "change",
     [
-        "UPDATE yaqzan.scout_runs SET state = 'done'",  # done with no advice
-        "UPDATE yaqzan.scout_runs SET state = 'failed', stage = 'finished', finished_at = now()",  # no reason
-        "UPDATE yaqzan.scout_runs SET reason = 'scout.x'",  # a reason while running
-        "UPDATE yaqzan.scout_runs SET result = '[1]'::jsonb",  # advice that is not an object
-        "UPDATE yaqzan.scout_runs SET stage = 'finished'",  # finished while running
-        "UPDATE yaqzan.scout_runs"
+        "UPDATE agentzaaheen.scout_runs SET state = 'done'",  # done with no advice
+        "UPDATE agentzaaheen.scout_runs SET state = 'failed', stage = 'finished', finished_at ="
+        " now()",  # no reason
+        "UPDATE agentzaaheen.scout_runs SET reason = 'scout.x'",  # a reason while running
+        "UPDATE agentzaaheen.scout_runs SET result = '[1]'::jsonb",  # advice that is not an object
+        "UPDATE agentzaaheen.scout_runs SET stage = 'finished'",  # finished while running
+        "UPDATE agentzaaheen.scout_runs"
         " SET reason = 'Not a code', state = 'failed', stage = 'finished', finished_at = now()",
     ],
 )
@@ -149,7 +150,7 @@ def test_runs_stay_behind_the_workspace_wall(test_db: ScratchDb) -> None:
         conn = await connect_as(test_db.app_url, TENANT, CAFE_ID)
         try:
             # No WHERE clause: the wall alone decides what is seen.
-            assert await conn.fetchval("SELECT count(*) FROM yaqzan.scout_runs") == 0
+            assert await conn.fetchval("SELECT count(*) FROM agentzaaheen.scout_runs") == 0
         finally:
             await conn.close()
         async with open_db(test_db.app_url) as db:
@@ -163,7 +164,7 @@ def test_the_app_may_not_delete_runs(test_db: ScratchDb) -> None:
         async with open_db(test_db.app_url) as db:
             await ask(db)
             async with db.scoped(TENANT, SHOP_ID).connection() as conn:
-                await conn.execute("DELETE FROM yaqzan.scout_runs")
+                await conn.execute("DELETE FROM agentzaaheen.scout_runs")
 
     with pytest.raises(StoreError) as caught:
         run(body())
@@ -188,7 +189,7 @@ def test_an_archived_workspace_takes_no_new_run_and_deleting_it_removes_its_runs
         admin = await asyncpg.connect(test_db.admin_url)
         try:
             left = await admin.fetchval(
-                "SELECT count(*) FROM yaqzan.scout_runs WHERE project_id = $1", SHOP_ID
+                "SELECT count(*) FROM agentzaaheen.scout_runs WHERE project_id = $1", SHOP_ID
             )
         finally:
             await admin.close()

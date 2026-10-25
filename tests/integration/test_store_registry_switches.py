@@ -13,8 +13,8 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 
+from agentzaaheen.core.store import RegistrySwitchRows, RequestRow, RequestStatus, SwitchRow
 from tests.integration.conftest import ScratchDb, connect_as, open_db, run
-from yaqzan.core.store import RegistrySwitchRows, RequestRow, RequestStatus, SwitchRow
 
 TENANT = uuid4()
 OTHER = uuid4()
@@ -43,7 +43,9 @@ def test_switch_off_is_stored_and_overwritten(test_db: ScratchDb) -> None:
             rows = RegistrySwitchRows(db.scoped(TENANT))
             await rows.switch_off("skill", "a-skill", FILES, changed_by=CHAIRMAN, changed_at=NOW)
             later = NOW + timedelta(minutes=1)
-            await rows.switch_off("skill", "a-skill", CHANGED, changed_by="system:yaqzan", changed_at=later)
+            await rows.switch_off(
+                "skill", "a-skill", CHANGED, changed_by="system:agentzaaheen", changed_at=later
+            )
             return await rows.switches(), await RegistrySwitchRows(db.scoped(OTHER)).switches()
 
     mine, theirs = run(body())
@@ -52,7 +54,7 @@ def test_switch_off_is_stored_and_overwritten(test_db: ScratchDb) -> None:
     assert (row.kind, row.item_id, row.enabled, row.fingerprint, row.request_id) == (
         "skill", "a-skill", False, CHANGED, None,
     )  # fmt: skip
-    assert row.changed_by == "system:yaqzan"
+    assert row.changed_by == "system:agentzaaheen"
 
 
 def test_one_pending_request_per_item(test_db: ScratchDb) -> None:
@@ -116,9 +118,10 @@ def test_requests_are_scoped_by_tenant(test_db: ScratchDb) -> None:
 
 # ---------------------------------------------------------------- the database's own rules (as the app role)
 
-_ON = """INSERT INTO yaqzan.registry_switches (tenant_id, kind, item_id, enabled, fingerprint, request_id,
+_ON = """INSERT INTO agentzaaheen.registry_switches (tenant_id, kind, item_id, enabled, fingerprint,
+    request_id,
     changed_by, changed_at) VALUES ($1, 'skill', $2, $5, $3, $4, 'user:chairman', now())"""
-_APPROVED = """INSERT INTO yaqzan.registry_requests (id, tenant_id, kind, item_id, fingerprint, status,
+_APPROVED = """INSERT INTO agentzaaheen.registry_requests (id, tenant_id, kind, item_id, fingerprint, status,
     requested_by, requested_at, decided_by, decided_at, step_up_at)
     VALUES ($1, $2, 'skill', $3, $4, 'approved', 'user:chairman', now(), $5, now(), $6)"""
 
@@ -185,27 +188,29 @@ def test_off_may_not_name_a_request(test_db: ScratchDb) -> None:
 
 def test_an_approval_needs_a_person_and_a_step_up(test_db: ScratchDb) -> None:
     _refused(test_db, _APPROVED, uuid4(), TENANT, "a-skill", FILES, CHAIRMAN, None)
-    _refused(test_db, _APPROVED, uuid4(), TENANT, "a-skill", FILES, "system:yaqzan", NOW)
+    _refused(test_db, _APPROVED, uuid4(), TENANT, "a-skill", FILES, "system:agentzaaheen", NOW)
 
 
 def test_a_decided_request_never_changes(test_db: ScratchDb) -> None:
     approved = _approved(test_db, "a-skill")
     reopen = (
-        "UPDATE yaqzan.registry_requests SET status = 'pending', decided_by = NULL, decided_at = NULL"
+        "UPDATE agentzaaheen.registry_requests SET status = 'pending', decided_by = NULL, decided_at = NULL"
         " WHERE id = $1"
     )
     _refused(test_db, reopen, approved)
-    _refused(test_db, "UPDATE yaqzan.registry_requests SET status = 'refused' WHERE id = $1", approved)
+    _refused(test_db, "UPDATE agentzaaheen.registry_requests SET status = 'refused' WHERE id = $1", approved)
 
 
 def test_what_was_asked_for_cannot_be_rewritten(test_db: ScratchDb) -> None:
     filed = request("a-skill")
     _file(test_db, filed)
-    _refused(test_db, "UPDATE yaqzan.registry_requests SET fingerprint = $2 WHERE id = $1", filed.id, CHANGED)
-    _refused(test_db, "UPDATE yaqzan.registry_requests SET item_id = 'other' WHERE id = $1", filed.id)
+    _refused(
+        test_db, "UPDATE agentzaaheen.registry_requests SET fingerprint = $2 WHERE id = $1", filed.id, CHANGED
+    )
+    _refused(test_db, "UPDATE agentzaaheen.registry_requests SET item_id = 'other' WHERE id = $1", filed.id)
 
 
 @pytest.mark.parametrize("table", ["registry_switches", "registry_requests"])
 def test_the_app_cannot_delete_switches_or_requests(test_db: ScratchDb, table: str) -> None:
     with pytest.raises(asyncpg.InsufficientPrivilegeError):
-        run(_app(test_db, f"DELETE FROM yaqzan.{table}"))  # noqa: S608  # nosec B608  # fixed table names
+        run(_app(test_db, f"DELETE FROM agentzaaheen.{table}"))  # noqa: S608  # nosec B608  # fixed table names

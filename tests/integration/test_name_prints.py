@@ -13,9 +13,7 @@ from uuid import UUID
 
 import pytest
 
-from tests.fixtures.name_prints import PRINTER
-from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
-from yaqzan.core.llm_gateway import (
+from agentzaaheen.core.llm_gateway import (
     MemoryBook,
     ModelGate,
     PromptPart,
@@ -25,14 +23,18 @@ from yaqzan.core.llm_gateway import (
     Use,
     prints_of,
 )
-from yaqzan.core.sdk import DataClass, ModelLevel
-from yaqzan.core.store import AllNamePrints, NamePrints, StateChange, StoreError, WorkspaceLifecycle
+from agentzaaheen.core.sdk import DataClass, ModelLevel
+from agentzaaheen.core.store import AllNamePrints, NamePrints, StateChange, StoreError, WorkspaceLifecycle
+from agentzaaheen.core.store import name_prints as name_prints_store
+from tests.fixtures.name_prints import PRINTER
+from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000f1")
 SHOP_ID = UUID("00000000-0000-4000-8000-0000000000f2")
 CAFE_ID = UUID("00000000-0000-4000-8000-0000000000f3")
 NOW = datetime(2026, 10, 25, 9, 0, tzinfo=UTC)
 CHANGE = StateChange(by="user:chairman", at=NOW, step_up_at=NOW - timedelta(minutes=1))
+ERASE = StateChange(by="user:chairman", at=NOW + timedelta(minutes=2), step_up_at=NOW + timedelta(minutes=1))
 
 
 def pairs(*names: str) -> set[tuple[str, bytes]]:
@@ -99,7 +101,7 @@ def test_archived_workspaces_count_take_nothing_new_and_erasing_removes_them(
             assert await every.made_with(PRINTER.key_id) == pairs("Grace")  # a former customer is still one
             with pytest.raises(StoreError):
                 await cafe.add(pairs("Mark"), key_id=PRINTER.key_id, at=NOW)
-            await lifecycle.erase(CHANGE)
+            await lifecycle.erase(ERASE)  # its own, newer step-up: one step-up never allows two moves
             assert await every.made_with(PRINTER.key_id) == set()
 
     run(body())
@@ -111,14 +113,16 @@ def test_prints_are_behind_the_workspace_wall_and_never_change(test_db: ScratchD
             await NamePrints(db.scoped(TENANT, SHOP_ID)).add(pairs("Grace"), key_id=PRINTER.key_id, at=NOW)
         conn = await connect_as(test_db.app_url, TENANT, CAFE_ID)
         try:
-            assert await conn.fetchval("SELECT count(*) FROM yaqzan.customer_name_prints") == 0  # no filter
+            assert (
+                await conn.fetchval("SELECT count(*) FROM agentzaaheen.customer_name_prints") == 0
+            )  # no filter
         finally:
             await conn.close()
         conn = await connect_as(test_db.app_url, TENANT, SHOP_ID)
         try:
             for statement in (
-                "UPDATE yaqzan.customer_name_prints SET key_id = 'x'",
-                "DELETE FROM yaqzan.customer_name_prints",
+                "UPDATE agentzaaheen.customer_name_prints SET key_id = 'x'",
+                "DELETE FROM agentzaaheen.customer_name_prints",
             ):
                 with pytest.raises(Exception, match="permission denied"):
                     await conn.execute(statement)
@@ -140,5 +144,20 @@ def test_odd_prints_are_refused(test_db: ScratchDb, given: set[tuple[str, bytes]
         async with open_db(test_db.app_url) as db:
             with pytest.raises((StoreError, ValueError)):
                 await NamePrints(db.scoped(TENANT, SHOP_ID)).add(given, key_id=PRINTER.key_id, at=NOW)
+
+    run(body())
+
+
+def test_too_many_prints_at_once_are_refused_before_the_database(
+    test_db: ScratchDb, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(name_prints_store, "MAX_PRINTS", 2)
+
+    async def body() -> None:
+        async with open_db(test_db.app_url) as db:
+            with pytest.raises(ValueError, match="at most 2"):
+                await NamePrints(db.scoped(TENANT, SHOP_ID)).add(
+                    pairs("Fatima Al Mansoori", "Grace"), key_id="k", at=NOW
+                )
 
     run(body())

@@ -13,15 +13,15 @@ from uuid import UUID
 
 import pytest
 
+from agentzaaheen.core.api.agents import DashboardAgents, SwitchIn, purpose
+from agentzaaheen.core.auth import PasskeyError
+from agentzaaheen.core.policy import AgentControl, AgentVerdict, PasskeyApprovals, RegistryControl
+from agentzaaheen.core.registry.roles import RoleLibrary, load_roles
+from agentzaaheen.core.store import WorkspaceRow
 from tests.fixtures.soft_authenticator import SoftAuthenticator
 from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
 from tests.integration.test_passkey_approvals import CODE, SITE, Clock, enrol, registry
 from tests.unit.test_registry_roles import pack
-from yaqzan.core.api.agents import DashboardAgents, SwitchIn, purpose
-from yaqzan.core.auth import PasskeyError
-from yaqzan.core.policy import AgentControl, AgentVerdict, PasskeyApprovals, RegistryControl
-from yaqzan.core.registry.roles import RoleLibrary, load_roles
-from yaqzan.core.store import WorkspaceRow
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000d1")
 EVA = WorkspaceRow(UUID("00000000-0000-4000-8000-0000000000d2"), "eva", "Eva")
@@ -44,7 +44,8 @@ def audit(test_db: ScratchDb) -> list[tuple[str, str, str]]:
         conn = await connect_as(test_db.app_url, TENANT)
         try:
             rows = await conn.fetch(
-                "SELECT action, outcome, reason_code FROM yaqzan.audit_log WHERE tenant_id = $1 ORDER BY seq",
+                "SELECT action, outcome, reason_code FROM agentzaaheen.audit_log WHERE tenant_id ="
+                " $1 ORDER BY seq",
                 TENANT,
             )
         finally:

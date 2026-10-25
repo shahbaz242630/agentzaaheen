@@ -16,16 +16,16 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from tests.fixtures import paddle_world as world
-from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.sdk import RevenueBatch, RevenueSource, SourceError, SourceErrorCode
-from yaqzan.plugins.connectors.paddle import (
+from agentzaaheen.core.net import JsonClient, NetPolicy
+from agentzaaheen.core.sdk import RevenueBatch, RevenueSource, SourceError, SourceErrorCode
+from agentzaaheen.plugins.connectors.paddle import (
     ALLOWED_HOSTS,
     API_VERSION_HEADER,
     SANDBOX_BASE_URL,
     FakePaddleSource,
     PaddleSource,
 )
+from tests.fixtures import paddle_world as world
 
 FAKE_KEY = "pdl_sdbx_apikey_" + "z" * 20  # built here, never a real key
 

@@ -21,9 +21,9 @@ def _report(
 
 
 def test_floors_are_stricter_for_authority_code() -> None:
-    assert coverage_gate.floor_for("src/yaqzan/core/policy/gate.py") == (95.0, 95.0)
-    assert coverage_gate.floor_for(r"src\yaqzan\core\vault\box.py") == (95.0, 95.0)
-    assert coverage_gate.floor_for("src/yaqzan/plugins/connectors/paddle/client.py") == (80.0, 70.0)
+    assert coverage_gate.floor_for("src/agentzaaheen/core/policy/gate.py") == (95.0, 95.0)
+    assert coverage_gate.floor_for(r"src\agentzaaheen\core\vault\box.py") == (95.0, 95.0)
+    assert coverage_gate.floor_for("src/agentzaaheen/plugins/connectors/paddle/client.py") == (80.0, 70.0)
     assert coverage_gate.floor_for("tools/path_guard.py") == (90.0, 85.0)
 
 
@@ -40,14 +40,14 @@ def test_low_branches_fail() -> None:
 
 
 def test_empty_files_are_skipped() -> None:
-    assert coverage_gate.check(_report("src/yaqzan/core/api/__init__.py", 0, 0)) == []
+    assert coverage_gate.check(_report("src/agentzaaheen/core/api/__init__.py", 0, 0)) == []
 
 
 def test_main_reads_report(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     good = tmp_path / "good.json"
     good.write_text(json.dumps(_report("tools/x.py", 10, 10)), encoding="utf-8")
     bad = tmp_path / "bad.json"
-    bad.write_text(json.dumps(_report("src/yaqzan/core/policy/g.py", 10, 5)), encoding="utf-8")
+    bad.write_text(json.dumps(_report("src/agentzaaheen/core/policy/g.py", 10, 5)), encoding="utf-8")
     assert coverage_gate.main([str(good)]) == 0
     assert coverage_gate.main([str(bad)]) == 1
     assert "policy" in capsys.readouterr().out

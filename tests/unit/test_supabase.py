@@ -10,13 +10,13 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from agentzaaheen.core.api.backend import backend_card, failed_backend_card
+from agentzaaheen.core.metrics import Freshness
+from agentzaaheen.core.sdk import BackendHealth, ProjectState, ServiceHealth, SourceError, SourceErrorCode
+from agentzaaheen.plugins.connectors.supabase import FakeSupabaseApi, SupabaseSource, mapping
 from tools import dashboard
 from tools.dashboard_sources import ListNotUsableError
 from tools.dashboard_supabase import SupabaseListError, load_supabase, supabase_list
-from yaqzan.core.api.backend import backend_card, failed_backend_card
-from yaqzan.core.metrics import Freshness
-from yaqzan.core.sdk import BackendHealth, ProjectState, ServiceHealth, SourceError, SourceErrorCode
-from yaqzan.plugins.connectors.supabase import FakeSupabaseApi, SupabaseSource, mapping
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 REF = "abcdefghijklmnopqrst"

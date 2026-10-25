@@ -20,16 +20,16 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.api import SamplePortfolio
+from agentzaaheen.core.api.summary import read_summary
+from agentzaaheen.core.api.views import Card, Entry, Health, ModelList, ProjectDetail, ProjectSummary, Tone
+from agentzaaheen.core.api.workspaces import WorkspaceDirectory
+from agentzaaheen.core.metrics import Freshness
+from agentzaaheen.core.notify import Alert
+from agentzaaheen.core.policy import SummaryControl
+from agentzaaheen.core.store import AuditRows, Briefings, DailySummaries, Database, StoreError, WorkspaceRow
 from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
 from tools.dashboard_summaries import NO_TOPIC, AlertLog, LaptopSummaries
-from yaqzan.core.api import SamplePortfolio
-from yaqzan.core.api.summary import read_summary
-from yaqzan.core.api.views import Card, Entry, Health, ModelList, ProjectDetail, ProjectSummary, Tone
-from yaqzan.core.api.workspaces import WorkspaceDirectory
-from yaqzan.core.metrics import Freshness
-from yaqzan.core.notify import Alert
-from yaqzan.core.policy import SummaryControl
-from yaqzan.core.store import AuditRows, Briefings, DailySummaries, Database, StoreError, WorkspaceRow
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000d1")
 SHOP_ID = UUID("00000000-0000-4000-8000-0000000000d2")
@@ -157,7 +157,7 @@ def test_a_summary_cannot_be_written_into_another_workspace(test_db: ScratchDb) 
         try:
             with pytest.raises(Exception, match="row-level security"):
                 await conn.execute(
-                    "INSERT INTO yaqzan.daily_summaries VALUES ($1, $2, $3, $4, '{}'::jsonb)",
+                    "INSERT INTO agentzaaheen.daily_summaries VALUES ($1, $2, $3, $4, '{}'::jsonb)",
                     TENANT, CAFE_ID, DAY, NOW,
                 )  # fmt: skip
         finally:

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SRC = ROOT / "src" / "yaqzan"
+SRC = ROOT / "src" / "agentzaaheen"
 STORE = SRC / "core" / "store"
 _WRITES = {"INSERT", "UPDATE", "DELETE"}
 

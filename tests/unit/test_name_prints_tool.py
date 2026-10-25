@@ -12,9 +12,9 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.vault import load_master_key
 from tests.fixtures import paddle_world as world
 from tools import name_prints
-from yaqzan.core.vault import load_master_key
 
 FAKE_KEY = "pdl_live_apikey_" + "z" * 20  # built here, never a real key
 

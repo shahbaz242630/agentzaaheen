@@ -9,13 +9,13 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.broker import save_credential
+from agentzaaheen.core.metrics import KeyHealth
+from agentzaaheen.core.scheduler import KeyAlert, check_keys
+from agentzaaheen.core.sdk import Severity
+from agentzaaheen.core.store import Database, RevenueRows
+from agentzaaheen.core.vault import CredentialSlot, Keyring, MasterKey
 from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
-from yaqzan.core.broker import save_credential
-from yaqzan.core.metrics import KeyHealth
-from yaqzan.core.scheduler import KeyAlert, check_keys
-from yaqzan.core.sdk import Severity
-from yaqzan.core.store import Database, RevenueRows
-from yaqzan.core.vault import CredentialSlot, Keyring, MasterKey
 
 TENANT = uuid4()
 NOW = datetime(2027, 1, 2, 9, 0, tzinfo=UTC)

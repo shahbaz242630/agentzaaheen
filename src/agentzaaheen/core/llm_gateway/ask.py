@@ -1,0 +1,143 @@
+"""Asking Claude: clear the call, send it through the one door, record what it cost (ADR-033, F10 slice 2a).
+
+:class:`CloudAsk` is the only way a role reaches Claude. It asks the
+:class:`~agentzaaheen.core.llm_gateway.route.ModelGate` first; only a cleared call
+is sent. The role pack and fixed rules go first as the system prefix (so
+they can be cached), the task last. Every call is logged with its role,
+model, use, run ID, token counts and cost, never its text.
+
+What comes back is an :class:`Answer` whose ``outcome`` is ``"answered"`` or
+a code saying why not. A call that was refused, could not reach Claude, or
+that Claude declined is **never** answered by a weaker model instead: the
+caller marks its run "did not run" and names it in the briefing.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Protocol
+
+from agentzaaheen.core.llm_gateway.cloud_check import PromptPart
+from agentzaaheen.core.llm_gateway.model_map import Usage, usd
+from agentzaaheen.core.llm_gateway.route import ModelGate
+from agentzaaheen.core.llm_gateway.spend import Use
+from agentzaaheen.core.net import ClaudeReply
+from agentzaaheen.core.sdk import ModelLevel, SourceError, get_logger, say
+
+ANSWERED = "answered"
+UNREACHABLE = "model.unreachable"
+DECLINED = "model.declined"  # Claude's own safety check stopped the answer (stop reason "refusal")
+
+
+class ClaudeDoor(Protocol):
+    """The one door to Claude (``core.net.ClaudeClient`` in real use)."""
+
+    async def message(  # the request's own parts
+        self,
+        *,
+        model: str,
+        system: Sequence[str],
+        messages: Sequence[Mapping[str, str]],
+        max_tokens: int,
+        effort: str | None = None,
+    ) -> ClaudeReply:
+        """Claude's reply to one request."""
+        ...
+
+
+@dataclass(frozen=True)
+class Answer:
+    """What happened to one ask: ``outcome`` is ``"answered"`` or why not; ``cost_micro`` is what it cost.
+
+    When Claude could not be reached, ``reason`` is the network's code (``net.auth``,
+    ``net.rate_limited``, ...) and ``status`` the HTTP status, if there was one.
+    """
+
+    outcome: str
+    text: str = ""
+    stop_reason: str = ""
+    cost_micro: int = 0
+    reason: str = ""
+    status: int | None = None
+
+
+class CloudAsk:
+    """Clears, sends and records one Claude call at a time."""
+
+    def __init__(self, gate: ModelGate, door: ClaudeDoor) -> None:
+        self._gate = gate
+        self._door = door
+        self._log = get_logger("agentzaaheen.models")
+
+    async def ask(  # noqa: PLR0913  # each is a separate fact about the call
+        self,
+        *,
+        role: str,
+        role_level: ModelLevel,
+        wanted: ModelLevel,
+        use: Use,
+        system: Sequence[PromptPart],
+        task: Sequence[PromptPart],
+        max_output_tokens: int,
+        run_id: str,
+        effort: str | None = None,
+    ) -> Answer:
+        """Ask the ``wanted`` level's Claude model, if the gate allows it."""
+        if wanted < ModelLevel.SONNET:
+            raise ValueError("CloudAsk is for Claude levels only; our own models are asked directly")
+        cleared = await self._gate.clear(
+            role=role,
+            role_level=role_level,
+            wanted=wanted,
+            parts=(*system, *task),
+            max_output_tokens=max_output_tokens,
+            use=use,
+        )
+        if cleared.refusal is not None or cleared.model is None:
+            return Answer(str(cleared.refusal))
+        model = cleared.model
+        try:
+            reply = await self._door.message(
+                model=model.model_id,
+                system=[part.text for part in system],
+                messages=[{"role": "user", "content": "\n\n".join(part.text for part in task)}],
+                max_tokens=max_output_tokens,
+                effort=effort,
+            )
+        except SourceError as exc:
+            say(
+                self._log,
+                "model_cloud_call_failed",
+                role=role,
+                model=model.model_id,
+                use=use.value,
+                run_id=run_id,
+                code=exc.reason_code,
+            )
+            return Answer(UNREACHABLE, reason=exc.reason_code, status=exc.status)
+        usage = Usage(
+            input_tokens=reply.input_tokens,
+            output_tokens=reply.output_tokens,
+            cache_read_tokens=reply.cache_read_tokens,
+            cache_write_5m_tokens=reply.cache_write_5m_tokens,
+            cache_write_1h_tokens=reply.cache_write_1h_tokens,
+        )
+        cost = await self._gate.record(use, model, usage)
+        say(
+            self._log,
+            "model_cloud_call_done",
+            role=role,
+            model=model.model_id,
+            use=use.value,
+            run_id=run_id,
+            tokens_in=usage.input_tokens,
+            tokens_out=usage.output_tokens,
+            cache_read=usage.cache_read_tokens,
+            cache_write=usage.cache_write_5m_tokens + usage.cache_write_1h_tokens,
+            cost_usd=usd(cost),
+            stop=reply.stop_reason,
+        )
+        if reply.stop_reason == "refusal":
+            return Answer(DECLINED, stop_reason=reply.stop_reason, cost_micro=cost)
+        return Answer(ANSWERED, reply.text, reply.stop_reason, cost)

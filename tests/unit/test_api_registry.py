@@ -3,18 +3,18 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.api.app import CONTENT_SECURITY_POLICY
-from yaqzan.core.api.code import failed_code_card
-from yaqzan.core.api.overlay import CardMaker, OverlayPortfolio
-from yaqzan.core.api.registry import RegistryPage, Use, registry_page, uses_from_cards
-from yaqzan.core.api.views import Card, ProjectDetail
-from yaqzan.core.metrics import Freshness
-from yaqzan.core.registry import Invocation, Registry, load_registry
-from yaqzan.core.registry.models import Problem, Skill
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.api.app import CONTENT_SECURITY_POLICY
+from agentzaaheen.core.api.code import failed_code_card
+from agentzaaheen.core.api.overlay import CardMaker, OverlayPortfolio
+from agentzaaheen.core.api.registry import RegistryPage, Use, registry_page, uses_from_cards
+from agentzaaheen.core.api.views import Card, ProjectDetail
+from agentzaaheen.core.metrics import Freshness
+from agentzaaheen.core.registry import Invocation, Registry, load_registry
+from agentzaaheen.core.registry.models import Problem, Skill
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
-PLUGINS = Path(__file__).resolve().parents[2] / "src" / "yaqzan" / "plugins"
+PLUGINS = Path(__file__).resolve().parents[2] / "src" / "agentzaaheen" / "plugins"
 HASH = "a" * 64
 
 

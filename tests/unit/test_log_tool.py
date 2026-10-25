@@ -7,15 +7,15 @@ import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from agentzaaheen.core.llm_gateway import Tool
+from agentzaaheen.core.policy import Standing
+from agentzaaheen.core.registry import Kind, State, load_registry
+from agentzaaheen.core.telemetry import LogFolder, LogPage, LogQuery
+from agentzaaheen.core.telemetry.logfile import file_name
 from tools import chat_tools
 from tools.log_tool import READ_LOGS_SKILL, log_lines_text, read_logs_tool
-from yaqzan.core.llm_gateway import Tool
-from yaqzan.core.policy import Standing
-from yaqzan.core.registry import Kind, State, load_registry
-from yaqzan.core.telemetry import LogFolder, LogPage, LogQuery
-from yaqzan.core.telemetry.logfile import file_name
 
-PLUGINS = Path(__file__).resolve().parents[2] / "src" / "yaqzan" / "plugins"
+PLUGINS = Path(__file__).resolve().parents[2] / "src" / "agentzaaheen" / "plugins"
 TODAY = date(2026, 10, 25)
 NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
 REPOS = {"zaaheen": "acme/zaaheen", "eva": "acme/eva"}

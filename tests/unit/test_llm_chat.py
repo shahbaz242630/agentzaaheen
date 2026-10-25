@@ -7,9 +7,9 @@ from collections.abc import Mapping, Sequence
 
 import pytest
 
-from yaqzan.core.llm_gateway import SYSTEM_PROMPT, ChatReply, FactChat, build_messages
-from yaqzan.core.llm_gateway.chat import MAX_ANSWER_CHARS
-from yaqzan.core.sdk import SourceError, SourceErrorCode
+from agentzaaheen.core.llm_gateway import SYSTEM_PROMPT, ChatReply, FactChat, build_messages
+from agentzaaheen.core.llm_gateway.chat import MAX_ANSWER_CHARS
+from agentzaaheen.core.sdk import SourceError, SourceErrorCode
 
 
 class FakeModel:

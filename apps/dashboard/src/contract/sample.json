@@ -957,7 +957,7 @@
         "key_slots": [
           "token"
         ],
-        "fingerprint": "5fd3003bc6c87952189e42caad655fd12ebec4305b2d5d8e144c86e639565d8b",
+        "fingerprint": "4d3b94b72649d91b6ec544ac54214e8d46f84953585fcb66680759c4916c51cc",
         "uses": [
           {
             "project_id": "zaaheen",
@@ -1003,7 +1003,7 @@
         "key_slots": [
           "api_key"
         ],
-        "fingerprint": "8aa194edb9844366bca2c7f9a6c479b8e84950473cf5b1dd02e20d7c4eebf73c",
+        "fingerprint": "8a19863e8bac3f1f79db44d0f2f4c59968af49ebd670e991cf9c3be87e2c9d7b",
         "uses": [
           {
             "project_id": "zaaheen",
@@ -1031,7 +1031,7 @@
         "key_slots": [
           "token"
         ],
-        "fingerprint": "a47a465f92c38a447d7be708992bf98b6183ee8ed4fcc22ccf3b63e7c302f628",
+        "fingerprint": "e69b8ed6dbe71c7d14d395ba2a41da697646cfc55639e9c733280a7dc01a9b10",
         "uses": [],
         "state": "on"
       },
@@ -1049,7 +1049,7 @@
           "GET /"
         ],
         "key_slots": [],
-        "fingerprint": "b9e9c696c73ea70f398c80f1878e3a693cc11623957404c606d31147d9737eb9",
+        "fingerprint": "f32ccb3edbfa4421b0a28e9d239908b908e5d3ec4a5dc182c90e4695e0a43495",
         "uses": [],
         "state": "on"
       }

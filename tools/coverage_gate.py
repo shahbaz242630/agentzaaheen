@@ -14,13 +14,13 @@ from typing import Any
 
 # (path fragment, minimum line %, minimum branch %). First match wins.
 FLOORS: tuple[tuple[str, float, float], ...] = (
-    ("yaqzan/core/policy/", 95.0, 95.0),
-    ("yaqzan/core/vault/", 95.0, 95.0),
-    ("yaqzan/core/runner/", 95.0, 95.0),
-    ("yaqzan/core/llm_gateway/", 95.0, 95.0),
-    ("yaqzan/core/metrics/", 95.0, 95.0),
-    ("yaqzan/core/sdk/", 95.0, 95.0),
-    ("yaqzan/plugins/connectors/", 80.0, 70.0),
+    ("agentzaaheen/core/policy/", 95.0, 95.0),
+    ("agentzaaheen/core/vault/", 95.0, 95.0),
+    ("agentzaaheen/core/runner/", 95.0, 95.0),
+    ("agentzaaheen/core/llm_gateway/", 95.0, 95.0),
+    ("agentzaaheen/core/metrics/", 95.0, 95.0),
+    ("agentzaaheen/core/sdk/", 95.0, 95.0),
+    ("agentzaaheen/plugins/connectors/", 80.0, 70.0),
     ("", 90.0, 85.0),
 )
 

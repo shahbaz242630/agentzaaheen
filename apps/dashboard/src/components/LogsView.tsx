@@ -250,7 +250,7 @@ function LogsBody({
     return (
       <p className="text-sm text-muted">
         Logs are not kept yet. Start the dashboard with{" "}
-        <code>--log-dir ~/AppData/Local/Yaqzan/logs</code> to keep them.
+        <code>--log-dir ~/AppData/Local/AgentZaaheen/logs</code> to keep them.
       </p>
     );
   }

@@ -9,13 +9,13 @@ from pathlib import Path
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.policy import Standing
+from agentzaaheen.core.registry import Kind, State, load_registry
+from agentzaaheen.core.store import StoreError, StoreErrorCode
 from tests.unit.test_llm_tools import Script
 from tools import chat_tools, dashboard
-from yaqzan.core.policy import Standing
-from yaqzan.core.registry import Kind, State, load_registry
-from yaqzan.core.store import StoreError, StoreErrorCode
 
-PLUGINS = Path(__file__).resolve().parents[2] / "src" / "yaqzan" / "plugins"
+PLUGINS = Path(__file__).resolve().parents[2] / "src" / "agentzaaheen" / "plugins"
 FAKE_TOKEN = SecretStr("github_pat_" + "x" * 30)  # built here, never a real token
 SKILL = "triage-failing-build"
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)

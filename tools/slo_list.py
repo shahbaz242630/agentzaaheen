@@ -38,9 +38,9 @@ from pathlib import Path
 
 import yaml
 
-from yaqzan.core.api import SamplePortfolio
-from yaqzan.core.metrics import Objective, SliKind
-from yaqzan.core.registry.models import ITEM_ID
+from agentzaaheen.core.api import SamplePortfolio
+from agentzaaheen.core.metrics import Objective, SliKind
+from agentzaaheen.core.registry.models import ITEM_ID
 
 MAX_LIST_BYTES = 64 * 1024
 API_VERSION = "openslo/v1"

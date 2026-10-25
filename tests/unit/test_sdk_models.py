@@ -9,7 +9,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from yaqzan.core.sdk import (
+from agentzaaheen.core.sdk import (
     Action,
     ActionLevel,
     ActionStatus,

@@ -20,15 +20,22 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from agentzaaheen.core.api.agents import SwitchIn
+from agentzaaheen.core.api.app import REQUEST_HEADER
+from agentzaaheen.core.api.workspaces import WorkspaceDirectory
+from agentzaaheen.core.auth import PasskeyError, Site
+from agentzaaheen.core.policy import AgentVerdict, LifecycleVerdict
+from agentzaaheen.core.store import (
+    AuditRow,
+    AuditRows,
+    Database,
+    DatabaseSettings,
+    StoreError,
+    StoreErrorCode,
+)
 from tests.fixtures.soft_authenticator import SoftAuthenticator
 from tests.integration.conftest import Server, run
 from tools import dashboard, dashboard_switches, laptop_db
-from yaqzan.core.api.agents import SwitchIn
-from yaqzan.core.api.app import REQUEST_HEADER
-from yaqzan.core.api.workspaces import WorkspaceDirectory
-from yaqzan.core.auth import PasskeyError, Site
-from yaqzan.core.policy import AgentVerdict, LifecycleVerdict
-from yaqzan.core.store import AuditRow, AuditRows, Database, DatabaseSettings, StoreError, StoreErrorCode
 
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}
 SKILL = {"kind": "skill", "id": "triage-failing-build"}
@@ -97,7 +104,7 @@ def test_set_up_twice_is_safe_and_the_dashboard_gets_least_privilege(
     async def delete_switches() -> None:
         conn = await asyncpg.connect(laptop_url.get_secret_value())
         try:
-            await conn.execute("DELETE FROM yaqzan.registry_switches")
+            await conn.execute("DELETE FROM agentzaaheen.registry_switches")
         finally:
             await conn.close()
 

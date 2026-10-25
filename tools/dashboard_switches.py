@@ -23,14 +23,13 @@ from uuid import UUID, uuid4
 
 from pydantic import SecretStr
 
-from tools import laptop_db
-from yaqzan.core.api.agents import DashboardAgents, RoleChoice, SwitchIn, WorkspaceAgentsOut
-from yaqzan.core.api.registry import DashboardSwitches, PasskeyStatus, RegistryPage, Use
-from yaqzan.core.api.removal import DashboardRemoval
-from yaqzan.core.api.workspaces import WorkspaceDirectory
-from yaqzan.core.auth import Site
-from yaqzan.core.llm_gateway import Inspect
-from yaqzan.core.policy import (
+from agentzaaheen.core.api.agents import DashboardAgents, RoleChoice, SwitchIn, WorkspaceAgentsOut
+from agentzaaheen.core.api.registry import DashboardSwitches, PasskeyStatus, RegistryPage, Use
+from agentzaaheen.core.api.removal import DashboardRemoval
+from agentzaaheen.core.api.workspaces import WorkspaceDirectory
+from agentzaaheen.core.auth import Site
+from agentzaaheen.core.llm_gateway import Inspect
+from agentzaaheen.core.policy import (
     Added,
     AgentControl,
     AgentVerdict,
@@ -49,9 +48,10 @@ from yaqzan.core.policy import (
     Verdict,
     WorkspaceControl,
 )
-from yaqzan.core.registry import Kind, Registry
-from yaqzan.core.registry.roles import RoleLibrary
-from yaqzan.core.store import Database, DatabaseSettings, StoreError, WorkspaceRow, WorkspaceRows
+from agentzaaheen.core.registry import Kind, Registry
+from agentzaaheen.core.registry.roles import RoleLibrary
+from agentzaaheen.core.store import Database, DatabaseSettings, StoreError, WorkspaceRow, WorkspaceRows
+from tools import laptop_db
 
 LAPTOP_TENANT = laptop_db.LAPTOP_TENANT
 START_LAPTOP_DB = "uv run python -m tools.laptop_db up"

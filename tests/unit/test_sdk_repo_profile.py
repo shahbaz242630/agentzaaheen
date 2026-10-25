@@ -9,7 +9,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from yaqzan.core.sdk import (
+from agentzaaheen.core.sdk import (
     PROVIDERS,
     Language,
     Provider,
@@ -19,7 +19,7 @@ from yaqzan.core.sdk import (
     pick_code,
     pick_manifests,
 )
-from yaqzan.core.sdk.repo_profile import (
+from agentzaaheen.core.sdk.repo_profile import (
     HOSTS,
     MAX_CODE_FILES,
     MAX_EVIDENCE,

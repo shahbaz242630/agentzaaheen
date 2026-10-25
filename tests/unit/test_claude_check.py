@@ -72,7 +72,7 @@ def refuse(request: httpx.Request) -> httpx.Response:
 
 def test_the_claude_code_key_name_is_refused(capsys: pytest.CaptureFixture[str]) -> None:
     assert run_tool({"ANTHROPIC_API_KEY": FAKE_KEY}, refuse, key_env="ANTHROPIC_API_KEY") == 1
-    assert "YAQZAN_CLAUDE_KEY" in capsys.readouterr().out
+    assert "AGENTZAAHEEN_CLAUDE_KEY" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

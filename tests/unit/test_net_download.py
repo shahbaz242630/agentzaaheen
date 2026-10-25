@@ -12,7 +12,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from yaqzan.core.net import DownloadPolicy, JsonClient, NetError, NetErrorCode, NetPolicy
+from agentzaaheen.core.net import DownloadPolicy, JsonClient, NetError, NetErrorCode, NetPolicy
 
 API = "api.example.com"
 BLOB = re.compile(r"files\d{1,2}\.example\.net")

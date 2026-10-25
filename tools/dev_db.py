@@ -7,7 +7,7 @@ Commands:
     status                  say whether it is running
 
 Safety, because other projects run containers on the same Docker:
-    - It only ever touches the one container named ``yaqzan-dev-db`` that also
+    - It only ever touches the one container named ``agentzaaheen-dev-db`` that also
       carries our label. Anything else with that name is left alone.
     - It refuses to start when Docker has less than ``MIN_FREE_MB`` free, and is
       capped at ``MEMORY_LIMIT_MB`` so it can never starve another project.
@@ -25,8 +25,8 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 
-NAME = "yaqzan-dev-db"
-LABEL_KEY = "com.yaqzan.role"
+NAME = "agentzaaheen-dev-db"
+LABEL_KEY = "com.agentzaaheen.role"
 LABEL_VALUE = "dev-db"
 IMAGE = "pgvector/pgvector:0.8.7-pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d"
 HOST = "127.0.0.1"

@@ -8,9 +8,9 @@ from typing import Any
 import pytest
 import yaml
 
+from agentzaaheen.core.sdk import PaymentStatus, RefundKind, SourceError, SourceErrorCode, SubscriptionStatus
+from agentzaaheen.plugins.connectors.paddle import ALLOWED_HOSTS, mapping
 from tests.fixtures import paddle_world as world
-from yaqzan.core.sdk import PaymentStatus, RefundKind, SourceError, SourceErrorCode, SubscriptionStatus
-from yaqzan.plugins.connectors.paddle import ALLOWED_HOSTS, mapping
 
 
 def one_sub(**changes: Any) -> dict[str, Any]:

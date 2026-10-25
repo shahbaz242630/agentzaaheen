@@ -9,10 +9,10 @@ import asyncpg
 import pytest
 from opentelemetry.trace import SpanKind, StatusCode
 
+from agentzaaheen.core.store import MIGRATIONS, Migration, StoreError, StoreErrorCode
+from agentzaaheen.core.store.db import Database, _translated, json_dumps, require_aware, translate
+from agentzaaheen.core.store.migrations import check_history
 from tests.tracing import recorded
-from yaqzan.core.store import MIGRATIONS, Migration, StoreError, StoreErrorCode
-from yaqzan.core.store.db import Database, _translated, json_dumps, require_aware, translate
-from yaqzan.core.store.migrations import check_history
 
 
 def _pg_error(sqlstate: str) -> asyncpg.PostgresError:

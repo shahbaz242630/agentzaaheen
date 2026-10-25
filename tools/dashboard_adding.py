@@ -13,12 +13,12 @@ from collections.abc import Awaitable, Callable
 import httpx
 from pydantic import SecretStr
 
+from agentzaaheen.core.api.adding import RepoOption
+from agentzaaheen.core.net import JsonClient, NetPolicy
+from agentzaaheen.core.policy import Added, LifecycleVerdict
+from agentzaaheen.core.store import WorkspaceRow
+from agentzaaheen.plugins.connectors.github import ALLOWED_HOSTS, API_HEADERS, BASE_URL, GitHubRepos
 from tools.dashboard_switches import LaptopSwitches
-from yaqzan.core.api.adding import RepoOption
-from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.policy import Added, LifecycleVerdict
-from yaqzan.core.store import WorkspaceRow
-from yaqzan.plugins.connectors.github import ALLOWED_HOSTS, API_HEADERS, BASE_URL, GitHubRepos
 
 
 class LaptopAdding:

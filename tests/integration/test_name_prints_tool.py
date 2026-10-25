@@ -12,13 +12,13 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.llm_gateway import prints_of
+from agentzaaheen.core.store import AllNamePrints
+from agentzaaheen.core.vault import NamePrinter, load_master_key
 from tests.fixtures import paddle_world as world
 from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from tools import name_prints
 from tools.laptop_db import LAPTOP_TENANT, LAPTOP_WORKSPACES
-from yaqzan.core.llm_gateway import prints_of
-from yaqzan.core.store import AllNamePrints
-from yaqzan.core.vault import NamePrinter, load_master_key
 
 FAKE_KEY = "pdl_live_apikey_" + "z" * 20  # built here, never a real key
 ZAAHEEN = next(w.workspace_id for w in LAPTOP_WORKSPACES if w.slug == "zaaheen")

@@ -9,8 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from tests.fixtures.name_prints import PRINTER
-from yaqzan.core.llm_gateway import (
+from agentzaaheen.core.llm_gateway import (
     CAPS_USD,
     MODELS,
     TOTAL_STOP_USD,
@@ -27,10 +26,11 @@ from yaqzan.core.llm_gateway import (
     Use,
     prints_of,
 )
-from yaqzan.core.llm_gateway.route import worst_case_micro
-from yaqzan.core.llm_gateway.spend import month_bounds, month_of
-from yaqzan.core.sdk import DataClass, ModelLevel, install_log_sink
-from yaqzan.core.vault import MasterKey, NamePrinter
+from agentzaaheen.core.llm_gateway.route import worst_case_micro
+from agentzaaheen.core.llm_gateway.spend import month_bounds, month_of
+from agentzaaheen.core.sdk import DataClass, ModelLevel, install_log_sink
+from agentzaaheen.core.vault import MasterKey, NamePrinter
+from tests.fixtures.name_prints import PRINTER
 
 OCT = datetime(2026, 10, 25, 9, 0, tzinfo=UTC)
 OPS = (PromptPart("Head of Engineering: 3 builds failed this week.", DataClass.INTERNAL),)

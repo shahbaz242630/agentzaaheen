@@ -13,7 +13,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from yaqzan.core.net import ModelClient, NetError, NetErrorCode, check_model_url
+from agentzaaheen.core.net import ModelClient, NetError, NetErrorCode, check_model_url
 
 LOCAL = "http://127.0.0.1:8766"
 SERVER = "models.example.com"

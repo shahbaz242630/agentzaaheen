@@ -2,10 +2,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from yaqzan.core.api import SamplePortfolio
-from yaqzan.core.api.overlay import OverlayPortfolio
-from yaqzan.core.api.views import Card, Count, Metric, NotKnown
-from yaqzan.core.metrics import Freshness
+from agentzaaheen.core.api import SamplePortfolio
+from agentzaaheen.core.api.overlay import OverlayPortfolio
+from agentzaaheen.core.api.views import Card, Count, Metric, NotKnown
+from agentzaaheen.core.metrics import Freshness
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 

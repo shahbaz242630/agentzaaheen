@@ -24,10 +24,15 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from pydantic import SecretStr
 
-from yaqzan.core import metrics
-from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.sdk import RevenueBatch, SourceError, explain
-from yaqzan.plugins.connectors.paddle import ALLOWED_HOSTS, API_VERSION_HEADER, SANDBOX_BASE_URL, PaddleSource
+from agentzaaheen.core import metrics
+from agentzaaheen.core.net import JsonClient, NetPolicy
+from agentzaaheen.core.sdk import RevenueBatch, SourceError, explain
+from agentzaaheen.plugins.connectors.paddle import (
+    ALLOWED_HOSTS,
+    API_VERSION_HEADER,
+    SANDBOX_BASE_URL,
+    PaddleSource,
+)
 
 
 async def fetch(

@@ -8,8 +8,8 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.net import HeartbeatClient, NetError, NetErrorCode, NetPolicy, check_ping_url
 from tests.tracing import recorded
-from yaqzan.core.net import HeartbeatClient, NetError, NetErrorCode, NetPolicy, check_ping_url
 
 UUID = "0f3c6a1e-5b7d-4c2a-9e8f-1a2b3c4d5e6f"  # made up
 PING = SecretStr(f"https://hc-ping.com/{UUID}")
@@ -31,7 +31,7 @@ def test_a_ping_is_one_get_to_the_check_and_says_so(capsys: pytest.CaptureFixtur
         asyncio.run(beat(serve).ping("briefing"))
     (request,) = seen
     assert (request.method, str(request.url), request.content) == ("GET", PING.get_secret_value(), b"")
-    assert request.headers["User-Agent"] == "Yaqzan-heartbeat/1"
+    assert request.headers["User-Agent"] == "AgentZaaheen-heartbeat/1"
     (span,) = spans.spans
     assert span.name == "GET hc-ping.com"
     assert UUID not in str(dict(span.attributes or {}))

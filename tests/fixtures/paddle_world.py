@@ -16,7 +16,7 @@ from urllib.parse import parse_qs
 
 import httpx
 
-from yaqzan.core.sdk import (
+from agentzaaheen.core.sdk import (
     BillingCycle,
     Interval,
     Payment,

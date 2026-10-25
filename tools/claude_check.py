@@ -14,7 +14,7 @@ The key is read from the environment variable you name (never printed). Not
 API credit for its own work.
 
 Usage:
-    uv run python -m tools.claude_check --key-env YAQZAN_CLAUDE_KEY [--model sonnet|opus]
+    uv run python -m tools.claude_check --key-env AGENTZAAHEEN_CLAUDE_KEY [--model sonnet|opus]
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from collections.abc import Mapping, Sequence
 import httpx
 from pydantic import SecretStr
 
-from yaqzan.core.llm_gateway import (
+from agentzaaheen.core.llm_gateway import (
     MODELS,
     Answer,
     CloudAsk,
@@ -40,9 +40,9 @@ from yaqzan.core.llm_gateway import (
     SpendLedger,
     Use,
 )
-from yaqzan.core.llm_gateway.model_map import usd
-from yaqzan.core.net import ClaudeClient
-from yaqzan.core.sdk import DataClass, ModelLevel, explain
+from agentzaaheen.core.llm_gateway.model_map import usd
+from agentzaaheen.core.net import ClaudeClient
+from agentzaaheen.core.sdk import DataClass, ModelLevel, explain
 
 MAX_OUTPUT_TOKENS = 64
 LEVELS = {"sonnet": ModelLevel.SONNET, "opus": ModelLevel.OPUS}
@@ -109,7 +109,7 @@ def main(
     ns = parser.parse_args(argv)
     if ns.key_env == RESERVED_ENV:
         print(f"claude-check: do not use {RESERVED_ENV}; Claude Code would bill the API for its own work.")
-        print("  Put the key in YAQZAN_CLAUDE_KEY instead.")
+        print("  Put the key in AGENTZAAHEEN_CLAUDE_KEY instead.")
         return 1
     raw = (os.environ if environ is None else environ).get(ns.key_env, "").strip()
     if not raw:

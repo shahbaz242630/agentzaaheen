@@ -25,16 +25,16 @@ from collections.abc import Iterable, Sequence
 
 ALLOWED: tuple[str, ...] = (
     # Python source, tests and tooling
-    "src/yaqzan/*.py",
-    "src/yaqzan/**/*.py",
-    "src/yaqzan/py.typed",
+    "src/agentzaaheen/*.py",
+    "src/agentzaaheen/**/*.py",
+    "src/agentzaaheen/py.typed",
     "tests/*.py",
     "tests/**/*.py",
     "tools/*.py",
     # Plugin content that IS product code (agent prompts, skill playbooks, manifests)
-    "src/yaqzan/plugins/agents/*/prompt.md",
-    "src/yaqzan/plugins/skills/*/SKILL.md",
-    "src/yaqzan/plugins/*/*/plugin.yaml",
+    "src/agentzaaheen/plugins/agents/*/prompt.md",
+    "src/agentzaaheen/plugins/skills/*/SKILL.md",
+    "src/agentzaaheen/plugins/*/*/plugin.yaml",
     # The dashboard web UI (F04): source, its config, and the API contract fixture
     "apps/dashboard/index.html",
     "apps/dashboard/package.json",

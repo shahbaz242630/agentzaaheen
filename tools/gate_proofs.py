@@ -24,7 +24,7 @@ from tools import coverage_gate, path_guard
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "gate_proofs" / "fixtures"
-PROOF_MODULE = ROOT / "src" / "yaqzan" / "plugins" / "connectors" / "_gate_proof_violation.py"
+PROOF_MODULE = ROOT / "src" / "agentzaaheen" / "plugins" / "connectors" / "_gate_proof_violation.py"
 
 
 def _fails(argv: Sequence[str]) -> bool:
@@ -45,7 +45,9 @@ def proof_mypy() -> bool:
 
 def proof_import_boundaries() -> bool:
     """import-linter must reject a plugin that imports a core internal."""
-    PROOF_MODULE.write_text('"""Gate proof: temporary."""\n\nimport yaqzan.core.store\n', encoding="utf-8")
+    PROOF_MODULE.write_text(
+        '"""Gate proof: temporary."""\n\nimport agentzaaheen.core.store\n', encoding="utf-8"
+    )
     try:
         return _fails(["lint-imports", "--no-cache"])
     finally:
@@ -54,7 +56,7 @@ def proof_import_boundaries() -> bool:
 
 def proof_path_guard() -> bool:
     """The path guard must reject docs, handoffs and secrets."""
-    bad = ["docs/02-PRD.md", "HANDOFF.md", ".env", "src/yaqzan/core/README.md"]
+    bad = ["docs/02-PRD.md", "HANDOFF.md", ".env", "src/agentzaaheen/core/README.md"]
     return path_guard.check(bad) == bad
 
 
@@ -62,7 +64,7 @@ def proof_coverage_gate() -> bool:
     """The coverage gate must reject a policy file with 50% coverage."""
     report = {
         "files": {
-            "src/yaqzan/core/policy/gate.py": {
+            "src/agentzaaheen/core/policy/gate.py": {
                 "summary": {
                     "num_statements": 10,
                     "covered_lines": 5,

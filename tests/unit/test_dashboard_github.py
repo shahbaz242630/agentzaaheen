@@ -10,10 +10,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from agentzaaheen.core.api import SamplePortfolio
 from tests.fixtures import github_world as github
 from tests.fixtures import paddle_world as paddle
 from tools import dashboard, dashboard_sources
-from yaqzan.core.api import SamplePortfolio
 
 FAKE_TOKEN = "github_pat_" + "q" * 30  # built here, never a real token
 FAKE_KEY = "pdl_live_apikey_" + "q" * 20

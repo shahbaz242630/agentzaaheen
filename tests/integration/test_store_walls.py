@@ -21,18 +21,15 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 
-from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
-from tests.integration.test_policy_ledger import draft
-from tests.integration.test_store_records import NOW, PROJECT, TENANT, action, event, finding, run_record
-from tests.integration.test_store_registry_switches import CHAIRMAN, request
-from tests.integration.test_store_revenue import AT, full_batch
-from yaqzan.core.policy import Ledger
-from yaqzan.core.store import (
+from agentzaaheen.core.policy import Ledger
+from agentzaaheen.core.store import (
     AgentRows,
     AllSealedSecrets,
     Briefings,
     DailySummaries,
     KillSwitchRows,
+    ModelCalls,
+    NamePrints,
     NewAgent,
     PasskeyRow,
     PasskeyRows,
@@ -52,7 +49,12 @@ from yaqzan.core.store import (
     WorkspaceSettings,
     WorkspaceSources,
 )
-from yaqzan.core.store.db import _SET_SCOPE as SET_SCOPE  # the exact statement the store runs
+from agentzaaheen.core.store.db import _SET_SCOPE as SET_SCOPE  # the exact statement the store runs
+from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
+from tests.integration.test_policy_ledger import draft
+from tests.integration.test_store_records import NOW, PROJECT, TENANT, action, event, finding, run_record
+from tests.integration.test_store_registry_switches import CHAIRMAN, request
+from tests.integration.test_store_revenue import AT, full_batch
 
 OTHER_WORKSPACE = UUID("00000000-0000-4000-8000-0000000000bb")
 OTHER_TENANT = UUID("00000000-0000-4000-8000-000000000002")
@@ -60,12 +62,12 @@ OTHER_TENANT = UUID("00000000-0000-4000-8000-000000000002")
 _TABLES = """
 SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
     (SELECT count(*) FROM pg_policies p
-        WHERE p.schemaname = 'yaqzan' AND p.tablename = c.relname) AS policies,
-    EXISTS (SELECT 1 FROM information_schema.columns k WHERE k.table_schema = 'yaqzan'
+        WHERE p.schemaname = 'agentzaaheen' AND p.tablename = c.relname) AS policies,
+    EXISTS (SELECT 1 FROM information_schema.columns k WHERE k.table_schema = 'agentzaaheen'
         AND k.table_name = c.relname AND k.column_name = 'project_id'
         AND k.is_nullable = 'NO') AS per_workspace
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'yaqzan' AND c.relkind = 'r' AND c.relname <> 'schema_migrations'
+WHERE n.nspname = 'agentzaaheen' AND c.relkind = 'r' AND c.relname <> 'schema_migrations'
 ORDER BY c.relname
 """
 
@@ -131,13 +133,15 @@ async def _fill_every_table(url: str) -> None:
         )
         await DailySummaries(here).put(NOW.date(), {"walled": True}, made_at=NOW)
         await Briefings(db.scoped(TENANT)).open(NOW.date(), title="Briefing", message="Walled.", made_at=NOW)
+        await ModelCalls(db.scoped(TENANT)).add("heads", "claude-opus-5-5", 1, at=NOW)
+        await NamePrints(here).add({("single", bytes(32))}, key_id="names-1", at=NOW)
 
 
 async def _count(url: str, table: str, tenant: UUID, workspace: UUID | None) -> int:
     conn = await connect_as(url, tenant, workspace)
     try:
         # No WHERE clause on purpose: the wall alone decides what is seen. Names come from the catalog.
-        return int(await conn.fetchval(f"SELECT count(*) FROM yaqzan.{table}"))  # noqa: S608
+        return int(await conn.fetchval(f"SELECT count(*) FROM agentzaaheen.{table}"))  # noqa: S608
     finally:
         await conn.close()
 
@@ -176,7 +180,7 @@ def test_a_query_that_names_no_tenant_is_refused(test_db: ScratchDb) -> None:
     async def count_without_a_tenant(table: str) -> None:
         conn = await asyncpg.connect(test_db.app_url)
         try:
-            await conn.fetchval(f"SELECT count(*) FROM yaqzan.{table}")  # noqa: S608  # name from the catalog
+            await conn.fetchval(f"SELECT count(*) FROM agentzaaheen.{table}")  # noqa: S608  # name from the catalog
         finally:
             await conn.close()
 
@@ -210,7 +214,7 @@ def test_a_row_cannot_be_written_into_another_workspace(test_db: ScratchDb) -> N
     async def body() -> None:
         async with open_db(test_db.app_url) as db, db.scoped(PROJECT).connection() as conn:
             await conn.execute(
-                "INSERT INTO yaqzan.source_syncs (tenant_id, project_id, source, last_attempt_at)"
+                "INSERT INTO agentzaaheen.source_syncs (tenant_id, project_id, source, last_attempt_at)"
                 " VALUES ($1, $2, 'paddle', now())",
                 TENANT,
                 OTHER_WORKSPACE,
@@ -225,7 +229,8 @@ def test_a_row_cannot_be_written_for_another_tenant(test_db: ScratchDb) -> None:
     async def body() -> None:
         async with open_db(test_db.app_url) as db, db.scoped(TENANT).connection() as conn:
             await conn.execute(
-                "INSERT INTO yaqzan.kill_switches (tenant_id, scope, ref, engaged, changed_by, changed_at)"
+                "INSERT INTO agentzaaheen.kill_switches (tenant_id, scope, ref, engaged, changed_by,"
+                " changed_at)"
                 " VALUES ($1, 'all', '', true, 'user:chairman', now())",
                 OTHER_TENANT,
             )
@@ -273,9 +278,9 @@ def test_the_scope_ends_with_its_transaction(test_db: ScratchDb) -> None:
     async def body() -> int:
         async with open_db(test_db.app_url, max_size=1) as db:
             async with db.scoped(PROJECT).connection() as conn:
-                await conn.fetchval("SELECT count(*) FROM yaqzan.events")
+                await conn.fetchval("SELECT count(*) FROM agentzaaheen.events")
             async with db.connection() as conn:  # the very same connection, no scope named
-                return int(await conn.fetchval("SELECT count(*) FROM yaqzan.events"))
+                return int(await conn.fetchval("SELECT count(*) FROM agentzaaheen.events"))
 
     with pytest.raises(StoreError) as caught:
         run(body())

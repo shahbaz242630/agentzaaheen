@@ -15,8 +15,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 
-from yaqzan.core.llm_gateway import Tool
-from yaqzan.core.telemetry import LogFolder, LogPage, LogQuery
+from agentzaaheen.core.llm_gateway import Tool
+from agentzaaheen.core.telemetry import LogFolder, LogPage, LogQuery
 
 # The registry id of the skill this tool belongs to (its SKILL.md folder).
 READ_LOGS_SKILL = "read-logs"

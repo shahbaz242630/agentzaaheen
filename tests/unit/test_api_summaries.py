@@ -12,10 +12,10 @@ from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.api.app import REQUEST_HEADER
-from yaqzan.core.api.summary import summarise
-from yaqzan.core.store import BriefingRow, StoreError, StoreErrorCode, SummaryRow, WorkspaceRow
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.api.app import REQUEST_HEADER
+from agentzaaheen.core.api.summary import summarise
+from agentzaaheen.core.store import BriefingRow, StoreError, StoreErrorCode, SummaryRow, WorkspaceRow
 
 NOW = datetime(2026, 10, 25, 3, 0, tzinfo=UTC)
 DAY = date(2026, 10, 25)

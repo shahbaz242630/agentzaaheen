@@ -12,8 +12,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from tests.fixtures.name_prints import PRINTER
-from yaqzan.core.llm_gateway import (
+from agentzaaheen.core.llm_gateway import (
     Answer,
     CloudAsk,
     FixedNames,
@@ -24,8 +23,9 @@ from yaqzan.core.llm_gateway import (
     SpendLedger,
     Use,
 )
-from yaqzan.core.net import ClaudeReply, NetError, NetErrorCode
-from yaqzan.core.sdk import DataClass, ModelLevel, install_log_sink
+from agentzaaheen.core.net import ClaudeReply, NetError, NetErrorCode
+from agentzaaheen.core.sdk import DataClass, ModelLevel, install_log_sink
+from tests.fixtures.name_prints import PRINTER
 
 OCT = datetime(2026, 10, 25, 9, 0, tzinfo=UTC)
 PACK = PromptPart("You are the Head of Engineering. You only read and draft.", DataClass.INTERNAL)

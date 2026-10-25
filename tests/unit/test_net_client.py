@@ -13,8 +13,8 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from yaqzan.core.net import JsonClient, NetError, NetErrorCode, NetPolicy, check_base_url, check_path
-from yaqzan.core.sdk import SourceError, SourceErrorCode
+from agentzaaheen.core.net import JsonClient, NetError, NetErrorCode, NetPolicy, check_base_url, check_path
+from agentzaaheen.core.sdk import SourceError, SourceErrorCode
 
 HOST = "api.example.com"
 POLICY = NetPolicy(allowed_hosts=frozenset({HOST}), max_attempts=3, max_response_bytes=1000)

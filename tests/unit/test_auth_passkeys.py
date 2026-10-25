@@ -6,8 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from tests.fixtures.soft_authenticator import SoftAuthenticator
-from yaqzan.core.auth import (
+from agentzaaheen.core.auth import (
     CHALLENGE_TTL,
     Challenges,
     KnownPasskey,
@@ -19,6 +18,7 @@ from yaqzan.core.auth import (
     verify_approval,
     verify_enrol,
 )
+from tests.fixtures.soft_authenticator import SoftAuthenticator
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 SITE = Site(origin="http://localhost:8765")

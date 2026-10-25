@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.api.app import CONTENT_SECURITY_POLICY
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.api.app import CONTENT_SECURITY_POLICY
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 

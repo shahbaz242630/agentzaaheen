@@ -11,7 +11,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from yaqzan.core.policy import (
+from agentzaaheen.core.policy import (
     GENESIS_HASH,
     AuditDraft,
     AuditEntry,

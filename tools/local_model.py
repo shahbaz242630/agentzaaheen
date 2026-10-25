@@ -12,7 +12,7 @@ The dashboard then talks to it through the core's model client:
     uv run python -m tools.dashboard --model-url http://127.0.0.1:8766   # terminal 2
 
 The server binary and model live outside the repo, under
-``%LOCALAPPDATA%/Yaqzan/llm`` (checksum-verified when downloaded).
+``%LOCALAPPDATA%/AgentZaaheen/llm`` (checksum-verified when downloaded).
 """
 
 from __future__ import annotations

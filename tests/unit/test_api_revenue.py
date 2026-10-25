@@ -2,10 +2,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from yaqzan.core.api.revenue import revenue_card
-from yaqzan.core.api.views import Count, Money, NotKnown
-from yaqzan.core.metrics import CountAndAmounts, Freshness, Unknown
-from yaqzan.core.scheduler import RevenueSnapshot
+from agentzaaheen.core.api.revenue import revenue_card
+from agentzaaheen.core.api.views import Count, Money, NotKnown
+from agentzaaheen.core.metrics import CountAndAmounts, Freshness, Unknown
+from agentzaaheen.core.scheduler import RevenueSnapshot
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 

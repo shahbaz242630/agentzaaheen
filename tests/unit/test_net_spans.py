@@ -15,8 +15,7 @@ import pytest
 from opentelemetry.trace import SpanKind, StatusCode
 from pydantic import SecretStr
 
-from tests.tracing import Recorded, recorded
-from yaqzan.core.net import (
+from agentzaaheen.core.net import (
     DownloadPolicy,
     JsonClient,
     ModelClient,
@@ -25,6 +24,7 @@ from yaqzan.core.net import (
     PushClient,
     StatusProbe,
 )
+from tests.tracing import Recorded, recorded
 
 HOST = "api.example.com"
 POLICY = NetPolicy(allowed_hosts=frozenset({HOST}), max_attempts=3)
@@ -71,7 +71,7 @@ def test_a_get_is_one_client_span_named_by_host(spans: Recorded) -> None:
     assert dict(done.attributes or {}) == {
         "server.address": HOST,
         "http.request.method": "GET",
-        "yaqzan.attempts": 1,
+        "agentzaaheen.attempts": 1,
         "http.response.status_code": 200,
     }
     text = everything(spans)
@@ -90,9 +90,9 @@ def test_retries_are_events_on_the_one_span(spans: Recorded) -> None:
 
     asyncio.run(go())
     done = spans.named(f"GET {HOST}")
-    assert (done.attributes or {})["yaqzan.attempts"] == 2
+    assert (done.attributes or {})["agentzaaheen.attempts"] == 2
     assert [(e.name, dict(e.attributes or {})) for e in done.events] == [
-        ("retry", {"yaqzan.attempt": 1, "yaqzan.reason": "http_503"})
+        ("retry", {"agentzaaheen.attempt": 1, "agentzaaheen.reason": "http_503"})
     ]
 
 
@@ -110,7 +110,7 @@ def test_a_failed_get_carries_the_code_status_and_attempts(spans: Recorded) -> N
     attributes = dict(done.attributes or {})
     assert attributes["error.type"] == "net.auth"
     assert attributes["http.response.status_code"] == 401
-    assert attributes["yaqzan.attempts"] == 1
+    assert attributes["agentzaaheen.attempts"] == 1
 
 
 def test_a_refusal_before_sending_has_no_status(spans: Recorded) -> None:
@@ -157,7 +157,7 @@ def test_a_probe_span_has_the_status_and_time(spans: Recorded) -> None:
         "server.address": HOST,
         "http.request.method": "GET",
         "http.response.status_code": 204,
-        "yaqzan.elapsed_ms": 250,
+        "agentzaaheen.elapsed_ms": 250,
     }
 
 

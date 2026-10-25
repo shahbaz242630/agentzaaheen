@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from yaqzan.core.registry.roles import LINE_LIMITS, load_roles, version_of
-from yaqzan.core.sdk import ModelLevel
+from agentzaaheen.core.registry.roles import LINE_LIMITS, load_roles, version_of
+from agentzaaheen.core.sdk import ModelLevel
 
 CARD = """# Monitoring
 

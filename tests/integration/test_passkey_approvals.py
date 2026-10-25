@@ -15,12 +15,12 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 
+from agentzaaheen.core.auth import PasskeyError, Site
+from agentzaaheen.core.policy import Channel, PasskeyApprovals, RegistryControl, Role, Verdict
+from agentzaaheen.core.registry import Invocation, Kind, Registry, Skill, State
+from agentzaaheen.core.store import PasskeyRow, PasskeyRows
 from tests.fixtures.soft_authenticator import SoftAuthenticator
 from tests.integration.conftest import ScratchDb, connect_as, open_db, run
-from yaqzan.core.auth import PasskeyError, Site
-from yaqzan.core.policy import Channel, PasskeyApprovals, RegistryControl, Role, Verdict
-from yaqzan.core.registry import Invocation, Kind, Registry, Skill, State
-from yaqzan.core.store import PasskeyRow, PasskeyRows
 
 TENANT = uuid4()
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
@@ -77,7 +77,8 @@ def audit(test_db: ScratchDb) -> list[tuple[str, str, str]]:
         conn = await connect_as(test_db.app_url, TENANT)
         try:
             rows = await conn.fetch(
-                "SELECT action, outcome, reason_code FROM yaqzan.audit_log WHERE tenant_id = $1 ORDER BY seq",
+                "SELECT action, outcome, reason_code FROM agentzaaheen.audit_log WHERE tenant_id ="
+                " $1 ORDER BY seq",
                 TENANT,
             )
         finally:
@@ -273,9 +274,9 @@ def test_the_app_cannot_swap_a_stored_public_key(test_db: ScratchDb) -> None:
         conn = await connect_as(test_db.app_url, TENANT)
         try:
             with pytest.raises(asyncpg.InsufficientPrivilegeError):
-                await conn.execute("UPDATE yaqzan.passkeys SET public_key = $1", b"z" * 64)
+                await conn.execute("UPDATE agentzaaheen.passkeys SET public_key = $1", b"z" * 64)
             with pytest.raises(asyncpg.InsufficientPrivilegeError):
-                await conn.execute("DELETE FROM yaqzan.passkeys")
+                await conn.execute("DELETE FROM agentzaaheen.passkeys")
         finally:
             await conn.close()
 
@@ -339,13 +340,13 @@ def test_the_database_keeps_one_active_passkey_and_revoked_ones_stay_revoked(tes
         try:
             with pytest.raises(asyncpg.UniqueViolationError):
                 await conn.execute(
-                    "INSERT INTO yaqzan.passkeys (tenant_id, credential_id, public_key, sign_count,"
+                    "INSERT INTO agentzaaheen.passkeys (tenant_id, credential_id, public_key, sign_count,"
                     " created_by, created_at) VALUES ($1, $2, $3, 0, 'user:chairman', now())",
                     TENANT, b"c" * 16, b"k" * 64,
                 )  # fmt: skip
             with pytest.raises(asyncpg.CheckViolationError):
                 await conn.execute(
-                    "UPDATE yaqzan.passkeys SET revoked_at = NULL WHERE credential_id = $1", b"a" * 16
+                    "UPDATE agentzaaheen.passkeys SET revoked_at = NULL WHERE credential_id = $1", b"a" * 16
                 )
         finally:
             await conn.close()
@@ -439,7 +440,8 @@ def test_a_request_for_an_outside_bundle_can_never_be_approved(test_db: ScratchD
         conn = await connect_as(test_db.app_url, TENANT)
         try:
             await conn.execute(
-                "INSERT INTO yaqzan.registry_requests (id, tenant_id, kind, item_id, fingerprint, status,"
+                "INSERT INTO agentzaaheen.registry_requests (id, tenant_id, kind, item_id,"
+                " fingerprint, status,"
                 " requested_by, requested_at) VALUES ($1, $2, 'plugin', 'outside', $3, 'pending',"
                 " 'user:chairman', now())",
                 request_id, TENANT, FILES,

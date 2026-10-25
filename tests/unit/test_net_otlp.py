@@ -12,8 +12,8 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from yaqzan.core.net import NetError, NetErrorCode, OtlpSender, check_otlp_endpoint
-from yaqzan.core.net.otlp import MAX_BODY_BYTES
+from agentzaaheen.core.net import NetError, NetErrorCode, OtlpSender, check_otlp_endpoint
+from agentzaaheen.core.net.otlp import MAX_BODY_BYTES
 
 ENDPOINT = "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp"
 FAKE_TOKEN = "glc_" + "t" * 40  # built here, never a real token

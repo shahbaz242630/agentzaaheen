@@ -11,9 +11,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from agentzaaheen.core.sdk import span
 from tools import dashboard
 from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options, tracing_from
-from yaqzan.core.sdk import span
 
 ENDPOINT = "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp"
 FAKE_TOKEN = "glc_" + "t" * 40  # built here, never a real token

@@ -1,6 +1,6 @@
 """Integration tests run against a real Postgres (Rulebook §5.1: no database mocks).
 
-The server comes from ``YAQZAN_TEST_DATABASE_URL`` or the running dev container
+The server comes from ``AGENTZAAHEEN_TEST_DATABASE_URL`` or the running dev container
 (``uv run python -m tools.dev_db up``). Once per session the schema is migrated
 into a template database by a non-superuser owner; each test then gets its own
 fresh copy of that template, so tests never see each other's rows.
@@ -9,7 +9,7 @@ Every tenant table sits behind a database wall (ADR-039): a project-level row
 needs its workspace first (:func:`add_workspaces`), and a raw connection must
 name its tenant (:func:`connect_as`).
 
-Without a server these tests skip locally. CI sets ``YAQZAN_REQUIRE_DB=1``,
+Without a server these tests skip locally. CI sets ``AGENTZAAHEEN_REQUIRE_DB=1``,
 which turns "could not run" into a failure instead of a silent pass.
 """
 
@@ -29,12 +29,12 @@ import asyncpg
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.store import Database, DatabaseSettings, WorkspaceRow, WorkspaceRows, migrate
 from tools import dev_db
-from yaqzan.core.store import Database, DatabaseSettings, WorkspaceRow, WorkspaceRows, migrate
 
-OWNER = "yaqzan_owner_test"
-APP = "yaqzan_app_test"
-TEMPLATE = "yaqzan_template"
+OWNER = "agentzaaheen_owner_test"
+APP = "agentzaaheen_app_test"
+TEMPLATE = "agentzaaheen_template"
 
 
 def run[T](coro: Coroutine[Any, Any, T]) -> T:
@@ -130,7 +130,7 @@ async def _build_template(server: Server) -> None:
         ):
             await conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
         await conn.execute(f"DROP DATABASE IF EXISTS {TEMPLATE} WITH (FORCE)")
-        await conn.execute(f"DROP ROLE IF EXISTS {APP}, yaqzan_app")
+        await conn.execute(f"DROP ROLE IF EXISTS {APP}, agentzaaheen_app")
         await _ensure_role(conn, OWNER, "LOGIN CREATEROLE NOSUPERUSER", server.owner_password)
         await conn.execute(f"CREATE DATABASE {TEMPLATE} OWNER {OWNER}")
     finally:
@@ -142,7 +142,7 @@ async def _build_template(server: Server) -> None:
         await _ensure_role(
             conn, APP, "LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB", server.app_password
         )
-        await conn.execute(f"GRANT yaqzan_app TO {APP}")
+        await conn.execute(f"GRANT agentzaaheen_app TO {APP}")
     finally:
         await conn.close()
 
@@ -162,7 +162,7 @@ _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
 
 def _server_url() -> str | None:
-    url = os.environ.get("YAQZAN_TEST_DATABASE_URL") or dev_db.admin_url()
+    url = os.environ.get("AGENTZAAHEEN_TEST_DATABASE_URL") or dev_db.admin_url()
     # Session set-up drops roles and databases: never let a mistyped URL aim that at a real server.
     if url is not None and urlsplit(url).hostname not in _LOOPBACK:
         pytest.fail("test database must be on this machine (127.0.0.1); refusing a remote server")
@@ -174,7 +174,7 @@ def server() -> Server:
     url = _server_url()
     if url is None:
         message = "no test Postgres: run `uv run python -m tools.dev_db up`"
-        if os.environ.get("YAQZAN_REQUIRE_DB") == "1":
+        if os.environ.get("AGENTZAAHEEN_REQUIRE_DB") == "1":
             pytest.fail(message)
         pytest.skip(message)
     found = Server(admin_url=url, owner_password=secrets.token_hex(16), app_password=secrets.token_hex(16))

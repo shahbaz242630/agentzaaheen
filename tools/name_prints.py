@@ -38,13 +38,18 @@ from uuid import UUID
 import httpx
 from pydantic import SecretStr
 
+from agentzaaheen.core.llm_gateway import prints_of
+from agentzaaheen.core.net import JsonClient, NetPolicy
+from agentzaaheen.core.sdk import SourceError, explain
+from agentzaaheen.core.store import Database, DatabaseSettings, NamePrints
+from agentzaaheen.core.vault import MasterKey, NamePrinter, VaultError, load_master_key
+from agentzaaheen.plugins.connectors.paddle import (
+    ALLOWED_HOSTS,
+    API_VERSION_HEADER,
+    LIVE_BASE_URL,
+    PaddleSource,
+)
 from tools.laptop_db import LAPTOP_TENANT, LAPTOP_WORKSPACES, prepare
-from yaqzan.core.llm_gateway import prints_of
-from yaqzan.core.net import JsonClient, NetPolicy
-from yaqzan.core.sdk import SourceError, explain
-from yaqzan.core.store import Database, DatabaseSettings, NamePrints
-from yaqzan.core.vault import MasterKey, NamePrinter, VaultError, load_master_key
-from yaqzan.plugins.connectors.paddle import ALLOWED_HOSTS, API_VERSION_HEADER, LIVE_BASE_URL, PaddleSource
 
 KEY_ID = "names-1"
 KEY_FILE = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Agent Zaaheen" / "keys" / "names.key"

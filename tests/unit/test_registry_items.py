@@ -5,14 +5,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from yaqzan.core.registry import Invocation, Layout
-from yaqzan.core.registry.bundles import read_bundle
-from yaqzan.core.registry.connectors import read_connector
-from yaqzan.core.registry.files import ItemError
-from yaqzan.core.registry.skills import read_skill
-from yaqzan.core.sdk import ToolLevel
+from agentzaaheen.core.registry import Invocation, Layout
+from agentzaaheen.core.registry.bundles import read_bundle
+from agentzaaheen.core.registry.connectors import read_connector
+from agentzaaheen.core.registry.files import ItemError
+from agentzaaheen.core.registry.skills import read_skill
+from agentzaaheen.core.sdk import ToolLevel
 
-PLUGINS = Path(__file__).resolve().parents[2] / "src" / "yaqzan" / "plugins"
+PLUGINS = Path(__file__).resolve().parents[2] / "src" / "agentzaaheen" / "plugins"
 
 
 def refused(call: object) -> ItemError:

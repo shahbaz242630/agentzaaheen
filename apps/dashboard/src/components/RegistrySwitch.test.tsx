@@ -109,7 +109,7 @@ describe("the registry switches", () => {
     await userEvent.click(within(triage).getByRole("button", { name: "Switch off" }));
     const [sent] = posts(fetch);
     expect(sent?.path).toBe("/api/registry/switch-off");
-    expect(sent?.init.headers).toMatchObject({ "X-Yaqzan-Request": "1", "Content-Type": "application/json" });
+    expect(sent?.init.headers).toMatchObject({ "X-AgentZaaheen-Request": "1", "Content-Type": "application/json" });
     expect(sent?.body).toEqual({ kind: "skill", id: "triage-failing-build" });
     await vi.waitFor(() => {
       expect(onChange).toHaveBeenCalledWith(skillOff);

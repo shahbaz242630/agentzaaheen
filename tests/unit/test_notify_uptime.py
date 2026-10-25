@@ -10,11 +10,18 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.net import NetError, NetErrorCode, PushClient
+from agentzaaheen.core.notify import Alert, UptimeWatch, deliver
+from agentzaaheen.core.sdk import (
+    SiteRule,
+    SourceError,
+    SourceErrorCode,
+    StatusAnswer,
+    UptimeReport,
+    check_site,
+)
 from tests.tracing import recorded
 from tools.dashboard_uptime import UptimeLive, start_watch
-from yaqzan.core.net import NetError, NetErrorCode, PushClient
-from yaqzan.core.notify import Alert, UptimeWatch, deliver
-from yaqzan.core.sdk import SiteRule, SourceError, SourceErrorCode, StatusAnswer, UptimeReport, check_site
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 TOPIC = SecretStr("abcdefghijklmnop" + "qrstuvwx")  # a made-up topic, 24 characters
@@ -314,8 +321,8 @@ def test_a_failed_round_does_not_end_the_rechecking(capsys: pytest.CaptureFixtur
 
 def test_start_watch_needs_a_usable_topic(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     rules = {"eva": (SiteRule(url=A),)}
-    assert start_watch(rules, NAMES, {}, "YAQZAN_NTFY_TOPIC", clock=Clock()) is None
-    assert "YAQZAN_NTFY_TOPIC is not set" in capsys.readouterr().out
+    assert start_watch(rules, NAMES, {}, "AGENTZAAHEEN_NTFY_TOPIC", clock=Clock()) is None
+    assert "AGENTZAAHEEN_NTFY_TOPIC is not set" in capsys.readouterr().out
     assert start_watch(rules, NAMES, {"T": "has space"}, "T", clock=Clock()) is None
 
 
@@ -348,7 +355,7 @@ def test_a_round_is_one_trace_holding_every_probe() -> None:
         (alert,) = asyncio.run(live.round())
     assert alert.down
     round_span = spans.named("uptime round")
-    assert (round_span.attributes or {})["yaqzan.count"] == 1
+    assert (round_span.attributes or {})["agentzaaheen.count"] == 1
     probes = [s for s in spans.spans if s.name.startswith("probe ")]
     assert probes
     assert round_span.context is not None

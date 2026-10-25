@@ -1,5 +1,5 @@
 // The API contract, checked on arrival (Rulebook §4: zod at the API boundary).
-// Mirrors src/yaqzan/core/api/views.py. Anything that does not match is refused.
+// Mirrors src/agentzaaheen/core/api/views.py. Anything that does not match is refused.
 import { z } from "zod";
 
 const code = z.string().regex(/^[a-z0-9_]+(\.[a-z0-9_]+)*$/);
@@ -92,7 +92,7 @@ export const ChatAnswer = z.strictObject({
 });
 export type ChatAnswer = z.infer<typeof ChatAnswer>;
 
-// The Customize page (F06). Mirrors src/yaqzan/core/api/registry.py.
+// The Customize page (F06). Mirrors src/agentzaaheen/core/api/registry.py.
 const item = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
 const fingerprint = z.string().regex(/^[0-9a-f]{64}$/);
 
@@ -171,7 +171,7 @@ export const RegistryPage = z.strictObject({
 });
 export type RegistryPage = z.infer<typeof RegistryPage>;
 
-// The Agents tab (ADR-039, F17 slice 3). Mirrors src/yaqzan/core/api/agents.py. Money is in US cents.
+// The Agents tab (ADR-039, F17 slice 3). Mirrors src/agentzaaheen/core/api/agents.py. Money is in US cents.
 export const RoleChoice = z.strictObject({
   id: item,
   title: z.string(),
@@ -229,7 +229,7 @@ export const RepoList = z.strictObject({
 export type RepoList = z.infer<typeof RepoList>;
 export const AddedProject = z.strictObject({ slug: item, name: z.string() });
 
-// What a workspace is built with (F17 slice 5b-1). Mirrors src/yaqzan/core/api/profile.py.
+// What a workspace is built with (F17 slice 5b-1). Mirrors src/agentzaaheen/core/api/profile.py.
 export const ProviderCategory = z.enum([
   "code",
   "hosting",
@@ -272,7 +272,7 @@ export const Profile = z
   );
 export type Profile = z.infer<typeof Profile>;
 
-// The scout's newest run and its advice, checked by code (F17 slice 5b-2). Mirrors src/yaqzan/core/api/scout.py.
+// The scout's newest run and its advice, checked by code (F17 slice 5b-2). Mirrors src/agentzaaheen/core/api/scout.py.
 const repoPath = z.string().min(1).max(400);
 export const RoleAdvice = z.strictObject({
   role_id: item,
@@ -313,7 +313,7 @@ export const ScoutView = z
 export type ScoutView = z.infer<typeof ScoutView>;
 
 // The daily summaries and the Board's briefings, written by code (F17 slice 6). Mirrors
-// src/yaqzan/core/api/summary.py and summaries.py.
+// src/agentzaaheen/core/api/summary.py and summaries.py.
 const day = z.iso.date();
 export const Unread = z.strictObject({ title: z.string(), reason: code });
 export const SourceFact = z.strictObject({
@@ -388,7 +388,7 @@ export const Briefings = z.strictObject({ connected: z.boolean(), briefings: z.a
 export type Briefings = z.infer<typeof Briefings>;
 const Made = z.strictObject({ made: z.int().nonnegative(), failed: z.int().nonnegative() });
 
-// The kept log lines (ADR-034 slice 3). Mirrors src/yaqzan/core/api/logs.py. Only our own
+// The kept log lines (ADR-034 slice 3). Mirrors src/agentzaaheen/core/api/logs.py. Only our own
 // sentences and plain values arrive: codes, names, counts and durations.
 export const LogLevel = z.enum(["info", "warning", "error"]);
 export type LogLevel = z.infer<typeof LogLevel>;
@@ -443,7 +443,7 @@ async function errorCode(response: Response): Promise<string | null> {
 async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json", "X-Yaqzan-Request": "1" },
+    headers: { Accept: "application/json", "Content-Type": "application/json", "X-AgentZaaheen-Request": "1" },
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new ApiError(path, response.status, await errorCode(response));

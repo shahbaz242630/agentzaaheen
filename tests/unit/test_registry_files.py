@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from yaqzan.core.registry import files
-from yaqzan.core.registry.files import (
+from agentzaaheen.core.registry import files
+from agentzaaheen.core.registry.files import (
     ItemError,
     fingerprint,
     lenient_mapping,

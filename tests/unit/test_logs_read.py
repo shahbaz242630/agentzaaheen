@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.telemetry import LogFolder, LogPage, LogQuery, logread
-from yaqzan.core.telemetry.logfile import file_name
-from yaqzan.core.telemetry.logread import read_logs
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.telemetry import LogFolder, LogPage, LogQuery, logread
+from agentzaaheen.core.telemetry.logfile import file_name
+from agentzaaheen.core.telemetry.logread import read_logs
 
 TODAY = date(2026, 10, 25)
 NOW = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
@@ -24,7 +24,7 @@ def line(n: int, **more: object) -> dict[str, object]:
         "timestamp": f"2026-10-25T09:{n:02d}:00Z",
         "level": "info",
         "event": "push_sent",
-        "component": "yaqzan.push",
+        "component": "agentzaaheen.push",
         "what": f"Line {n}.",
         "why": "Because.",
         "next": "",
@@ -179,7 +179,7 @@ def test_the_page_gets_each_line_in_parts(tmp_path: Path) -> None:
         "timestamp": "2026-10-25T09:01:00Z",
         "level": "warning",
         "event": "push_sent",
-        "component": "yaqzan.push",
+        "component": "agentzaaheen.push",
         "what": "Line 1.",
         "why": "Because.",
         "next": None,

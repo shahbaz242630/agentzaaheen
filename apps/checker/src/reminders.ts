@@ -107,7 +107,7 @@ export async function readStatuses(settings: ReminderSettings, deps: Deps): Prom
       method: "GET",
       redirect: "manual",
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { "x-api-key": settings.readKey, "user-agent": "yaqzan-checker (read only)" },
+      headers: { "x-api-key": settings.readKey, "user-agent": "agentzaaheen-checker (read only)" },
     });
     if (response.status !== 200) {
       await response.body?.cancel();

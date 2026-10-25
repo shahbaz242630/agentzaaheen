@@ -9,10 +9,16 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from agentzaaheen.core.net import DownloadPolicy, JsonClient, NetPolicy
+from agentzaaheen.core.sdk import FailedStepLog, SourceError, SourceErrorCode
+from agentzaaheen.plugins.connectors.github import (
+    ALLOWED_HOSTS,
+    API_HEADERS,
+    BASE_URL,
+    LOG_HOST,
+    GitHubBuildLog,
+)
 from tests.fixtures import github_log_world as world
-from yaqzan.core.net import DownloadPolicy, JsonClient, NetPolicy
-from yaqzan.core.sdk import FailedStepLog, SourceError, SourceErrorCode
-from yaqzan.plugins.connectors.github import ALLOWED_HOSTS, API_HEADERS, BASE_URL, LOG_HOST, GitHubBuildLog
 
 Serve = Callable[[httpx.Request], httpx.Response]
 
@@ -76,7 +82,7 @@ def test_data_that_breaks_the_log_shape_is_a_bad_response(monkeypatch: pytest.Mo
     def broken(**fields: object) -> FailedStepLog:
         return FailedStepLog.model_validate({**fields, "digest": "0" * 64})
 
-    monkeypatch.setattr("yaqzan.plugins.connectors.github.logs.make_failed_step_log", broken)
+    monkeypatch.setattr("agentzaaheen.plugins.connectors.github.logs.make_failed_step_log", broken)
     with pytest.raises(SourceError) as caught:
         read(world.LogWorld().serve)
     assert caught.value.code is SourceErrorCode.BAD_RESPONSE

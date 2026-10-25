@@ -12,9 +12,9 @@ from uuid import UUID
 
 import pytest
 
+from agentzaaheen.core.llm_gateway import CAPS_USD, SpendLedger, StoreBook, Use
+from agentzaaheen.core.store import ModelCalls, StoreError, StoreErrorCode
 from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
-from yaqzan.core.llm_gateway import CAPS_USD, SpendLedger, StoreBook, Use
-from yaqzan.core.store import ModelCalls, StoreError, StoreErrorCode
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000e1")
 OTHER = UUID("00000000-0000-4000-8000-0000000000e2")
@@ -69,10 +69,12 @@ def test_each_tenant_sees_only_its_own_spend(test_db: ScratchDb) -> None:
             assert await other.spent("heads", start=MONTH_START, end=NOV_START) == 0
         conn = await connect_as(test_db.app_url, OTHER)
         try:
-            assert await conn.fetchval("SELECT count(*) FROM yaqzan.model_calls") == 0  # no filter at all
+            assert (
+                await conn.fetchval("SELECT count(*) FROM agentzaaheen.model_calls") == 0
+            )  # no filter at all
             with pytest.raises(Exception, match="row-level security"):
                 await conn.execute(
-                    "INSERT INTO yaqzan.model_calls VALUES ($1, gen_random_uuid(), $2, 'heads', $3, 1)",
+                    "INSERT INTO agentzaaheen.model_calls VALUES ($1, gen_random_uuid(), $2, 'heads', $3, 1)",
                     TENANT, OCT, OPUS,
                 )  # fmt: skip
         finally:
@@ -88,8 +90,8 @@ def test_a_spent_amount_can_only_go_up(test_db: ScratchDb) -> None:
         conn = await connect_as(test_db.app_url, TENANT)
         try:
             for statement in (
-                "UPDATE yaqzan.model_calls SET cost_micro = 0",
-                "DELETE FROM yaqzan.model_calls",
+                "UPDATE agentzaaheen.model_calls SET cost_micro = 0",
+                "DELETE FROM agentzaaheen.model_calls",
             ):
                 with pytest.raises(Exception, match="permission denied"):
                     await conn.execute(statement)

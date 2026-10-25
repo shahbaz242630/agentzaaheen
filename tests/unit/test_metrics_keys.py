@@ -6,8 +6,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from yaqzan.core.metrics import WARN_BEFORE, KeyHealth, days_left, key_health
-from yaqzan.core.sdk import Severity
+from agentzaaheen.core.metrics import WARN_BEFORE, KeyHealth, days_left, key_health
+from agentzaaheen.core.sdk import Severity
 
 NOW = datetime(2027, 1, 2, 9, 0, tzinfo=UTC)
 LIVE_KEY_ENDS = datetime(2027, 1, 16, 9, 0, tzinfo=UTC)  # the shape of the Chairman's live Paddle key

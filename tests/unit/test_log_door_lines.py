@@ -19,14 +19,14 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from agentzaaheen.core.api import SamplePortfolio, create_app
+from agentzaaheen.core.llm_gateway import FactChat
+from agentzaaheen.core.llm_gateway.tools import Tool
+from agentzaaheen.core.net import JsonClient, ModelClient, NetError, NetPolicy, PushClient, StatusProbe
+from agentzaaheen.core.store import StoreError, StoreErrorCode
+from agentzaaheen.core.store.db import Database, changed, written
 from tools.dashboard_sources import ListNotUsableError
 from tools.dashboard_uptime import uptime_list
-from yaqzan.core.api import SamplePortfolio, create_app
-from yaqzan.core.llm_gateway import FactChat
-from yaqzan.core.llm_gateway.tools import Tool
-from yaqzan.core.net import JsonClient, ModelClient, NetError, NetPolicy, PushClient, StatusProbe
-from yaqzan.core.store import StoreError, StoreErrorCode
-from yaqzan.core.store.db import Database, changed, written
 
 NOW = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
 HOST = "api.example.com"

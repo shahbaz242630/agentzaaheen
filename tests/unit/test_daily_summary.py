@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from yaqzan.core.api.summary import (
+from agentzaaheen.core.api.summary import (
     MAX_MESSAGE_BYTES,
     AgentsFact,
     AlertsFact,
@@ -24,7 +24,7 @@ from yaqzan.core.api.summary import (
     read_summary,
     summarise,
 )
-from yaqzan.core.api.views import (
+from agentzaaheen.core.api.views import (
     Card,
     Count,
     Entry,
@@ -36,7 +36,7 @@ from yaqzan.core.api.views import (
     ProjectSummary,
     Tone,
 )
-from yaqzan.core.metrics import Freshness
+from agentzaaheen.core.metrics import Freshness
 
 DAY = date(2026, 10, 25)
 NOW = datetime(2026, 10, 25, 1, 0, tzinfo=UTC)  # 05:00 in Dubai
