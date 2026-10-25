@@ -13,7 +13,7 @@ from uuid import UUID
 import pytest
 
 from agentzaaheen.core.llm_gateway import CAPS_USD, SpendLedger, StoreBook, Use
-from agentzaaheen.core.store import ModelCalls, StoreError, StoreErrorCode
+from agentzaaheen.core.store import CallTokens, ModelCalls, StoreError, StoreErrorCode
 from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000e1")
@@ -127,3 +127,47 @@ def test_a_cost_without_a_time_zone_is_refused(test_db: ScratchDb) -> None:
             assert caught.value.code is StoreErrorCode.NAIVE_TIME
 
     run(body())
+
+
+def test_counts_are_kept_and_the_first_calls_with_counts_come_back_oldest_first(test_db: ScratchDb) -> None:
+    def counts(out: int) -> CallTokens:
+        return CallTokens(tokens_in=1_000, tokens_out=out, cache_read=200, cache_write=50, answer_chars=400)
+
+    async def body() -> list[tuple[datetime, int]]:
+        async with open_db(test_db.app_url) as db:
+            calls = ModelCalls(db.scoped(TENANT))
+            await calls.add("heads", OPUS, 1, at=OCT - timedelta(days=3))  # before migration 0015: no counts
+            await calls.add("heads", OPUS, 2, at=OCT + timedelta(hours=1), tokens=counts(900))
+            await calls.add("heads", OPUS, 3, at=OCT, tokens=counts(700))
+            await calls.add("heads", OPUS, 4, at=OCT + timedelta(hours=2), tokens=counts(800))
+            await calls.add("code-review", "claude-sonnet-5-5", 5, at=OCT, tokens=counts(10))  # another model
+            await ModelCalls(db.scoped(OTHER)).add(
+                "heads", OPUS, 6, at=OCT, tokens=counts(5)
+            )  # another tenant
+            first = await calls.first_with_counts(OPUS, 2)
+            assert first[0].tokens == counts(700)
+            return [(row.at, row.tokens.tokens_out) for row in first]
+
+    assert run(body()) == [(OCT, 700), (OCT + timedelta(hours=1), 900)]
+
+
+def test_negative_counts_are_refused(test_db: ScratchDb) -> None:
+    async def body() -> None:
+        async with open_db(test_db.app_url) as db:
+            bad = CallTokens(tokens_in=1, tokens_out=-1, cache_read=0, cache_write=0, answer_chars=0)
+            with pytest.raises(StoreError):
+                await ModelCalls(db.scoped(TENANT)).add("heads", OPUS, 1, at=OCT, tokens=bad)
+
+    run(body())
+
+
+def test_the_ledger_hands_each_calls_counts_to_the_database(test_db: ScratchDb) -> None:
+    counts = CallTokens(tokens_in=10, tokens_out=20, cache_read=3, cache_write=4, answer_chars=5)
+
+    async def body() -> list[CallTokens]:
+        async with open_db(test_db.app_url) as db:
+            calls = ModelCalls(db.scoped(TENANT))
+            await SpendLedger(StoreBook(calls), clock=lambda: OCT).record(Use.HEADS, OPUS, 7, counts)
+            return [row.tokens for row in await calls.first_with_counts(OPUS, 5)]
+
+    assert run(body()) == [counts]

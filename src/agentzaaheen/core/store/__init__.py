@@ -47,7 +47,7 @@ from agentzaaheen.core.store.db import Database, DatabaseSettings, Scoped
 from agentzaaheen.core.store.errors import StoreError, StoreErrorCode
 from agentzaaheen.core.store.migrations import LATEST_VERSION, MIGRATIONS, Migration, check_schema, migrate
 from agentzaaheen.core.store.model_call_misses import MissRow, ModelCallMisses
-from agentzaaheen.core.store.model_calls import ModelCalls
+from agentzaaheen.core.store.model_calls import CallRow, CallTokens, ModelCalls
 from agentzaaheen.core.store.name_prints import AllNamePrints, NamePrints
 from agentzaaheen.core.store.passkeys import PasskeyRow, PasskeyRows
 from agentzaaheen.core.store.records import MAX_PAGE, Records
@@ -103,6 +103,8 @@ __all__ = [
     "BriefingRow",
     "BriefingState",
     "Briefings",
+    "CallRow",
+    "CallTokens",
     "CredentialDates",
     "DailySummaries",
     "Database",

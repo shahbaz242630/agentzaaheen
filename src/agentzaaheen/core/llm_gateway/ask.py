@@ -212,7 +212,7 @@ class CloudAsk:
             cache_write_5m_tokens=reply.cache_write_5m_tokens,
             cache_write_1h_tokens=reply.cache_write_1h_tokens,
         )
-        cost = await self._gate.record(use, model, usage)
+        cost = await self._gate.record(use, model, usage, len(reply.text))
         say(
             self._log,
             "model_cloud_call_done",

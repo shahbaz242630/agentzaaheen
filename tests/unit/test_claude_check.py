@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -18,6 +19,7 @@ from pydantic import SecretStr
 
 from agentzaaheen.core.llm_gateway import MODELS, MemoryBook, MemoryMisses, Use
 from agentzaaheen.core.sdk import ModelLevel, SourceError, SourceErrorCode
+from agentzaaheen.core.store import CallTokens
 from tools import claude_check
 from tools.name_prints import make_key
 
@@ -46,9 +48,11 @@ class Book(MemoryBook):
         super().__init__()
         self.calls: list[tuple[Use, str, int]] = []
 
-    async def add(self, use: Use, model: str, micro: int, at: object) -> None:
+    async def add(
+        self, use: Use, model: str, micro: int, at: datetime, tokens: CallTokens | None = None
+    ) -> None:
         self.calls.append((use, model, micro))
-        await super().add(use, model, micro, at)  # type: ignore[arg-type]  # the time is passed on as given
+        await super().add(use, model, micro, at, tokens)
 
 
 def run_tool(handler: object = answered, *extra: str, book: Book | None = None) -> int:

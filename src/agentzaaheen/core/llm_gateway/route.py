@@ -33,6 +33,7 @@ from agentzaaheen.core.llm_gateway.cloud_check import (
 from agentzaaheen.core.llm_gateway.model_map import MODELS, ModelEntry, Usage, cost_micro_usd, usd
 from agentzaaheen.core.llm_gateway.spend import SpendLedger, Use
 from agentzaaheen.core.sdk import ModelLevel, get_logger, say
+from agentzaaheen.core.store import CallTokens
 
 
 class Refusal(StrEnum):
@@ -166,11 +167,22 @@ class ModelGate:
         say(self._log, "model_cloud_check_passed", model=entry.model_id, checked=len(parts))
         return await self._spend(role, entry, use, parts, max_output_tokens)
 
-    async def record(self, use: Use, model: ModelEntry, usage: Usage) -> int:
-        """Add what one call really cost (from the API's token counts); returns millionths of a USD."""
+    async def record(self, use: Use, model: ModelEntry, usage: Usage, answer_chars: int = 0) -> int:
+        """Add what one call really cost (from the API's counts) and keep the counts; returns micro-USD.
+
+        ``answer_chars`` is the visible answer's length: with ``usage.output_tokens`` it shows how
+        much of the output was hidden thinking (Opus thinks on every call; F10 slice 3b).
+        """
         micro = cost_micro_usd(model.price, usage)
         if model.cloud:
-            await self._ledger.record(use, model.model_id, micro)
+            tokens = CallTokens(
+                tokens_in=usage.input_tokens,
+                tokens_out=usage.output_tokens,
+                cache_read=usage.cache_read_tokens,
+                cache_write=usage.cache_write_5m_tokens + usage.cache_write_1h_tokens,
+                answer_chars=answer_chars,
+            )
+            await self._ledger.record(use, model.model_id, micro, tokens)
         return micro
 
     async def _known_names(self) -> KnownNames | None:
