@@ -103,7 +103,7 @@ from agentzaaheen.core.scheduler import DEFAULT_ZONE
 from agentzaaheen.core.sdk import SiteRule, span
 from agentzaaheen.core.store import ScoutRun, WorkspaceRow
 from agentzaaheen.core.telemetry import LogFile, LogFolder
-from tools import laptop_db
+from tools import laptop_db, vault_key
 from tools.chat_tools import LOCAL_MODEL_ID, Switched, model_chat, tools_for
 from tools.dashboard_adding import LaptopAdding
 from tools.dashboard_profile import LaptopProfiles, Repos
@@ -119,7 +119,7 @@ from tools.dashboard_sources import (
 )
 from tools.dashboard_summaries import AlertLog, LaptopSummaries
 from tools.dashboard_supabase import SupabaseProject, supabase_list, supabase_portfolio
-from tools.dashboard_switches import LaptopSwitches, Prepare, connect, off_connectors
+from tools.dashboard_switches import LaptopClaudeKeys, LaptopSwitches, Prepare, connect, off_connectors
 from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options, tracing_from
 from tools.dashboard_uptime import ntfy_topic, start_watch, uptime_list, uptime_portfolio
 from tools.fix_guides import Project, fixes_list
@@ -328,6 +328,12 @@ def _parser() -> argparse.ArgumentParser:
         "--switches", action="store_true", help="on/off switches, kept in the laptop database"
     )
     parser.add_argument(
+        "--vault-key",
+        type=Path,
+        default=vault_key.KEY_FILE,
+        help="the vault's master key file (with --switches: saving the Claude key needs it)",
+    )
+    parser.add_argument(
         "--enrol-passkey", action="store_true", help="allow the one-time passkey set-up (needs --switches)"
     )
     parser.add_argument(
@@ -423,6 +429,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
             site=Site(origin=f"http://localhost:{ns.port}"),
             enrol_code=code,
             library=library,
+            keyring=vault_key.load_keyring(ns.vault_key),
         )
         if code is not None:
             print(f"dashboard: passkey set-up is open. The code to type on the Customize page is {code}")
@@ -488,6 +495,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         scout=scout,
         summaries=summaries,
         logs=LogFolder(ns.log_dir.expanduser()) if ns.log_dir is not None else None,
+        claude_key=LaptopClaudeKeys(switches) if switches is not None else None,
         on_start=summaries.start if summaries is not None else None,
         on_close=_closer(switches, scout, summaries),
     )

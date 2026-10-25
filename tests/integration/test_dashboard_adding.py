@@ -54,7 +54,8 @@ def test_the_laptop_set_up_saves_each_project_s_repository_once(
         finally:
             await db.close()
 
-    assert run(body()) == laptop_db.LAPTOP_REPOS
+    # Agent Zaaheen's own workspace has no repository linked yet: it is saved with none.
+    assert run(body()) == {w.slug: laptop_db.LAPTOP_REPOS.get(w.slug) for w in laptop_db.LAPTOP_WORKSPACES}
 
 
 def test_the_form_lists_the_token_s_repositories_and_who_reads_them(laptop_url: SecretStr) -> None:

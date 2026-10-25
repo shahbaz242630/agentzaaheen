@@ -40,6 +40,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from agentzaaheen.core.api.adding import WorkspaceAdding, adding_routes
 from agentzaaheen.core.api.agents import AgentSwitches, agent_routes
+from agentzaaheen.core.api.claude_key import ClaudeKeys, claude_key_routes
 from agentzaaheen.core.api.facts import portfolio_facts, project_facts, uses_sample
 from agentzaaheen.core.api.logs import LogReader, log_routes
 from agentzaaheen.core.api.profile import WorkspaceProfiles, profile_routes
@@ -369,6 +370,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     scout: WorkspaceScout | None = None,
     summaries: WorkspaceSummaries | None = None,
     logs: LogReader | None = None,
+    claude_key: ClaudeKeys | None = None,
     on_start: Callable[[], Awaitable[None]] | None = None,
     on_close: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
@@ -385,6 +387,8 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     ``summaries`` keeps each workspace's daily summary and the Board's briefings (with a database).
     ``logs`` reads the kept log files for the Logs page (with ``--log-dir``); without it the page says
     no logs are kept.
+    ``claude_key`` saves the Claude API key into the vault after Windows Hello (with a database);
+    without it the Customize page says it cannot be saved here.
     ``on_start`` runs once the server is up, inside its event loop (the morning job starts there);
     ``on_close`` runs when the server stops (the laptop database's pool is closed there).
 
@@ -447,6 +451,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     scout_routes(app, scout, _refuse_foreign)
     summary_routes(app, summaries, _refuse_foreign)
     log_routes(app, logs)
+    claude_key_routes(app, claude_key, _refuse_foreign)
 
     async def answer(question: ChatQuestion, facts: str, sample: bool, workspace: str | None) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:

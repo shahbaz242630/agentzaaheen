@@ -36,6 +36,9 @@ from agentzaaheen.core.policy import (
     AuditDraft,
     AuditOutcome,
     Channel,
+    ClaudeKeyControl,
+    ClaudeKeyStatus,
+    ClaudeKeyVerdict,
     Ledger,
     LifecycleVerdict,
     PasskeyApprovals,
@@ -51,7 +54,9 @@ from agentzaaheen.core.policy import (
 from agentzaaheen.core.registry import Kind, Registry
 from agentzaaheen.core.registry.roles import RoleLibrary
 from agentzaaheen.core.store import Database, DatabaseSettings, StoreError, WorkspaceRow, WorkspaceRows
+from agentzaaheen.core.vault import Keyring
 from tools import laptop_db
+from tools.vault_key import CLAUDE_WORKSPACE, claude_slot
 
 LAPTOP_TENANT = laptop_db.LAPTOP_TENANT
 START_LAPTOP_DB = "uv run python -m tools.laptop_db up"
@@ -111,6 +116,7 @@ class LaptopSwitches:
         site: Site,
         enrol_code: str | None = None,
         library: RoleLibrary | None = None,
+        keyring: Keyring | None = None,
     ) -> None:
         self._settings = DatabaseSettings(dsn=url, min_size=1, max_size=4)
         self._library = library or RoleLibrary((), ())
@@ -119,6 +125,8 @@ class LaptopSwitches:
         self._workspaces: WorkspaceControl | None = None
         self._scout: ScoutControl | None = None
         self._summaries: SummaryControl | None = None
+        self._claude_key: ClaudeKeyControl | None = None
+        self._keyring = keyring
         self._site = site
         self._enrol_code = enrol_code
         self._registry = registry
@@ -147,6 +155,14 @@ class LaptopSwitches:
                 self._removal = DashboardRemoval(self._workspaces, passkeys)
                 self._scout = ScoutControl(db, LAPTOP_TENANT, self._clock)
                 self._summaries = SummaryControl(db, LAPTOP_TENANT, self._clock)
+                self._claude_key = ClaudeKeyControl(
+                    db,
+                    LAPTOP_TENANT,
+                    CLAUDE_WORKSPACE,
+                    slot=claude_slot(db, self._keyring),
+                    passkeys=passkeys,
+                    clock=self._clock,
+                )
         return self._switches
 
     async def _agents_now(self) -> DashboardAgents:
@@ -214,6 +230,15 @@ class LaptopSwitches:
         if self._summaries is None:  # pragma: no cover  # _open always sets it
             raise RuntimeError("the laptop database is not open")
         return self._summaries
+
+    # ---- the Claude key (ADR-033, F10 slice 2c): sealed after the same passkey
+
+    async def claude_key_control(self) -> ClaudeKeyControl:
+        """Saving and opening the Claude key (opens the database on first use)."""
+        await self._open()
+        if self._claude_key is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._claude_key
 
     # ---- adding a project (ADR-039, F17 slice 5a): the dashboard acts as the Chairman (no login yet)
 
@@ -329,3 +354,22 @@ class LaptopSwitches:
     async def enrol(self, code: str, credential: dict[str, Any]) -> None:
         """Keep the new passkey's public half."""
         await (await self._open()).enrol(code, credential)
+
+
+class LaptopClaudeKeys:
+    """The Claude key routes' view of the laptop database (its own object: names clash with the switches')."""
+
+    def __init__(self, switches: LaptopSwitches) -> None:
+        self._switches = switches
+
+    async def status(self) -> ClaudeKeyStatus:
+        """Whether the vault is ready and a key is saved."""
+        return await (await self._switches.claude_key_control()).status()
+
+    async def options(self, key: SecretStr) -> dict[str, Any]:
+        """Options for Windows Hello to sign saving exactly ``key``."""
+        return await (await self._switches.claude_key_control()).options(key)
+
+    async def save(self, key: SecretStr, credential: dict[str, Any] | None) -> ClaudeKeyVerdict:
+        """Seal the key once this exact save is signed."""
+        return await (await self._switches.claude_key_control()).save(key, credential)

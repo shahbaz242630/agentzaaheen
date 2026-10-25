@@ -13,8 +13,17 @@ from enum import StrEnum
 
 from pydantic import SecretStr
 
-from agentzaaheen.core.store import Access, Scoped, SealedRow, SealedSecrets, SlotKey
-from agentzaaheen.core.vault import CredentialSlot, Keyring, SealedSecret, open_secret, seal
+from agentzaaheen.core.sdk import SourceError, SourceErrorCode
+from agentzaaheen.core.store import Access, Scoped, SealedRow, SealedSecrets, SlotKey, StoreError
+from agentzaaheen.core.vault import (
+    CredentialSlot,
+    Keyring,
+    SealedSecret,
+    VaultError,
+    VaultErrorCode,
+    open_secret,
+    seal,
+)
 
 
 class BrokerErrorCode(StrEnum):
@@ -72,3 +81,56 @@ async def open_credential(scope: Scoped, keyring: Keyring, slot: CredentialSlot)
         ciphertext=row.ciphertext,
     )
     return open_secret(sealed, slot, keyring)
+
+
+class SealedSlot:
+    """One credential slot, sealed and opened here, for a caller that may not see the vault.
+
+    ``keyring`` is ``None`` when the vault's master key file was not found: then
+    nothing can be saved, and opening fails closed. Keys saved here never expire
+    on their own (``expires_at`` is left empty).
+    """
+
+    def __init__(
+        self, scope: Scoped, keyring: Keyring | None, slot: CredentialSlot, *, access: Access
+    ) -> None:
+        self._scope = scope
+        self._keyring = keyring
+        self._slot = slot
+        self._access: Access = access
+
+    @property
+    def ready(self) -> bool:
+        """Whether the vault can seal and open (its master key file was found)."""
+        return self._keyring is not None
+
+    async def save(self, secret: SecretStr) -> None:
+        """Seal ``secret`` into the slot, replacing any older one."""
+        if self._keyring is None:
+            raise VaultError(VaultErrorCode.BAD_KEY_FILE, "the vault's master key file was not found")
+        await save_credential(
+            self._scope, self._keyring, self._slot, secret, expires_at=None, access=self._access
+        )
+
+    async def open(self) -> SecretStr:
+        """The secret for one use.
+
+        Fails closed as a ``SourceError`` with the reason, so a call that needs it
+        ends as "could not be reached", never as a crash and never with a guess.
+        """
+        try:
+            if self._keyring is None:
+                raise VaultError(VaultErrorCode.BAD_KEY_FILE, "the vault's master key file was not found")
+            return await open_credential(self._scope, self._keyring, self._slot)
+        except (BrokerError, VaultError) as exc:
+            raise SourceError(
+                SourceErrorCode.AUTH,
+                f"the {self._slot.connector} key could not be opened",
+                detail_code=exc.code,
+            ) from None
+        except StoreError as exc:
+            raise SourceError(
+                SourceErrorCode.UNAVAILABLE,
+                f"the sealed {self._slot.connector} key could not be read",
+                detail_code=exc.code,
+            ) from None

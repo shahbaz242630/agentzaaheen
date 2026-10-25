@@ -6,24 +6,27 @@ one Claude client in ``core/net``, then the cost from the pinned prices. Prints
 the outcome, the short answer and what it cost; never the key.
 
 The answer is capped at ``MAX_OUTPUT_TOKENS``, so one check costs well under
-one US cent. Its cost is shown but kept in memory only, not added to the
-monthly caps in the database.
+one US cent. Its cost is added to this month's spend in the laptop database,
+like every other Claude call, so the caps count it.
 
-The key is read from the environment variable you name (never printed). Not
-``ANTHROPIC_API_KEY``: Claude Code reads that one too, and would then bill the
-API credit for its own work.
+The key is opened from the vault for this one call (F10 slice 2c): it is saved
+once on the dashboard's Customize page, sealed after Windows Hello. It is never
+read from a file or an environment variable. The laptop database must be
+running (``tools.laptop_db up``) and the vault's master key file in place
+(``tools.vault_key make-key``).
 
 Usage:
-    uv run python -m tools.claude_check --key-env AGENTZAAHEEN_CLAUDE_KEY [--model sonnet|opus]
+    uv run python -m tools.claude_check [--model sonnet|opus]
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Sequence
+from pathlib import Path
+from typing import Any
 
 import httpx
 from pydantic import SecretStr
@@ -34,15 +37,19 @@ from agentzaaheen.core.llm_gateway import (
     CloudAsk,
     FixedNames,
     KnownNames,
-    MemoryBook,
     ModelGate,
     PromptPart,
+    SpendBook,
     SpendLedger,
+    StoreBook,
     Use,
 )
 from agentzaaheen.core.llm_gateway.model_map import usd
 from agentzaaheen.core.net import ClaudeClient
 from agentzaaheen.core.sdk import DataClass, ModelLevel, explain
+from agentzaaheen.core.store import Database, DatabaseSettings, ModelCalls
+from agentzaaheen.core.vault import Keyring
+from tools import laptop_db, vault_key
 
 MAX_OUTPUT_TOKENS = 64
 LEVELS = {"sonnet": ModelLevel.SONNET, "opus": ModelLevel.OPUS}
@@ -50,22 +57,19 @@ SYSTEM = PromptPart(
     "You are checking that a connection works. Answer in one short sentence.", DataClass.PUBLIC
 )
 TASK = PromptPart("Say that the connection to Claude works.", DataClass.PUBLIC)
-RESERVED_ENV = "ANTHROPIC_API_KEY"
+NO_KEY_SAVED = "credential.missing"
+
+KeySource = Callable[[], Awaitable[SecretStr]]
+Prepare = Callable[[], Coroutine[Any, Any, SecretStr | None]]
 
 
 async def check(
-    key: SecretStr, level: ModelLevel, transport: httpx.AsyncBaseTransport | None = None
+    key: KeySource, level: ModelLevel, book: SpendBook, transport: httpx.AsyncBaseTransport | None = None
 ) -> Answer:
-    """One call through the gate and the door."""
-
-    async def key_source() -> SecretStr:
-        return key
-
+    """One call through the gate and the door, its cost written to ``book``."""
     pinned = frozenset(entry.model_id for entry in MODELS.values() if entry.cloud)
-    gate = ModelGate(
-        SpendLedger(MemoryBook()), FixedNames(KnownNames.empty())
-    )  # our own words: no names to hold
-    async with ClaudeClient(key_source, models=pinned, transport=transport) as door:
+    gate = ModelGate(SpendLedger(book), FixedNames(KnownNames.empty()))  # our own words: no names to hold
+    async with ClaudeClient(key, models=pinned, transport=transport) as door:
         return await CloudAsk(gate, door).ask(
             role="claude-check",
             role_level=level,
@@ -78,13 +82,31 @@ async def check(
         )
 
 
+async def check_saved_key(
+    url: SecretStr, keyring: Keyring, level: ModelLevel, transport: httpx.AsyncBaseTransport | None
+) -> Answer:
+    """The check with the key sealed in the laptop database, its cost added to the month's spend."""
+    db = await Database.open(DatabaseSettings(dsn=url, min_size=1, max_size=2))
+    try:
+        slot = vault_key.claude_slot(db, keyring)
+        book = StoreBook(ModelCalls(db.scoped(laptop_db.LAPTOP_TENANT)))
+        return await check(slot.open, level, book, transport)
+    finally:
+        await db.close()
+
+
 def report(answer: Answer, model: str) -> tuple[int, list[str]]:
     """The exit code and the lines to print."""
     if answer.outcome == "answered":
         return 0, [
             f"claude-check: {model} answered.",
             f"  Answer: {answer.text.strip()[:200]}",
-            f"  Cost: USD {usd(answer.cost_micro)} (not added to the monthly caps)",
+            f"  Cost: USD {usd(answer.cost_micro)} (added to this month's spend)",
+        ]
+    if answer.reason == NO_KEY_SAVED:
+        return 1, [
+            f"claude-check: {model} was not called: no Claude key is saved.",
+            "  Save it once on the dashboard's Customize page (Windows Hello confirms it), then try again.",
         ]
     if answer.reason:
         said = explain(answer.reason, vendor="claude")
@@ -99,30 +121,24 @@ def report(answer: Answer, model: str) -> tuple[int, list[str]]:
 def main(
     argv: Sequence[str] | None = None,
     *,
-    environ: Mapping[str, str] | None = None,
+    key_file: Path = vault_key.KEY_FILE,
+    prepare: Prepare = laptop_db.prepare,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> int:
     """Run the check; 0 when Claude answered, 1 otherwise."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--key-env", required=True, help="name of the env var holding the Claude API key")
     parser.add_argument("--model", choices=sorted(LEVELS), default="sonnet")
     ns = parser.parse_args(argv)
-    if ns.key_env == RESERVED_ENV:
-        print(f"claude-check: do not use {RESERVED_ENV}; Claude Code would bill the API for its own work.")
-        print("  Put the key in AGENTZAAHEEN_CLAUDE_KEY instead.")
+    keyring = vault_key.load_keyring(key_file)
+    if keyring is None:
+        print("claude-check: could not run, not a pass.")
         return 1
-    raw = (os.environ if environ is None else environ).get(ns.key_env, "").strip()
-    if not raw:
-        print(f"claude-check: {ns.key_env} is not set (could not run, not a pass).")
-        return 1
-    if not raw.isascii() or not raw.isprintable() or " " in raw:
-        print("claude-check: the key contains spaces or control characters; copy it again.")
-        return 1
-    if not raw.startswith("sk-ant-"):
-        print("claude-check: that does not look like a Claude API key (they start with sk-ant-).")
+    url = asyncio.run(prepare())
+    if url is None:
+        print("claude-check: the laptop database is not running. Start it: python -m tools.laptop_db up")
         return 1
     level = LEVELS[ns.model]
-    answer = asyncio.run(check(SecretStr(raw), level, transport))
+    answer = asyncio.run(check_saved_key(url, keyring, level, transport))
     code, lines = report(answer, MODELS[level].model_id)
     for line in lines:
         print(line)

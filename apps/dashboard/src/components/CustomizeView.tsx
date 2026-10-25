@@ -1,8 +1,17 @@
 import { Compass, Search, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { ApiError, api, type ItemState, type Kind, type PasskeyStatus, type RegistryPage } from "../api";
-import { PasskeyProblem, approveWithPasskey, onPasskeyAddress, setUpPasskey } from "../passkey";
+import {
+  ApiError,
+  api,
+  type ClaudeKeyStatus,
+  type ItemState,
+  type Kind,
+  type PasskeyStatus,
+  type RegistryPage,
+} from "../api";
+import { PasskeyProblem, approveWithPasskey, onPasskeyAddress, setUpPasskey, withPasskeyIfNeeded } from "../passkey";
+import { ClaudeKeyPanel } from "./ClaudeKeyPanel";
 import { PasskeyPanel } from "./PasskeyPanel";
 import { ConnectorCard, PluginCard, SkillCard, skillTitle } from "./RegistryCards";
 import { RequestList, SwitchControl, reason } from "./RegistrySwitch";
@@ -69,6 +78,7 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passkey, setPasskey] = useState<PasskeyStatus | null>(null);
+  const [claudeKey, setClaudeKey] = useState<ClaudeKeyStatus | null>(null);
 
   useEffect(() => {
     if (!page.switches) return;
@@ -79,6 +89,14 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
       },
       () => {
         if (live) setPasskey(null);
+      },
+    );
+    api.claudeKey().then(
+      (status) => {
+        if (live) setClaudeKey(status);
+      },
+      () => {
+        if (live) setClaudeKey(null);
       },
     );
     return () => {
@@ -133,6 +151,25 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
     );
   }
 
+  function saveClaudeKey(key: string) {
+    setBusy(true);
+    setError(null);
+    withPasskeyIfNeeded(
+      () => api.saveClaudeKey(key),
+      () => api.claudeKeyOptions(key),
+      (credential) => api.saveClaudeKey(key, credential),
+    ).then(
+      (status) => {
+        setClaudeKey(status);
+        setBusy(false);
+      },
+      (failure: unknown) => {
+        setError(explain(failure));
+        setBusy(false);
+      },
+    );
+  }
+
   function control(kind: Kind, id: string, state: ItemState) {
     if (!page.switches) return undefined;
     return (
@@ -166,6 +203,15 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
 
       {page.switches && passkey !== null && (
         <PasskeyPanel status={passkey} onAddress={onPasskeyAddress()} busy={busy} onSetUp={setUp} />
+      )}
+
+      {page.switches && claudeKey?.switches === true && (
+        <ClaudeKeyPanel
+          status={claudeKey}
+          canSign={passkey?.enrolled === true && onPasskeyAddress()}
+          busy={busy}
+          onSave={saveClaudeKey}
+        />
       )}
 
       {error !== null && (
