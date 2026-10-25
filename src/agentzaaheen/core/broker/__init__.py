@@ -7,7 +7,8 @@ What it does:
     channel; for now callers in the core use :func:`open_credential` directly.
 
 Public interface:
-    ``save_credential``, ``open_credential``, ``BrokerError``, ``BrokerErrorCode``.
+    ``save_credential``, ``open_credential``, ``SealedSlot`` (one slot, for callers
+    that may not see the vault), ``BrokerError``, ``BrokerErrorCode``.
 
 How to test:
     ``uv run pytest tests/integration/test_broker.py`` (needs the dev database).
@@ -17,6 +18,12 @@ Must never:
     be imported by a plugin, the SDK, the store, metrics or the network module.
 """
 
-from agentzaaheen.core.broker.keys import BrokerError, BrokerErrorCode, open_credential, save_credential
+from agentzaaheen.core.broker.keys import (
+    BrokerError,
+    BrokerErrorCode,
+    SealedSlot,
+    open_credential,
+    save_credential,
+)
 
-__all__ = ["BrokerError", "BrokerErrorCode", "open_credential", "save_credential"]
+__all__ = ["BrokerError", "BrokerErrorCode", "SealedSlot", "open_credential", "save_credential"]

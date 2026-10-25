@@ -419,6 +419,15 @@ function logsPath(filters: LogFilters): string {
 export const PasskeyStatus = z.strictObject({ enrolled: z.boolean(), enrolment_open: z.boolean() });
 export type PasskeyStatus = z.infer<typeof PasskeyStatus>;
 
+// The Claude API key (ADR-033): only whether it is saved and when, never the key itself.
+export const ClaudeKeyStatus = z.strictObject({
+  switches: z.boolean(),
+  vault: z.boolean(),
+  saved: z.boolean(),
+  saved_at: z.string().nullable(),
+});
+export type ClaudeKeyStatus = z.infer<typeof ClaudeKeyStatus>;
+
 // WebAuthn options as JSON, handed straight to the browser's own parser (it checks them).
 const PasskeyOptions = z.strictObject({ options: z.record(z.string(), z.unknown()) });
 
@@ -528,6 +537,12 @@ export const api = {
   makeSummaries: () => postJson("/api/summaries/make", {}, Made),
   // The Logs page: read-only.
   logs: (filters: LogFilters) => getJson(logsPath(filters), LogsPage),
+  // The Claude key: saving answers `claude_key.needs_passkey` until Windows Hello signs that exact save.
+  claudeKey: () => getJson("/api/claude-key", ClaudeKeyStatus),
+  saveClaudeKey: (key: string, credential?: unknown) =>
+    postJson("/api/claude-key", { key, credential }, ClaudeKeyStatus),
+  claudeKeyOptions: async (key: string) =>
+    (await postJson("/api/claude-key/options", { key }, PasskeyOptions)).options,
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),

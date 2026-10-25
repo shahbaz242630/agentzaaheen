@@ -45,6 +45,12 @@ from agentzaaheen.core.policy.audit import (
     append,
     verify_chain,
 )
+from agentzaaheen.core.policy.claude_key import (
+    ClaudeKeyControl,
+    ClaudeKeyStatus,
+    ClaudeKeyVerdict,
+    key_problem,
+)
 from agentzaaheen.core.policy.gate import (
     MAX_TOOLS_PER_AGENT,
     AgentPolicy,
@@ -94,6 +100,9 @@ __all__ = [
     "ChainAnchor",
     "ChainReport",
     "Channel",
+    "ClaudeKeyControl",
+    "ClaudeKeyStatus",
+    "ClaudeKeyVerdict",
     "Decision",
     "DenyReason",
     "Effect",
@@ -124,6 +133,7 @@ __all__ = [
     "audit_draft",
     "authorize",
     "decide",
+    "key_problem",
     "load_kill_switches",
     "slug_of",
     "verify_chain",

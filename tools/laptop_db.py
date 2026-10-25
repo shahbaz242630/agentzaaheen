@@ -76,6 +76,8 @@ LAPTOP_WORKSPACES = tuple(
         ("agent-x", "Agent X"),
         ("eva", "Eva"),
         ("family-checkin", "Family Check-in"),
+        # Agent Zaaheen itself (Chairman, 25 Oct 2026): it runs 24/7 too, and holds the shared Claude key.
+        ("agentzaaheen", "Agent Zaaheen"),
     )
 )
 # Which repository each project reads (checked against the local clones, 20 Oct 2026).

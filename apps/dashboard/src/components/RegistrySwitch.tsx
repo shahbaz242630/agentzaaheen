@@ -30,6 +30,11 @@ const REASON: Record<string, string> = {
   "passkey.wrong_code": "That code doesn't match the one shown when the dashboard started.",
   "passkey.enrol_closed": "Passkey set-up is closed. Start the dashboard with --enrol-passkey to open it.",
   "passkey.not_verified": "Windows Hello did not confirm it. Please try again.",
+  "claude_key.bad_key": "That doesn't look like a Claude API key (they start with sk-ant-). Copy it again from the Claude Console.",
+  "claude_key.passkey_failed": "Windows Hello did not confirm it, so the key was not saved. Please try again.",
+  "claude_key.no_vault": "The vault has no master key yet. Run: uv run python -m tools.vault_key make-key, then restart the dashboard.",
+  "claude_key.read_only": "Saving the Claude key needs the laptop database. Start the dashboard with --switches.",
+  "claude_key.store_unavailable": "The laptop database did not answer. Is it running?",
 };
 
 export function reason(code: string | null): string {

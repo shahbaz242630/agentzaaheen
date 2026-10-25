@@ -64,12 +64,12 @@ class Saved:
     new: int
 
 
-def make_key(path: Path = KEY_FILE) -> bool:
+def make_key(path: Path = KEY_FILE, key_id: str = KEY_ID) -> bool:
     """Create the key file; ``False`` (and nothing changed) if one is already there."""
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with path.open("x", encoding="ascii") as handle:  # "x": never overwrite a key
-            handle.write(MasterKey.generate(KEY_ID).to_file_text())
+            handle.write(MasterKey.generate(key_id).to_file_text())
     except FileExistsError:
         return False
     if os.name == "posix":
