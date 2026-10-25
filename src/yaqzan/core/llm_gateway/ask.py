@@ -48,12 +48,18 @@ class ClaudeDoor(Protocol):
 
 @dataclass(frozen=True)
 class Answer:
-    """What happened to one ask: ``outcome`` is ``"answered"`` or why not; ``cost_micro`` is what it cost."""
+    """What happened to one ask: ``outcome`` is ``"answered"`` or why not; ``cost_micro`` is what it cost.
+
+    When Claude could not be reached, ``reason`` is the network's code (``net.auth``,
+    ``net.rate_limited``, ...) and ``status`` the HTTP status, if there was one.
+    """
 
     outcome: str
     text: str = ""
     stop_reason: str = ""
     cost_micro: int = 0
+    reason: str = ""
+    status: int | None = None
 
 
 class CloudAsk:
@@ -109,7 +115,7 @@ class CloudAsk:
                 run_id=run_id,
                 code=exc.reason_code,
             )
-            return Answer(UNREACHABLE)
+            return Answer(UNREACHABLE, reason=exc.reason_code, status=exc.status)
         usage = Usage(
             input_tokens=reply.input_tokens,
             output_tokens=reply.output_tokens,

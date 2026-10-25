@@ -155,7 +155,7 @@ def test_an_unreachable_claude_is_did_not_run_with_no_cost_and_no_weaker_answer(
 ) -> None:
     door = FakeDoor(NetError(NetErrorCode.RATE_LIMITED, "busy", status=529))
     asker, ledger = setup(door)
-    assert ask(asker) == Answer("model.unreachable")
+    assert ask(asker) == Answer("model.unreachable", reason="net.rate_limited", status=529)
     assert len(door.calls) == 1  # asked once, never retried, never handed to another model
     assert asyncio.run(ledger.allows(Use.HEADS, 0)).spent_micro == 0
     assert lines[-1]["event"] == "model_cloud_call_failed"
