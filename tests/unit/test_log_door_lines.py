@@ -26,7 +26,7 @@ from yaqzan.core.llm_gateway import FactChat
 from yaqzan.core.llm_gateway.tools import Tool
 from yaqzan.core.net import JsonClient, ModelClient, NetError, NetPolicy, PushClient, StatusProbe
 from yaqzan.core.store import StoreError, StoreErrorCode
-from yaqzan.core.store.db import Database
+from yaqzan.core.store.db import Database, written
 
 NOW = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
 HOST = "api.example.com"
@@ -237,6 +237,41 @@ def test_a_store_error_raised_inside_the_write_is_logged_too(capsys: pytest.Capt
     with pytest.raises(StoreError):
         asyncio.run(body())
     assert [line["code"] for line in lines(capsys, "store_write_failed")] == ["store.conflict"]
+
+
+def test_a_write_that_found_its_row_already_there_says_nothing_needed_writing(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async def body() -> list[bool]:
+        db = Database(_Pool())  # type: ignore[arg-type]  # a fake pool
+        async with db.write("a workspace"):
+            first = written(None)  # ON CONFLICT DO NOTHING gave no row back
+        async with db.write("a workspace"):
+            second = written("ws-1")
+        return [first, second]
+
+    assert asyncio.run(body()) == [False, True]
+    err = capsys.readouterr().err
+    unchanged = [json.loads(raw) for raw in err.splitlines() if '"store_unchanged"' in raw]
+    saved = [json.loads(raw) for raw in err.splitlines() if '"store_saved"' in raw]
+    assert [line["what"].split(" (")[0] for line in unchanged] == ["Nothing needed writing for a workspace"]
+    # The next write starts afresh: one "nothing" never makes a later real write look unchanged.
+    assert [line["record"] for line in saved] == ["a workspace"]
+
+
+def test_nothing_written_inside_a_write_does_not_leak_out_of_it(capsys: pytest.CaptureFixture[str]) -> None:
+    async def body() -> None:
+        db = Database(_Pool())  # type: ignore[arg-type]  # a fake pool
+        async with db.write("an outer record"), db.write("an inner record"):
+            written(None)
+        async with db.write("a later record"):
+            pass
+
+    asyncio.run(body())
+    err = capsys.readouterr().err
+    unchanged = [json.loads(raw)["record"] for raw in err.splitlines() if '"store_unchanged"' in raw]
+    saved = [json.loads(raw)["record"] for raw in err.splitlines() if '"store_saved"' in raw]
+    assert (unchanged, saved) == (["an inner record"], ["an outer record", "a later record"])
 
 
 # --- chat tools ----------------------------------------------------------------------------------

@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from yaqzan.core.store.db import Scoped, require_aware
+from yaqzan.core.store.db import Scoped, require_aware, written
 
 _ACTIVE = """
 SELECT credential_id, public_key, sign_count, created_by, created_at, last_used_at
@@ -72,7 +72,7 @@ class PasskeyRows:
                 row.created_by,
                 row.created_at,
             )
-        return added is not None
+            return written(added)
 
     async def replace(self, row: PasskeyRow) -> bool:
         """Revoke the active passkey and add ``row``, all or nothing. False if the new one was not added."""
@@ -99,7 +99,7 @@ class PasskeyRows:
         """Move the counter forward after a verified use. False if unknown, revoked or going backwards."""
         require_aware(at)
         async with self._scope.write("a passkey's use counter") as conn:
-            return await conn.fetchval(_USED, self._tenant, credential_id, sign_count, at) is not None
+            return written(await conn.fetchval(_USED, self._tenant, credential_id, sign_count, at))
 
 
 class _RollbackError(Exception):
