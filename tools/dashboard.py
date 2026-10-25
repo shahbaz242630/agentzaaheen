@@ -52,7 +52,7 @@ in ``--briefing-zone`` (default Asia/Dubai) (``tools.dashboard_summaries``).
 With ``--briefing-ping-env NAME`` each sent briefing pings that Healthchecks
 check, which alerts the phone when no briefing arrives. With ``--log-dir DIR``
 every log line (redacted, as on screen) is also kept in DIR, one file a day,
-for 30 days (ADR-034; on the laptop: ``~/AppData/Local/Yaqzan/logs``).
+for 30 days, and the Logs page reads them (ADR-034; on the laptop: ``~/AppData/Local/Yaqzan/logs``).
 
 Usage:
     cd apps/dashboard && npm ci && npm run build     # once, and after UI changes
@@ -122,7 +122,7 @@ from yaqzan.core.registry.roles import RoleLibrary, load_roles
 from yaqzan.core.scheduler import DEFAULT_ZONE
 from yaqzan.core.sdk import SiteRule, span
 from yaqzan.core.store import ScoutRun, WorkspaceRow
-from yaqzan.core.telemetry import LogFile
+from yaqzan.core.telemetry import LogFile, LogFolder
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
@@ -486,6 +486,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         profiles=profiles,
         scout=scout,
         summaries=summaries,
+        logs=LogFolder(ns.log_dir.expanduser()) if ns.log_dir is not None else None,
         on_start=summaries.start if summaries is not None else None,
         on_close=_closer(switches, scout, summaries),
     )

@@ -388,6 +388,33 @@ export const Briefings = z.strictObject({ connected: z.boolean(), briefings: z.a
 export type Briefings = z.infer<typeof Briefings>;
 const Made = z.strictObject({ made: z.int().nonnegative(), failed: z.int().nonnegative() });
 
+// The kept log lines (ADR-034 slice 3). Mirrors src/yaqzan/core/api/logs.py. Only our own
+// sentences and plain values arrive: codes, names, counts and durations.
+export const LogLevel = z.enum(["info", "warning", "error"]);
+export type LogLevel = z.infer<typeof LogLevel>;
+export const LogLine = z.strictObject({
+  timestamp: z.string().nullable(),
+  level: LogLevel,
+  event: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+  component: z.string().nullable(),
+  what: z.string().nullable(),
+  why: z.string().nullable(),
+  next: z.string().nullable(),
+  trace_id: z.string().regex(/^[0-9a-f]{32}$/).nullable(),
+  fields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+});
+export type LogLine = z.infer<typeof LogLine>;
+export const LogsPage = z.strictObject({ kept: z.boolean(), lines: z.array(LogLine), more: z.boolean(), cut: z.boolean() });
+export type LogsPage = z.infer<typeof LogsPage>;
+export type LogFilters = { level: LogLevel; days: number; project?: string | undefined; trace?: string | undefined };
+
+function logsPath(filters: LogFilters): string {
+  const query = new URLSearchParams({ level: filters.level, days: String(filters.days) });
+  if (filters.project) query.set("project", filters.project);
+  if (filters.trace) query.set("trace", filters.trace);
+  return `/api/logs?${query.toString()}`;
+}
+
 // The Chairman's passkey (ADR-SEC-007): whether it exists, and whether it may be set up on this run.
 export const PasskeyStatus = z.strictObject({ enrolled: z.boolean(), enrolment_open: z.boolean() });
 export type PasskeyStatus = z.infer<typeof PasskeyStatus>;
@@ -499,6 +526,8 @@ export const api = {
   workspaceSummaries: (slug: string) => getJson(`${workspacePath(slug)}/summaries`, WorkspaceSummaries),
   briefings: () => getJson("/api/briefings", Briefings),
   makeSummaries: () => postJson("/api/summaries/make", {}, Made),
+  // The Logs page: read-only.
+  logs: (filters: LogFilters) => getJson(logsPath(filters), LogsPage),
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),
