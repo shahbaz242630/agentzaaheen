@@ -115,6 +115,7 @@ def test_a_switch_turned_off_stays_off_after_a_restart(ui: Path, laptop_url: Sec
             "supabase": "on",
             "uptime": "on",
             "check-slo": "on",
+            "read-logs": "on",
             "trace-request": "on",
             "triage-failing-build": "on",
             "triage-outage": "on",
@@ -123,6 +124,7 @@ def test_a_switch_turned_off_stays_off_after_a_restart(ui: Path, laptop_url: Sec
         assert response.status_code == 200
         assert {s["id"]: s["state"] for s in response.json()["skills"]} == {
             "check-slo": "on",
+            "read-logs": "on",
             "trace-request": "on",
             "triage-failing-build": "off",  # only the one switched off
             "triage-outage": "on",

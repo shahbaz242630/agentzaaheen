@@ -45,7 +45,13 @@ def test_the_skill_tool_offers_only_skills_the_model_may_pick(tmp_path: Path) ->
     write_skill(root, "ask-me-first", "metadata:\n  invocation: manual\n")
     tool, skills = chat_tools.skill_tool(load_registry(root), root)
     assert tool is not None
-    assert tool.choices == ("check-slo", "trace-request", "triage-failing-build", "triage-outage")
+    assert tool.choices == (
+        "check-slo",
+        "read-logs",
+        "trace-request",
+        "triage-failing-build",
+        "triage-outage",
+    )
     assert tool.trusted is True
     assert skills.startswith("- check-slo: Say how each project")
     assert "- triage-failing-build: Work out why" in skills
