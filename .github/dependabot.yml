@@ -30,4 +30,9 @@ updates:
     groups:
       dashboard-dependencies:
         patterns: ["*"]
+    ignore:
+      # TypeScript 7 (25 Oct 2026): typescript-eslint 8.71 does not accept it yet (npm ERESOLVE in #37).
+      # Lift this once typescript-eslint supports 7, and move over in its own PR.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
