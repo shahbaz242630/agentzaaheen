@@ -14,6 +14,6 @@
   // Workers Logs: every run's log lines kept by Cloudflare (free plan: 3 days), so a failed run can be read afterwards.
   "observability": { "enabled": true },
   "d1_databases": [
-    { "binding": "DB", "database_name": "agentzaaheen-checker", "database_id": "72a627f7-aca9-4984-b5e0-c5aca19aebe8" }
+    { "binding": "DB", "database_name": "agentzaaheen-checker", "database_id": "536927ad-6da6-44c8-a562-343c6285155d" }
   ]
 }
