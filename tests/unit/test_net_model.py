@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 
 import httpx
@@ -66,7 +66,7 @@ def test_posts_one_chat_request_and_returns_the_text() -> None:
         "messages": QUESTION,
         "max_tokens": 64,
         "temperature": 0.2,
-        "stream": False,
+        "stream": True,  # so Cloudflare sees the answer start (and pings) within 100 s
     }
 
 
@@ -219,6 +219,107 @@ def test_a_failure_never_carries_the_prompt_or_answer() -> None:
     error = failure(handler)
     assert "How is revenue" not in str(error)
     assert "How is revenue" not in repr(error.args)
+
+
+# ---------------------------------------------------------------- streamed answers
+
+
+def sse(*events: object, done: bool = True) -> bytes:
+    """A stream as llama.cpp sends it: a ping while it reads the prompt, then one ``data:`` line per piece."""
+    lines = [":", ""]  # the 30-second ping, then the blank line that ends it
+    for event in events:
+        lines += [f"data: {json.dumps(event)}", ""]
+    if done:
+        lines += ["data: [DONE]", ""]
+    return ("\n".join(lines) + "\n").encode()
+
+
+def piece(text: str) -> dict[str, object]:
+    return {"choices": [{"index": 0, "delta": {"content": text}, "finish_reason": None}]}
+
+
+ROLE = {"choices": [{"index": 0, "delta": {"role": "assistant", "content": None}}]}
+FINISH = {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+PROGRESS = {"choices": [], "prompt_progress": {"total": 900, "cache": 0, "processed": 512, "time_ms": 15000}}
+
+
+class Chunks(httpx.AsyncByteStream):
+    """``body`` arriving ``size`` bytes at a time, as a network may cut it."""
+
+    def __init__(self, body: bytes, size: int) -> None:
+        self._body, self._size = body, size
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        for i in range(0, len(self._body), self._size):
+            yield self._body[i : i + self._size]
+
+
+def event_stream(stream: httpx.AsyncByteStream) -> httpx.Response:
+    return httpx.Response(200, headers={"Content-Type": "text/event-stream; charset=utf-8"}, stream=stream)
+
+
+def streamed(body: bytes, chunk: int | None = None) -> Handler:
+    """Answer with ``body`` as an event stream, in ``chunk``-byte pieces (default: all at once)."""
+    return lambda request: event_stream(Chunks(body, chunk or len(body)))
+
+
+def test_a_streamed_answer_is_joined_into_one_text() -> None:
+    body = sse(ROLE, PROGRESS, piece("Revenue "), piece("is "), piece("steady."), FINISH)
+    assert ask(streamed(body)) == "Revenue is steady."
+
+
+@pytest.mark.parametrize("chunk", [1, 3, 7, 64])
+def test_pieces_split_anywhere_by_the_network_still_join_correctly(chunk: int) -> None:
+    body = sse(ROLE, piece("Ventes "), piece("été — "), piece("مرحبا"), FINISH)  # multi-byte letters too
+    assert ask(streamed(body, chunk)) == "Ventes été — مرحبا"
+
+
+def test_windows_line_ends_are_read_the_same() -> None:
+    body = sse(piece("ok"), FINISH).replace(b"\n", b"\r\n")
+    assert ask(streamed(body)) == "ok"
+
+
+def test_reasoning_pieces_are_not_part_of_the_answer() -> None:
+    thinking = {"choices": [{"index": 0, "delta": {"reasoning_content": "secret plan"}}]}
+    assert ask(streamed(sse(thinking, piece("Answer."), FINISH))) == "Answer."
+
+
+def test_a_stream_cut_off_before_done_is_refused_not_half_used() -> None:
+    error = failure(streamed(sse(piece("Revenue is "), done=False)))
+    assert error.net_code is NetErrorCode.BAD_RESPONSE
+    assert "Revenue" not in str(error)
+
+
+def test_an_error_inside_the_stream_is_a_server_error() -> None:
+    oops = {"error": {"code": 500, "message": "context full: How is revenue?", "type": "server_error"}}
+    error = failure(streamed(sse(piece("Rev"), oops)))
+    assert error.net_code is NetErrorCode.SERVER_ERROR
+    assert "How is revenue" not in str(error)
+
+
+BROKEN_UTF8 = b"\xc3\x28"
+
+
+@pytest.mark.parametrize("line", [b"data: not json", b"data: [1, 2]", b"data: " + BROKEN_UTF8])
+def test_a_garbled_piece_is_a_bad_response(line: bytes) -> None:
+    body = sse(piece("ok")).replace(b"data: [DONE]", line + b"\n\ndata: [DONE]")
+    assert failure(streamed(body)).net_code is NetErrorCode.BAD_RESPONSE
+
+
+def test_an_oversized_stream_is_refused_as_it_arrives() -> None:
+    body = sse(*[piece("x" * 100) for _ in range(30)], FINISH)
+    error = failure(streamed(body, chunk=50), max_response_bytes=1000)
+    assert error.net_code is NetErrorCode.TOO_LARGE
+
+
+def test_the_whole_call_has_one_deadline_even_while_pings_keep_arriving() -> None:
+    class Pings(httpx.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            while True:  # a server that pings for ever and never answers
+                yield b":\n\n"
+                await asyncio.sleep(0.01)
+
+    assert failure(lambda request: event_stream(Pings()), timeout_s=0.2).net_code is NetErrorCode.TIMEOUT
 
 
 # ---------------------------------------------------------------- our server, behind Cloudflare Access
