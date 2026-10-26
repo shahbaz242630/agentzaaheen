@@ -29,6 +29,7 @@ never repaired or guessed (:class:`ScoutError`).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Sequence
@@ -70,6 +71,13 @@ Answer with ONE JSON object and nothing else, in this shape:
 Give one entry in "roles" for every role in the list."""
 
 ANSWER_FORMAT = SYSTEM_PROMPT.split("Answer with ONE JSON object", 1)[1]
+# What the scout runs, as one fingerprint: a run record names exactly these instructions (F11).
+INSTRUCTIONS_VERSION = hashlib.sha256(SYSTEM_PROMPT.encode("utf-8")).hexdigest()
+# Said back to the model when its answer is refused (F11 slice 2): our own words, never its text.
+REFUSAL_TELLS = {
+    "scout.not_json": "it was not one JSON object (a ```json fence around it is allowed, nothing else).",
+    "scout.bad_answer": 'it needs a "summary" text and a "roles" list, in the shape given.',
+}
 
 
 class ScoutError(Exception):

@@ -28,7 +28,7 @@ from agentzaaheen.core.api.registry import DashboardSwitches, PasskeyStatus, Reg
 from agentzaaheen.core.api.removal import DashboardRemoval
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.auth import Site
-from agentzaaheen.core.llm_gateway import Inspect, SpendLedger, StoreBook, claude_lines
+from agentzaaheen.core.llm_gateway import ChatModel, Inspect, SpendLedger, StoreBook, claude_lines
 from agentzaaheen.core.policy import (
     Added,
     AgentControl,
@@ -61,6 +61,7 @@ from agentzaaheen.core.policy import (
 )
 from agentzaaheen.core.registry import Kind, Registry
 from agentzaaheen.core.registry.roles import RoleLibrary
+from agentzaaheen.core.runner import Runner
 from agentzaaheen.core.store import (
     Database,
     DatabaseSettings,
@@ -139,6 +140,7 @@ class LaptopSwitches:
         self._settings = DatabaseSettings(dsn=url, min_size=1, max_size=4)
         self._library = library or RoleLibrary((), ())
         self._agents: DashboardAgents | None = None
+        self._agent_control: AgentControl | None = None
         self._removal: DashboardRemoval | None = None
         self._workspaces: WorkspaceControl | None = None
         self._scout: ScoutControl | None = None
@@ -169,7 +171,7 @@ class LaptopSwitches:
                     db, LAPTOP_TENANT, control, self._site, enrol_code=self._enrol_code, clock=self._clock
                 )
                 self._switches = DashboardSwitches(control, passkeys, self._registry, self._uses, self._clock)
-                agents = AgentControl(db, LAPTOP_TENANT, self._library, self._clock)
+                agents = self._agent_control = AgentControl(db, LAPTOP_TENANT, self._library, self._clock)
                 self._agents = DashboardAgents(agents, passkeys, self._library)
                 self._workspaces = WorkspaceControl(db, LAPTOP_TENANT, self._clock)
                 self._removal = DashboardRemoval(self._workspaces, passkeys)
@@ -220,6 +222,13 @@ class LaptopSwitches:
     async def runs_report(self, workspace: WorkspaceRow, since: datetime) -> RunsReport:
         """A workspace's agent runs since ``since`` that did not run or were skipped (its daily summary)."""
         return await (await self._agents_now()).runs_report(workspace, since)
+
+    async def runner(self, model: ChatModel | None) -> Runner:
+        """The runner every agent run and built-in job starts through (F11), with ``model``."""
+        await self._open()
+        if self._db is None or self._agent_control is None:  # pragma: no cover  # _open always sets them
+            raise RuntimeError("the laptop database is not open")
+        return Runner(self._db, LAPTOP_TENANT, self._agent_control, {}, self._clock, model=model)
 
     async def stop_switches(self) -> list[EngagedSwitch]:
         """Every stop switch that is on (the briefing names each one, F11)."""

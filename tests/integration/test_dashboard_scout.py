@@ -1,11 +1,17 @@
-"""The scout on the laptop: a run in the background, its stages, and every way it can end (F17 slice 5b-2)."""
+"""The scout on the laptop: a run in the background, its stages, and every way it can end (F17 slice 5b-2).
+
+Since F11 slice 2 every run goes through the real runner (a built-in job), so these tests use the test
+database for the runner's own records; the scout's store stays a stand-in. A refused answer is sent back
+with the reason at most twice; then the run needs a look.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import base64
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -18,16 +24,27 @@ from pydantic import SecretStr
 from agentzaaheen.core.api import SamplePortfolio, create_app
 from agentzaaheen.core.api.app import REQUEST_HEADER
 from agentzaaheen.core.api.scout import Asked, scout_view
-from agentzaaheen.core.policy import ScoutControl, ScoutVerdict
+from agentzaaheen.core.policy import AgentControl, ScoutControl, ScoutVerdict
 from agentzaaheen.core.registry.roles import RoleLibrary, RolePack
+from agentzaaheen.core.runner import Runner, system_agent_id
 from agentzaaheen.core.sdk import SourceError, SourceErrorCode
-from agentzaaheen.core.store import ScoutRun, StoreError, StoreErrorCode, WorkspaceRow
+from agentzaaheen.core.store import (
+    KillSwitchRows,
+    ScoutRun,
+    StoreError,
+    StoreErrorCode,
+    SwitchScope,
+    WorkspaceRow,
+)
+from tests.integration.conftest import ScratchDb, add_workspaces, open_db
 from tools.dashboard_profile import LaptopProfiles
 from tools.dashboard_scout import CRASHED, LaptopScout
 
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 REPO = "owner/shop"
 SHOP = WorkspaceRow(uuid4(), "shop", "Shop")
+CAFE = WorkspaceRow(uuid4(), "cafe", "Cafe")
+TENANT = UUID("00000000-0000-4000-8000-0000000000d1")
 TOKEN = SecretStr("github_pat_" + "w" * 30)
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}
 LIBRARY = RoleLibrary(
@@ -72,9 +89,9 @@ def github(request: httpx.Request) -> httpx.Response:
 
 
 class Model:
-    """A pretend model: answers ``reply`` (or raises it), and keeps the messages it was sent."""
+    """A pretend model: answers ``reply`` (or raises it; a list in turn), keeping what it was sent."""
 
-    def __init__(self, reply: str | Exception = GOOD) -> None:
+    def __init__(self, reply: str | Exception | list[str] = GOOD) -> None:
         self.reply = reply
         self.sent: list[Sequence[Mapping[str, str]]] = []
         self.busy = 0
@@ -90,6 +107,8 @@ class Model:
         self.busy -= 1
         if isinstance(self.reply, Exception):
             raise self.reply
+        if isinstance(self.reply, list):
+            return self.reply[min(len(self.sent), len(self.reply)) - 1]
         return self.reply
 
 
@@ -147,29 +166,65 @@ class Control:
         return None
 
 
+_DB: dict[str, str] = {}
+
+
+@pytest.fixture(autouse=True)
+def _database(test_db: ScratchDb) -> None:
+    _DB["url"] = test_db.app_url
+    asyncio.run(add_workspaces(test_db.app_url, TENANT, SHOP.workspace_id, CAFE.workspace_id))
+
+
+class Lab:
+    """A scout whose runs go through a real runner over the test database (opened by :meth:`open`)."""
+
+    def __init__(self, laptop: LaptopScout, model: Model | None) -> None:
+        self.laptop = laptop
+        self.model = model
+        self.runner: Runner | None = None
+
+    @asynccontextmanager
+    async def open(self, model: Model | None) -> AsyncIterator[LaptopScout]:
+        async with open_db(_DB["url"]) as db:
+            self.runner = Runner(
+                db, TENANT, AgentControl(db, TENANT, LIBRARY, lambda: NOW), {}, lambda: NOW, model=model
+            )
+            yield self.laptop
+
+
 def scout(
     control: Control,
     model: Model | None,
     repos: dict[str, str] | None = None,
     profiles: LaptopProfiles | None = None,
-) -> LaptopScout:
+) -> Lab:
     async def get() -> ScoutControl:
         return cast("ScoutControl", control)
 
     async def known() -> dict[str, str]:
         return {"shop": REPO, "zaaheen": REPO} if repos is None else repos
 
-    return LaptopScout(
-        control=get, repos=known, token=TOKEN, model=model, model_id="local-gemma", library=LIBRARY,
-        clock=lambda: NOW, transport=httpx.MockTransport(github), profiles=profiles,
+    async def runner() -> Runner:
+        if lab.runner is None:  # the routes' tests never open a database: the run fails at once
+            raise StoreError(StoreErrorCode.UNAVAILABLE, "no test database for this one")
+        return lab.runner
+
+    lab = Lab(
+        LaptopScout(
+            control=get, runner=runner, repos=known, token=TOKEN, model=model, model_id="local-gemma",
+            library=LIBRARY, clock=lambda: NOW, transport=httpx.MockTransport(github), profiles=profiles,
+        ),
+        model,
     )  # fmt: skip
+    return lab
 
 
-def ask_and_wait(laptop: LaptopScout) -> Asked:
+def ask_and_wait(lab: Lab) -> Asked:
     async def body() -> Asked:
-        asked = await laptop.ask(SHOP)
-        await laptop.wait()
-        return asked
+        async with lab.open(lab.model) as laptop:
+            asked = await laptop.ask(SHOP)
+            await laptop.wait()
+            return asked
 
     return asyncio.run(body())
 
@@ -208,8 +263,7 @@ def test_every_failure_closes_the_run_with_a_reason(reply: str | Exception, reas
 
 def test_a_github_failure_is_saved_at_the_reading_stage() -> None:
     control = Control()
-    laptop = scout(control, Model(), repos={"shop": "owner/gone"})
-    ask_and_wait(laptop)
+    ask_and_wait(scout(control, Model(), repos={"shop": "owner/gone"}))
     assert (only(control)["state"], only(control)["reason"]) == ("failed", "source.refused")
     assert control.stages == []
 
@@ -239,12 +293,13 @@ def test_a_refused_ask_starts_nothing(verdict: ScoutVerdict, said: Asked) -> Non
 
 def test_runs_in_two_workspaces_take_turns_on_the_model() -> None:
     control, model = Control(), Model()
-    laptop = scout(control, model, repos={"shop": REPO, "cafe": REPO})
+    lab = scout(control, model, repos={"shop": REPO, "cafe": REPO})
 
     async def body() -> None:
-        await laptop.ask(SHOP)
-        await laptop.ask(WorkspaceRow(uuid4(), "cafe", "Cafe"))
-        await laptop.wait()
+        async with lab.open(model) as laptop:
+            await laptop.ask(SHOP)
+            await laptop.ask(CAFE)
+            await laptop.wait()
 
     asyncio.run(body())
     assert [r["state"] for r in control.runs.values()] == ["done", "done"]
@@ -261,33 +316,35 @@ def test_stopping_the_dashboard_cancels_a_run_half_way() -> None:
             await asyncio.sleep(60)
             return GOOD
 
-    laptop = scout(control, Slow())
+    slow = Slow()
+    lab = scout(control, slow)
 
     async def body() -> None:
-        await laptop.ask(SHOP)
-        await asyncio.sleep(0.05)
-        await laptop.close()
+        async with lab.open(slow) as laptop:
+            await laptop.ask(SHOP)
+            await asyncio.sleep(0.5)
+            await laptop.close()
 
     asyncio.run(body())
     assert only(control)["state"] == "running"
 
 
 def test_it_is_connected_only_with_a_token_a_model_and_roles() -> None:
-    assert scout(Control(), Model()).connected
-    assert not scout(Control(), None).connected
+    assert scout(Control(), Model()).laptop.connected
+    assert not scout(Control(), None).laptop.connected
 
 
 # ---- the routes
 
 
-def client(laptop: LaptopScout | None) -> TestClient:
+def client(lab: Lab | None) -> TestClient:
+    laptop = lab.laptop if lab is not None else None
     return TestClient(create_app(SamplePortfolio(NOW), scout=laptop), base_url="http://127.0.0.1")
 
 
 def test_ask_answers_at_once_and_get_shows_the_advice_later() -> None:
     control = Control()
-    laptop = scout(control, Model())
-    c = client(laptop)
+    c = client(scout(control, Model()))
     asked = c.post("/api/workspaces/zaaheen/scout", json={}, headers=OURS)
     assert asked.status_code == 202
     assert asked.json()["state"] in {"running", "done"}
@@ -354,8 +411,7 @@ def test_what_the_project_is_built_with_reaches_the_model_as_facts() -> None:
         return {"shop": REPO}
 
     profiles = LaptopProfiles(TOKEN, known, lambda: NOW, httpx.MockTransport(github))
-    laptop = scout(control, model, profiles=profiles)
-    ask_and_wait(laptop)
+    ask_and_wait(scout(control, model, profiles=profiles))
     assert "Languages (counted by GitHub): TypeScript 100.0%." in model.sent[0][1]["content"]
     assert only(control)["state"] == "done"
 
@@ -366,9 +422,56 @@ def test_the_scout_still_runs_when_the_profile_cannot_be_read() -> None:
     async def known() -> dict[str, str]:
         return {"shop": "owner/gone"}  # the profile reader finds nothing there
 
-    laptop = scout(
-        control, model, profiles=LaptopProfiles(TOKEN, known, lambda: NOW, httpx.MockTransport(github))
+    ask_and_wait(
+        scout(control, model, profiles=LaptopProfiles(TOKEN, known, lambda: NOW, httpx.MockTransport(github)))
     )
-    ask_and_wait(laptop)
     assert "Languages" not in model.sent[0][1]["content"]
     assert only(control)["state"] == "done"
+
+
+# ---- F11 slice 2: through the runner, answers checked, sent back with the reason at most twice
+
+
+async def _run_rows(url: str) -> list[tuple[str, str | None, int]]:
+    async with open_db(url) as db, db.scoped(TENANT, SHOP.workspace_id).connection() as conn:
+        rows = await conn.fetch(
+            "SELECT outcome, error_code, steps FROM agentzaaheen.runs WHERE agent = $1",
+            str(system_agent_id("scout")),
+        )
+    return [(r["outcome"], r["error_code"], r["steps"]) for r in rows]
+
+
+def test_a_refused_answer_goes_back_with_the_reason_and_the_next_one_is_kept(test_db: ScratchDb) -> None:
+    control, model = Control(), Model(["Sure! You need marketing.", GOOD])
+    ask_and_wait(scout(control, model))
+    assert only(control)["state"] == "done"
+    assert len(model.sent) == 2
+    retry = model.sent[1]
+    assert (retry[-2]["role"], retry[-2]["content"]) == ("assistant", "Sure! You need marketing.")
+    assert retry[-1]["role"] == "user"
+    assert "it was not one JSON object" in retry[-1]["content"]
+    assert asyncio.run(_run_rows(test_db.app_url)) == [("ok", None, 2)]
+
+
+def test_three_refused_answers_mean_needs_a_look_never_a_guess(test_db: ScratchDb) -> None:
+    control, model = Control(), Model("Sure! You need marketing.")
+    ask_and_wait(scout(control, model))
+    assert len(model.sent) == 3  # the first answer and two more tries
+    assert (only(control)["state"], only(control)["reason"]) == ("failed", "scout.not_json")
+    assert "result" not in only(control)
+    assert asyncio.run(_run_rows(test_db.app_url)) == [("could_not_run", "run.needs_a_look", 3)]
+
+
+def test_a_stop_switch_stops_the_scout_and_the_screen_says_why(test_db: ScratchDb) -> None:
+    async def stop() -> None:
+        async with open_db(test_db.app_url) as db:
+            await KillSwitchRows(db.scoped(TENANT)).set(
+                SwitchScope.ALL, "", engaged=True, changed_by="user:chairman", changed_at=NOW
+            )
+
+    asyncio.run(stop())
+    control, model = Control(), Model()
+    ask_and_wait(scout(control, model))
+    assert (only(control)["state"], only(control)["reason"]) == ("failed", "run.stop_all")
+    assert model.sent == []
+    assert asyncio.run(_run_rows(test_db.app_url)) == []  # skipped: counted in the summary, no run row

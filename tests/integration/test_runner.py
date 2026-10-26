@@ -25,12 +25,17 @@ from agentzaaheen.core.policy import AgentControl, AgentVerdict, Budget
 from agentzaaheen.core.registry.roles import RoleLibrary, load_roles
 from agentzaaheen.core.runner import (
     CLOSE_GRACE,
+    NEEDS_A_LOOK,
+    AgentFailedError,
     AgentResult,
+    CheckedModel,
     FindingDraft,
     RunCode,
     Runner,
     RunReport,
     RunTicket,
+    ShapeRefusal,
+    system_agent_id,
 )
 from agentzaaheen.core.sdk import (
     DataClass,
@@ -579,3 +584,163 @@ def test_a_skip_is_audited_even_when_its_role_cannot_be_read(
     assert (unknown.started, unknown.code) == (False, "run.no_agent")
     assert (stopped.started, stopped.code) == (False, RunCode.STOP_ALL)
     assert skipped == [(None, "run.no_agent"), (None, "run.stop_all")]
+
+
+# ---- F11 slice 2: built-in jobs, the checked model, and known failures
+
+
+class Count:
+    """A shape: a whole number."""
+
+    def check(self, answer: str) -> int:
+        if not answer.isdigit():
+            raise ShapeRefusal("test.not_a_number", "a whole number only.")
+        return int(answer)
+
+
+class Replies:
+    """A model answering in turn; keeps how many times it was asked."""
+
+    def __init__(self, *replies: str) -> None:
+        self.replies = replies
+        self.asked = 0
+
+    async def chat(self, messages: object, *, max_tokens: int, temperature: float) -> str:
+        self.asked += 1
+        return self.replies[min(self.asked, len(self.replies)) - 1]
+
+
+@dataclass
+class FakeJob(FakeAgent):
+    """A built-in job: like an agent, plus the fingerprint of its instructions."""
+
+    role_id: str = "scout"
+    tools: frozenset[str] = frozenset()
+    version: str = "e" * 64
+    asks: bool = True
+    fail: str | None = None
+
+    async def run(self, ticket: RunTicket) -> AgentResult:
+        self.tickets.append(ticket)
+        if self.fail is not None:
+            raise AgentFailedError(self.fail)
+        if self.asks:
+            assert ticket.model is not None
+            await ticket.model.answer([{"role": "user", "content": "How many?"}], Count(), max_tokens=5,
+                                      temperature=0.0)  # fmt: skip
+        return AgentResult(delivered=True)
+
+
+def model_runner(db: Database, library: RoleLibrary, model: Replies | None) -> Runner:
+    return Runner(db, TENANT, AgentControl(db, TENANT, library, lambda: NOW), TOOLS, lambda: NOW, model=model)
+
+
+async def _steps(db: Database, run_id: UUID) -> tuple[str, str | None, int]:
+    async with db.scoped(TENANT, EVA).connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT outcome, error_code, steps FROM agentzaaheen.runs WHERE id = $1", run_id
+        )
+    assert row is not None
+    return row["outcome"], row["error_code"], row["steps"]
+
+
+def test_a_built_in_job_runs_through_the_runner_and_only_gets_the_checked_model(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    job, model = FakeJob(), Replies("seven", "7")
+
+    async def body() -> tuple[RunReport, tuple[str, str | None, int], list[tuple[str, str | None]]]:
+        async with open_db(test_db.app_url) as db:
+            report = await model_runner(db, library, model).run_system(EVA, job)
+            assert report.run_id is not None
+            starts = RunStarts(db.scoped(TENANT, EVA))
+            return (
+                report,
+                await _steps(db, report.run_id),
+                [
+                    (m.role_id, m.error_code)
+                    for m in await starts.missed(NOW - timedelta(1), NOW + timedelta(1))
+                ],
+            )
+
+    report, row, missed = run(body())
+    assert (report.outcome, report.code) == (RunOutcome.OK, None)
+    assert row == ("ok", None, 2)  # two tries: two steps
+    assert missed == []
+    ticket = job.tickets[0]
+    assert isinstance(ticket.model, CheckedModel)
+    assert ticket.agent_id == system_agent_id("scout")
+    assert dict(ticket.pack) == {}
+    assert not hasattr(ticket, "chat")  # no raw model on the ticket
+
+
+def test_a_job_whose_answers_are_all_refused_needs_a_look_and_is_named(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    async def body() -> tuple[RunReport, tuple[str, str | None, int], list[tuple[str, str | None]]]:
+        async with open_db(test_db.app_url) as db:
+            report = await model_runner(db, library, Replies("seven")).run_system(EVA, FakeJob())
+            assert report.run_id is not None
+            starts = RunStarts(db.scoped(TENANT, EVA))
+            return (
+                report,
+                await _steps(db, report.run_id),
+                [
+                    (m.role_id, m.error_code)
+                    for m in await starts.missed(NOW - timedelta(1), NOW + timedelta(1))
+                ],
+            )
+
+    report, row, missed = run(body())
+    assert (report.outcome, report.code, report.detail) == (
+        RunOutcome.COULD_NOT_RUN, NEEDS_A_LOOK, "test.not_a_number"
+    )  # fmt: skip
+    assert row == ("could_not_run", NEEDS_A_LOOK, 3)
+    assert missed == [("scout", NEEDS_A_LOOK)]  # a built-in job is named by its role
+
+
+@pytest.mark.parametrize(
+    ("said", "saved"), [("source.unavailable", "source.unavailable"), ("Not a code", "run.crashed")]
+)
+def test_a_known_failure_keeps_its_code_and_anything_else_is_a_crash(
+    test_db: ScratchDb, library: RoleLibrary, said: str, saved: str
+) -> None:
+    async def body() -> RunReport:
+        async with open_db(test_db.app_url) as db:
+            return await model_runner(db, library, None).run_system(EVA, FakeJob(fail=said))
+
+    report = run(body())
+    assert (report.outcome, report.code) == (RunOutcome.COULD_NOT_RUN, saved)
+
+
+def test_a_built_in_job_only_reads_and_must_name_its_instructions(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    async def body() -> tuple[RunReport, RunReport]:
+        async with open_db(test_db.app_url) as db:
+            runner = model_runner(db, library, None)
+            with pytest.raises(ValueError, match="SHA-256"):
+                await runner.run_system(EVA, FakeJob(version="1.0.0", asks=False))
+            drafting = await runner.run_system(EVA, FakeJob(tools=frozenset({"email.draft"}), asks=False))
+            no_model = await runner.run_system(EVA, FakeJob())  # asks, but this runner has no model
+            return drafting, no_model
+
+    drafting, no_model = run(body())
+    assert (drafting.outcome, drafting.code) == (RunOutcome.DENIED, RunCode.TOOL_ABOVE_PERMISSION)
+    assert no_model.outcome is RunOutcome.COULD_NOT_RUN  # its ticket had no model to ask
+
+
+def test_a_run_id_is_never_run_twice(test_db: ScratchDb, library: RoleLibrary) -> None:
+    job = FakeJob(asks=False)
+
+    async def body() -> tuple[RunReport, RunReport]:
+        async with open_db(test_db.app_url) as db:
+            runner, run_id = model_runner(db, library, None), uuid4()
+            return await runner.run_system(EVA, job, run_id=run_id), await runner.run_system(
+                EVA, job, run_id=run_id
+            )
+
+    first, second = run(body())
+    assert first.outcome is RunOutcome.OK
+    assert (second.started, second.code) == (False, RunCode.START_NOT_WRITTEN)
+    assert len(job.tickets) == 1

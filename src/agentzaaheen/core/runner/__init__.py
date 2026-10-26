@@ -3,7 +3,9 @@
 What it does:
     :class:`Runner` starts every agent run: kill switches, the job's door
     (switches and caps), the agent's frozen role pack and its tools are
-    checked before anything runs; the start is written down first; the end,
+    checked before anything runs; the start is written down first; every
+    model answer must have the role's shape (sent back with the reason at
+    most twice, then "needs a look"); the end,
     its findings and its real cost are saved together; a run that died
     halfway is closed later as interrupted. Every step is logged in plain
     English and audited.
@@ -25,18 +27,37 @@ from agentzaaheen.core.runner.agent import (
     FindingDraft,
     RunnerOnlyError,
     RunTicket,
+    SystemWork,
 )
-from agentzaaheen.core.runner.run import CLOSE_GRACE, RunCode, Runner, RunReport
+from agentzaaheen.core.runner.run import CLOSE_GRACE, RunCode, Runner, RunReport, system_agent_id
+from agentzaaheen.core.runner.shape import (
+    MAX_RETRIES,
+    NEEDS_A_LOOK,
+    AgentFailedError,
+    CheckedModel,
+    NeedsALookError,
+    Shape,
+    ShapeRefusal,
+)
 
 __all__ = [
     "CLOSE_GRACE",
     "MAX_FINDINGS",
+    "MAX_RETRIES",
+    "NEEDS_A_LOOK",
+    "AgentFailedError",
     "AgentResult",
     "AgentWork",
+    "CheckedModel",
     "FindingDraft",
+    "NeedsALookError",
     "RunCode",
     "RunReport",
     "RunTicket",
     "Runner",
     "RunnerOnlyError",
+    "Shape",
+    "ShapeRefusal",
+    "SystemWork",
+    "system_agent_id",
 ]
