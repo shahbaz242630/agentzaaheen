@@ -53,7 +53,7 @@ class ServerTokenVerdict(StrEnum):
     SAVED = "server_token.saved"
     NEEDS_PASSKEY = "server_token.needs_passkey"  # sign this save with Windows Hello, then send it again
     PASSKEY_FAILED = "server_token.passkey_failed"
-    BAD_TOKEN = "server_token.bad_token"  # noqa: S105  # a verdict code, not a secret
+    BAD_TOKEN = "server_token.bad_token"  # noqa: S105  # nosec B105  # a verdict code, not a secret
     NO_VAULT = "server_token.no_vault"  # the vault's master key file was not found at start
 
 

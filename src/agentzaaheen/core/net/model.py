@@ -46,7 +46,7 @@ SERVER_MODEL_HOST = "llm.agentzaaheen.com"  # our server's model, through the Cl
 CHAT_PATH = "/v1/chat/completions"
 _OPERATION = f"POST {CHAT_PATH}"
 ACCESS_ID_HEADER = "CF-Access-Client-Id"
-ACCESS_SECRET_HEADER = "CF-Access-Client-Secret"  # noqa: S105  # a header's name, not a secret
+ACCESS_SECRET_HEADER = "CF-Access-Client-Secret"  # noqa: S105  # nosec B105  # a header name, not a secret
 
 
 class AccessToken(Protocol):
