@@ -77,15 +77,28 @@ def admin_url(password: str) -> str:
     return f"postgresql://postgres:{quote(password, safe='')}@{DB_HOST}:{DB_PORT}/postgres"
 
 
+def private_copy(text: str, folder: Path) -> Path:
+    """``text`` in a new file only this user can read (the vault refuses a key file anyone else can).
+
+    systemd hands credentials over owned by root with read access for this service, which the
+    vault rightly refuses; this copy is ours alone and lives in the service's private /tmp.
+    """
+    path = folder / VAULT_KEY
+    handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(handle, "w", encoding="ascii") as out:
+        out.write(text + "\n")
+    return path
+
+
 def plan(
-    creds: Mapping[str, str], folder: Path, config: Path, *, send: bool
+    creds: Mapping[str, str], vault_key: Path, config: Path, *, send: bool
 ) -> tuple[list[str], dict[str, str]]:
     """The dashboard's options and the environment it reads its keys from."""
     for needed in (DB_PASSWORD, VAULT_KEY):
         if not creds.get(needed):
             raise NotReadyError(f"the credential {needed} is missing")
     env = {name: value for name, value in creds.items() if ENV_NAME.match(name) and value}
-    argv = ["--switches", "--vault-key", str(folder / VAULT_KEY), "--log-dir", str(LOG_DIR)]
+    argv = ["--switches", "--vault-key", str(vault_key), "--log-dir", str(LOG_DIR)]
     for name, option in READERS.items():
         if name in env:
             argv += [option, name]
@@ -116,21 +129,28 @@ def main(
     try:
         if not outer.get(CREDENTIALS):
             raise NotReadyError("no credentials from systemd; run this only as the systemd service")
-        folder = Path(outer[CREDENTIALS])
-        creds = credentials(folder)
-        options, env = plan(creds, folder, ns.config, send=ns.send)
+        creds = credentials(Path(outer[CREDENTIALS]))
     except NotReadyError as exc:
         print(f"server: not started: {exc}.")
         return 1
-    password = creds[DB_PASSWORD]
+    password = creds.get(DB_PASSWORD, "")
 
     async def prepare() -> SecretStr | None:
         return await laptop_db.set_up(admin_url(password))
 
-    print(f"server: starting with {len(env)} keys; phone {'on' if ns.send else 'off (the laptop sends)'}.")
-    with tempfile.TemporaryDirectory(prefix="agentzaaheen-page-") as page:
-        (Path(page) / "index.html").write_text(PAGE, encoding="utf-8")
-        result: int = start(options, environ=env, static_dir=Path(page), prepare=prepare)
+    with tempfile.TemporaryDirectory(prefix="agentzaaheen-") as private:  # 0700, removed on exit
+        folder = Path(private)
+        try:
+            options, env = plan(creds, folder / VAULT_KEY, ns.config, send=ns.send)
+        except NotReadyError as exc:
+            print(f"server: not started: {exc}.")
+            return 1
+        private_copy(creds[VAULT_KEY], folder)
+        (folder / "index.html").write_text(PAGE, encoding="utf-8")
+        print(
+            f"server: starting with {len(env)} keys; phone {'on' if ns.send else 'off (the laptop sends)'}."
+        )
+        result: int = start(options, environ=env, static_dir=folder, prepare=prepare)
     return result
 
 

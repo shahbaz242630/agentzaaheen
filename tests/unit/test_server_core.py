@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +63,7 @@ def test_the_admin_address_quotes_the_password() -> None:
 
 
 def test_without_send_nothing_reaches_the_phone(creds: Path, config: Path) -> None:
-    argv, env = plan(credentials(creds), creds, config, send=False)
+    argv, env = plan(credentials(creds), creds / "vault_key", config, send=False)
     options = options_of(argv)
     assert "--ntfy-topic-env" not in options
     assert "--briefing-ping-env" not in options
@@ -79,14 +80,14 @@ def test_without_send_nothing_reaches_the_phone(creds: Path, config: Path) -> No
 
 
 def test_with_send_the_topic_and_the_ping_are_used(creds: Path, config: Path) -> None:
-    options = options_of(plan(credentials(creds), creds, config, send=True)[0])
+    options = options_of(plan(credentials(creds), creds / "vault_key", config, send=True)[0])
     assert options["--ntfy-topic-env"] == "AGENTZAAHEEN_NTFY_TOPIC"
     assert options["--briefing-ping-env"] == "AGENTZAAHEEN_BRIEFING_PING_URL"
 
 
 def test_a_reader_without_its_key_or_file_is_left_out(creds: Path, tmp_path: Path) -> None:
     (creds / "PADDLE_LIVE_API_KEY_ZAAHEEN").unlink()
-    options = options_of(plan(credentials(creds), creds, tmp_path / "no-config", send=True)[0])
+    options = options_of(plan(credentials(creds), creds / "vault_key", tmp_path / "no-config", send=True)[0])
     assert "--paddle-key-env" not in options
     assert "--uptime" not in options
     assert "--supabase" not in options
@@ -96,7 +97,7 @@ def test_a_reader_without_its_key_or_file_is_left_out(creds: Path, tmp_path: Pat
 def test_the_database_password_and_vault_key_are_required(creds: Path, config: Path, missing: str) -> None:
     (creds / missing).write_text("  \n", encoding="utf-8")
     with pytest.raises(NotReadyError, match=missing):
-        plan(credentials(creds), creds, config, send=False)
+        plan(credentials(creds), creds / "vault_key", config, send=False)
 
 
 def test_main_outside_systemd_refuses(capsys: pytest.CaptureFixture[str]) -> None:
@@ -139,6 +140,9 @@ def test_main_starts_the_dashboard_with_the_server_database_and_a_page(
     def start(argv: list[str], **kw: Any) -> int:
         seen.update(argv=argv, **kw)
         seen["page"] = (kw["static_dir"] / "index.html").read_text(encoding="utf-8")
+        vault = Path(argv[argv.index("--vault-key") + 1])
+        seen["vault"] = vault.read_text(encoding="ascii").strip()
+        seen["vault_mode"] = vault.stat().st_mode & 0o777
         seen["url"] = asyncio.run(kw["prepare"]())
         return 0
 
@@ -150,6 +154,10 @@ def test_main_starts_the_dashboard_with_the_server_database_and_a_page(
     assert "--ntfy-topic-env" in seen["argv"]
     assert seen["environ"]["PADDLE_LIVE_API_KEY_ZAAHEEN"] == "pdl_live_x"
     assert "Agent Zaaheen is running on the server" in seen["page"]
+    assert seen["vault"] == KEYS["vault_key"]  # a private copy, not systemd's root-owned file
+    assert str(creds) not in " ".join(seen["argv"])
+    if os.name == "posix":
+        assert seen["vault_mode"] == 0o600
     assert not seen["static_dir"].exists()  # the page folder is removed after
     assert set_up_with == [admin_url(PASSWORD)]
     assert "phone on" in out
