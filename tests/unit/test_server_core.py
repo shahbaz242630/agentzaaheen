@@ -40,6 +40,7 @@ def config(tmp_path: Path) -> Path:
     folder.mkdir()
     (folder / "uptime.yaml").write_text("{}", encoding="utf-8")
     (folder / "supabase.yaml").write_text("{}", encoding="utf-8")
+    (folder / "keys.yaml").write_text("[]", encoding="utf-8")
     return folder
 
 
@@ -71,6 +72,7 @@ def test_without_send_nothing_reaches_the_phone(creds: Path, config: Path) -> No
     assert options["--github-token-env"] == "GITHUB_READ_TOKEN_AGENTZAAHEEN"
     assert options["--uptime"] == str(config / "uptime.yaml")
     assert options["--supabase"] == str(config / "supabase.yaml")
+    assert options["--keys"] == str(config / "keys.yaml")
     assert options["--vault-key"] == str(creds / "vault_key")
     assert "--switches" in argv
     assert "--model-url" not in options  # the summaries need no model
@@ -91,6 +93,7 @@ def test_a_reader_without_its_key_or_file_is_left_out(creds: Path, tmp_path: Pat
     assert "--paddle-key-env" not in options
     assert "--uptime" not in options
     assert "--supabase" not in options
+    assert "--keys" not in options
 
 
 @pytest.mark.parametrize("missing", ["postgres_password", "vault_key"])

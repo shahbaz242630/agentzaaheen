@@ -102,7 +102,11 @@ def plan(
     for name, option in READERS.items():
         if name in env:
             argv += [option, name]
-    for option, file in (("--uptime", "uptime.yaml"), ("--supabase", "supabase.yaml")):
+    for option, file in (
+        ("--uptime", "uptime.yaml"),
+        ("--supabase", "supabase.yaml"),
+        ("--keys", "keys.yaml"),
+    ):
         if (config / file).is_file():
             argv += [option, str(config / file)]
     if send:
@@ -122,7 +126,7 @@ def main(
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--send", action="store_true", help="send alerts and the briefing to the phone")
     parser.add_argument(
-        "--config", type=Path, default=CONFIG, help="the folder with uptime.yaml and supabase.yaml"
+        "--config", type=Path, default=CONFIG, help="the folder with uptime.yaml, supabase.yaml and keys.yaml"
     )
     ns = parser.parse_args(argv)
     outer = os.environ if environ is None else environ

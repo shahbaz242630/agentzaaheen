@@ -8,6 +8,7 @@ not read at the next start.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -440,3 +441,34 @@ def test_the_daily_summaries_reach_the_laptop_database(
 def test_an_unknown_briefing_zone_is_refused(ui: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert dashboard.main(["--briefing-zone", "Mars/Olympus"], static_dir=ui, serve=lambda *_: None) == 1
     assert "'Mars/Olympus' is not a time zone Agent Zaaheen knows" in capsys.readouterr().out
+
+
+def test_the_key_list_reaches_the_morning_briefing(ui: Path, laptop_url: SecretStr, tmp_path: Path) -> None:
+    at = datetime(2026, 12, 30, 3, 5, tzinfo=UTC)  # 07:05 in Dubai: the briefing is due
+    keys = tmp_path / "keys.yaml"
+    keys.write_text(
+        "- {name: Claude key, where: laptop vault, expires: 2027-01-02, renew: make a new one}\n"
+        "- {name: Paddle, where: laptop, expires: 2027-01-16, renew: make a new one}\n",
+        encoding="utf-8",
+    )
+    app = start(ui, laptop_url, ["--keys", str(keys)], clock=lambda: at)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        found: list[dict[str, object]] = []
+        for _ in range(100):  # the morning job runs in the background once the server is up
+            found = client.get("/api/briefings").json()["briefings"]
+            if found:
+                break
+            time.sleep(0.05)
+    (today,) = found
+    message = str(today["message"])
+    assert "Key ends in 3 days (2 Jan 2027): Claude key (laptop vault). Renew: make a new one" in message
+    assert "Paddle" not in message  # 17 days away
+
+
+def test_a_broken_key_list_stops_the_start(
+    ui: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    keys = tmp_path / "keys.yaml"
+    keys.write_text("- {name: A, where: b, expires: soon, renew: c}\n", encoding="utf-8")
+    assert dashboard.main(["--keys", str(keys)], static_dir=ui, serve=lambda *_: None) == 1
+    assert "key 1: expires is not usable" in capsys.readouterr().out

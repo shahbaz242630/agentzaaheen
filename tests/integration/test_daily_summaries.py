@@ -30,6 +30,7 @@ from agentzaaheen.core.policy import SummaryControl
 from agentzaaheen.core.store import AuditRows, Briefings, DailySummaries, Database, StoreError, WorkspaceRow
 from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
 from tools.dashboard_summaries import NO_TOPIC, AlertLog, ClaudeLines, LaptopSummaries
+from tools.key_dates import KeyDate
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000d1")
 SHOP_ID = UUID("00000000-0000-4000-8000-0000000000d2")
@@ -110,6 +111,7 @@ def job(  # the database, the clock, the phone, and what the job may count
     alerts: AlertLog | None = None,
     workspaces: tuple[WorkspaceRow, ...] = (SHOP, CAFE),
     claude: ClaudeLines | None = None,
+    key_dates: tuple[KeyDate, ...] = (),
 ) -> LaptopSummaries:
     control = SummaryControl(db, TENANT, clock)
 
@@ -125,6 +127,7 @@ def job(  # the database, the clock, the phone, and what the job may count
         alerts=alerts,
         watched=frozenset({"shop"}),
         claude=claude,
+        key_dates=key_dates,
         topic=topic,
         ping=ping,
         transport=(phone or Phone()).transport(),
@@ -398,3 +401,24 @@ def test_the_briefing_carries_the_boards_claude_lines(test_db: ScratchDb) -> Non
     text = run(body())
     assert text.splitlines()[1].startswith("1 Claude run did not run (ops:")
     assert seen == [NOW + timedelta(hours=2)]  # asked at the briefing's own time
+
+
+def test_the_briefing_warns_about_a_key_that_ends_soon(test_db: ScratchDb) -> None:
+    at = NOW + timedelta(hours=2)
+    day = at.astimezone(DUBAI).date()
+    soon = KeyDate(
+        name="Claude key", where="laptop vault", expires=day + timedelta(days=3), renew="make a new one"
+    )
+    later = KeyDate(name="Paddle", where="laptop", expires=day + timedelta(days=40), renew="make a new one")
+
+    async def body() -> str:
+        clock, phone = Clock(at), Phone()
+        async with open_db(test_db.app_url) as db:
+            await job(db, clock, phone, key_dates=(soon, later)).tick()
+        (sent,) = phone.seen
+        return sent.content.decode()
+
+    text = run(body())
+    assert text.splitlines()[1].startswith("Key ends in 3 days (")
+    assert "Claude key (laptop vault). Renew: make a new one" in text
+    assert "Paddle" not in text
