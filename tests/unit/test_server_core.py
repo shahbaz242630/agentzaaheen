@@ -13,9 +13,9 @@ from pydantic import SecretStr
 from tools import laptop_db, server_core
 from tools.server_core import NotReadyError, admin_url, credentials, plan
 
-PASSWORD = "p@ss/word:1"  # built here, never the real one
+ODD = "a@b/c:1"  # made up here: characters a database address must quote
 KEYS = {
-    "postgres_password": PASSWORD + "\n",
+    "postgres_password": ODD + "\n",
     "vault_key": "vault-1:" + "a" * 44,
     "PADDLE_LIVE_API_KEY_ZAAHEEN": "pdl_live_x",
     "GITHUB_READ_TOKEN_AGENTZAAHEEN": "github_pat_x",
@@ -49,7 +49,7 @@ def options_of(argv: list[str]) -> dict[str, str]:
 
 def test_credentials_are_read_by_name_and_trimmed(creds: Path) -> None:
     read = credentials(creds)
-    assert read["postgres_password"] == PASSWORD
+    assert read["postgres_password"] == ODD
     assert set(read) == set(KEYS)
 
 
@@ -59,7 +59,7 @@ def test_no_credentials_folder_is_said_plainly(tmp_path: Path) -> None:
 
 
 def test_the_admin_address_quotes_the_password() -> None:
-    assert admin_url(PASSWORD) == "postgresql://postgres:p%40ss%2Fword%3A1@127.0.0.1:5432/postgres"
+    assert admin_url(ODD) == "postgresql://postgres:a%40b%2Fc%3A1@127.0.0.1:5432/postgres"
 
 
 def test_without_send_nothing_reaches_the_phone(creds: Path, config: Path) -> None:
@@ -122,7 +122,7 @@ def test_main_says_what_is_missing_and_never_a_secret(
     out = capsys.readouterr().out
     assert code == 1
     assert "vault_key is missing" in out
-    assert PASSWORD not in out
+    assert ODD not in out
 
 
 def test_main_starts_the_dashboard_with_the_server_database_and_a_page(
@@ -159,7 +159,7 @@ def test_main_starts_the_dashboard_with_the_server_database_and_a_page(
     if os.name == "posix":
         assert seen["vault_mode"] == 0o600
     assert not seen["static_dir"].exists()  # the page folder is removed after
-    assert set_up_with == [admin_url(PASSWORD)]
+    assert set_up_with == [admin_url(ODD)]
     assert "phone on" in out
     assert not any(value.strip() in out for value in KEYS.values())
 
