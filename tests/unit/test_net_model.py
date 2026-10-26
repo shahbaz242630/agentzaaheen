@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import httpx
 import pytest
 from pydantic import SecretStr
 
 from agentzaaheen.core.net import ModelClient, NetError, NetErrorCode, check_model_url
+from agentzaaheen.core.sdk import SourceError, SourceErrorCode
 
 LOCAL = "http://127.0.0.1:8766"
 SERVER = "models.example.com"
@@ -217,3 +219,98 @@ def test_a_failure_never_carries_the_prompt_or_answer() -> None:
     error = failure(handler)
     assert "How is revenue" not in str(error)
     assert "How is revenue" not in repr(error.args)
+
+
+# ---------------------------------------------------------------- our server, behind Cloudflare Access
+
+TOKEN_ID = "0" * 32 + ".access"  # built here, never a real token
+TOKEN_SECRET = "f" * 64
+
+
+@dataclass(frozen=True)
+class Token:
+    client_id: str
+    client_secret: SecretStr
+
+
+def tokens(*secrets: str) -> tuple[Callable[[], Awaitable[Token]], list[int]]:
+    """A token source that hands out ``secrets`` in turn and counts how often it was opened."""
+    opened: list[int] = []
+
+    async def source() -> Token:
+        opened.append(1)
+        return Token(TOKEN_ID, SecretStr(secrets[min(len(opened), len(secrets)) - 1]))
+
+    return source, opened
+
+
+def test_the_server_token_is_opened_for_each_call_and_sent_as_cloudflares_two_headers() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return answer("ok")(request)
+
+    source, opened = tokens(TOKEN_SECRET, "e" * 64)
+
+    async def body() -> None:
+        async with ModelClient(
+            f"https://{SERVER}",
+            allowed_hosts=frozenset({SERVER}),
+            access=source,
+            transport=httpx.MockTransport(handler),
+        ) as c:
+            for _ in range(2):
+                await c.chat(QUESTION, max_tokens=64, temperature=0.2)
+
+    asyncio.run(body())
+    assert len(opened) == 2  # once per call: a replaced token is used at once
+    assert [r.headers["CF-Access-Client-Id"] for r in seen] == [TOKEN_ID, TOKEN_ID]
+    assert [r.headers["CF-Access-Client-Secret"] for r in seen] == [TOKEN_SECRET, "e" * 64]
+    assert "Authorization" not in seen[0].headers
+
+
+def test_without_a_token_source_no_access_headers_are_sent() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return answer("ok")(request)
+
+    ask(handler)
+    assert "CF-Access-Client-Id" not in seen[0].headers
+    assert "CF-Access-Client-Secret" not in seen[0].headers
+
+
+def test_a_token_that_cannot_be_opened_sends_nothing_and_is_an_auth_error() -> None:
+    seen: list[httpx.Request] = []
+
+    async def locked() -> Token:
+        raise SourceError(SourceErrorCode.AUTH, "no token saved", detail_code="credential.missing")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return answer("ok")(request)
+
+    caught = failure(handler, base=f"https://{SERVER}", allowed_hosts=frozenset({SERVER}), access=locked)
+    assert caught.net_code is NetErrorCode.AUTH
+    assert seen == []
+
+
+def test_the_server_token_is_never_sent_over_plain_http() -> None:
+    source, opened = tokens(TOKEN_SECRET)
+    with pytest.raises(NetError) as caught:
+        ModelClient(LOCAL, access=source)
+    assert caught.value.net_code is NetErrorCode.BLOCKED
+    assert opened == []
+
+
+def test_cloudflares_login_redirect_is_refused_not_followed() -> None:
+    def login(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"Location": "https://spring-river-c250.cloudflareaccess.com/"})
+
+    source, _ = tokens(TOKEN_SECRET)
+    caught = failure(login, base=f"https://{SERVER}", allowed_hosts=frozenset({SERVER}), access=source)
+    assert caught.net_code is NetErrorCode.BLOCKED
+    assert caught.status == 302
+    assert TOKEN_SECRET not in str(caught)

@@ -1,4 +1,4 @@
-"""The vault's master key on this laptop: make it once, and find the Claude key's sealed slot.
+"""The vault's master key on this laptop: make it once, and find the sealed slots that use it.
 
 Commands:
     make-key        create the master key file (once; refuses to overwrite)
@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from agentzaaheen.core.broker import SealedSlot
-from agentzaaheen.core.policy.claude_key import CONNECTOR, NAME
+from agentzaaheen.core.policy import claude_key, server_token
 from agentzaaheen.core.store import Database
 from agentzaaheen.core.vault import CredentialSlot, Keyring, VaultError, load_master_key
 from tools.laptop_db import LAPTOP_TENANT, LAPTOP_WORKSPACES
@@ -52,11 +52,24 @@ def claude_slot(db: Database, keyring: Keyring | None) -> SealedSlot:
     slot = CredentialSlot(
         tenant_id=LAPTOP_TENANT,
         project_id=CLAUDE_WORKSPACE,
-        connector=CONNECTOR,
-        name=NAME,
+        connector=claude_key.CONNECTOR,
+        name=claude_key.NAME,
         environment="production",
     )
     # It can spend money, so it is not a read-only key.
+    return SealedSlot(db.scoped(LAPTOP_TENANT, CLAUDE_WORKSPACE), keyring, slot, access="read_write")
+
+
+def server_token_slot(db: Database, keyring: Keyring | None) -> SealedSlot:
+    """The Cloudflare service token's sealed slot, beside the Claude key in the Agent Zaaheen workspace."""
+    slot = CredentialSlot(
+        tenant_id=LAPTOP_TENANT,
+        project_id=CLAUDE_WORKSPACE,
+        connector=server_token.CONNECTOR,
+        name=server_token.NAME,
+        environment="production",
+    )
+    # It makes our server's model work for the laptop, so it is not a read-only key either.
     return SealedSlot(db.scoped(LAPTOP_TENANT, CLAUDE_WORKSPACE), keyring, slot, access="read_write")
 
 

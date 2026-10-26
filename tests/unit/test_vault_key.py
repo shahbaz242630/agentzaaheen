@@ -1,4 +1,4 @@
-"""The vault's master key tool and the Claude key's shape check (F10 slice 2c). No database."""
+"""The vault's master key tool and the shape checks for the Claude key and the server token. No database."""
 
 from __future__ import annotations
 
@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from agentzaaheen.core.policy import key_problem
+from agentzaaheen.core.policy import key_problem, token_problem
 from agentzaaheen.core.policy.claude_key import MAX_KEY_CHARS
+from agentzaaheen.core.policy.server_token import MAX_PART_CHARS
 from tools import vault_key
 
 
@@ -54,3 +55,31 @@ def test_no_key_file_or_a_bad_one_gives_no_keyring_and_says_why(
 )
 def test_the_key_shape_check(raw: str, why: str | None) -> None:
     assert key_problem(raw) == why
+
+
+ID = "0" * 32 + ".access"  # built here, never a real token
+SECRET = "f" * 64
+
+
+@pytest.mark.parametrize(
+    ("client_id", "secret", "why"),
+    [
+        (ID, SECRET, None),
+        ("", SECRET, "a part is empty"),
+        (ID, "", "a part is empty"),
+        (ID, "f" * (MAX_PART_CHARS + 1), "a part is too long"),
+        ("x" * (MAX_PART_CHARS - len(".access")) + ".access", SECRET, None),  # exactly at the limit
+        (ID, SECRET[:10] + " " + SECRET[11:], "a part contains spaces or other characters a token never has"),
+        (
+            ID,
+            SECRET[:10] + "\n" + SECRET[11:],
+            "a part contains spaces or other characters a token never has",
+        ),
+        (ID + "é", SECRET, "a part contains spaces or other characters a token never has"),
+        ("0" * 32, SECRET, "the Client ID ends with .access"),
+        (".access", SECRET, "the Client ID ends with .access"),
+        (ID, ID, "the two parts look swapped"),
+    ],
+)
+def test_the_server_token_shape_check(client_id: str, secret: str, why: str | None) -> None:
+    assert token_problem(client_id, secret) == why

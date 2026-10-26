@@ -46,6 +46,10 @@ from agentzaaheen.core.policy import (
     Removal,
     Role,
     ScoutControl,
+    ServerTokenControl,
+    ServerTokenStatus,
+    ServerTokenVerdict,
+    ServiceToken,
     Standing,
     SummaryControl,
     Verdict,
@@ -64,7 +68,7 @@ from agentzaaheen.core.store import (
 )
 from agentzaaheen.core.vault import Keyring
 from tools import laptop_db
-from tools.vault_key import CLAUDE_WORKSPACE, claude_slot
+from tools.vault_key import CLAUDE_WORKSPACE, claude_slot, server_token_slot
 
 LAPTOP_TENANT = laptop_db.LAPTOP_TENANT
 START_LAPTOP_DB = "uv run python -m tools.laptop_db up"
@@ -134,6 +138,7 @@ class LaptopSwitches:
         self._scout: ScoutControl | None = None
         self._summaries: SummaryControl | None = None
         self._claude_key: ClaudeKeyControl | None = None
+        self._server_token: ServerTokenControl | None = None
         self._keyring = keyring
         self._site = site
         self._enrol_code = enrol_code
@@ -168,6 +173,14 @@ class LaptopSwitches:
                     LAPTOP_TENANT,
                     CLAUDE_WORKSPACE,
                     slot=claude_slot(db, self._keyring),
+                    passkeys=passkeys,
+                    clock=self._clock,
+                )
+                self._server_token = ServerTokenControl(
+                    db,
+                    LAPTOP_TENANT,
+                    CLAUDE_WORKSPACE,
+                    slot=server_token_slot(db, self._keyring),
                     passkeys=passkeys,
                     clock=self._clock,
                 )
@@ -247,6 +260,19 @@ class LaptopSwitches:
         if self._claude_key is None:  # pragma: no cover  # _open always sets it
             raise RuntimeError("the laptop database is not open")
         return self._claude_key
+
+    # ---- the server access token (F10 slice 4): the same passkey, opened for each call to our server
+
+    async def server_token_control(self) -> ServerTokenControl:
+        """Saving and opening the Cloudflare service token (opens the database on first use)."""
+        await self._open()
+        if self._server_token is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._server_token
+
+    async def server_token(self) -> ServiceToken:
+        """The token for one call to our server's model; raises ``SourceError`` when it cannot be opened."""
+        return await (await self.server_token_control()).token_source()()
 
     async def claude_lines(self, now: datetime) -> tuple[str, ...]:
         """The briefing's Claude lines: runs that did not run in the day before ``now``, caps at 80%."""
@@ -391,3 +417,24 @@ class LaptopClaudeKeys:
     async def save(self, key: SecretStr, credential: dict[str, Any] | None) -> ClaudeKeyVerdict:
         """Seal the key once this exact save is signed."""
         return await (await self._switches.claude_key_control()).save(key, credential)
+
+
+class LaptopServerTokens:
+    """The server token routes' view of the laptop database (its own object, like the Claude key's)."""
+
+    def __init__(self, switches: LaptopSwitches) -> None:
+        self._switches = switches
+
+    async def status(self) -> ServerTokenStatus:
+        """Whether the vault is ready and a token is saved."""
+        return await (await self._switches.server_token_control()).status()
+
+    async def options(self, client_id: str, client_secret: SecretStr) -> dict[str, Any]:
+        """Options for Windows Hello to sign saving exactly this token."""
+        return await (await self._switches.server_token_control()).options(client_id, client_secret)
+
+    async def save(
+        self, client_id: str, client_secret: SecretStr, credential: dict[str, Any] | None
+    ) -> ServerTokenVerdict:
+        """Seal the token once this exact save is signed."""
+        return await (await self._switches.server_token_control()).save(client_id, client_secret, credential)

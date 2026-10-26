@@ -34,7 +34,7 @@ from pydantic import SecretStr
 
 from agentzaaheen.core.api import ChatBackend
 from agentzaaheen.core.llm_gateway import ChatModel, ChatReply, FactChat, Inspect, Tool, catalogue
-from agentzaaheen.core.net import DownloadPolicy, JsonClient, ModelClient, NetError, NetPolicy
+from agentzaaheen.core.net import AccessSource, DownloadPolicy, JsonClient, ModelClient, NetError, NetPolicy
 from agentzaaheen.core.policy import Standing
 from agentzaaheen.core.registry import (
     Invocation,
@@ -102,18 +102,21 @@ def model_chat(  # noqa: PLR0913  # the server, then each optional part of the c
     *,
     switched: Switched | None = None,
     inspect: Inspect | None = None,
+    allowed_hosts: frozenset[str] = frozenset(),
+    access: AccessSource | None = None,
 ) -> ChatBackend | None:
     """The chat backed by the model server at ``model_url``, or ``None`` (after saying why) if refused.
 
     With ``switched`` its tools follow the registry switches; otherwise it keeps ``tools`` and ``skills``.
     ``inspect`` lets the Board's chat look inside a workspace, each look recorded first (ADR-039);
-    without it the Board's chat reads summaries only.
+    without it the Board's chat reads summaries only. ``allowed_hosts`` and ``access`` reach our
+    server's model through the tunnel (its host, and the service token opened for each call).
     """
     try:
-        client = ModelClient(model_url, transport=transport)
+        client = ModelClient(model_url, allowed_hosts=allowed_hosts, access=access, transport=transport)
     except NetError as exc:
         print(f"dashboard: the model address was refused ({exc.net_code.value}).")
-        print("  Use the local model server, e.g. http://127.0.0.1:8766")
+        print("  Use the local model server, e.g. http://127.0.0.1:8766, or https://llm.agentzaaheen.com")
         return None
     if switched is not None:
         return SwitchedChat(client, switched, inspect)

@@ -35,7 +35,7 @@ from agentzaaheen.core.store import (
 )
 from tests.fixtures.soft_authenticator import SoftAuthenticator
 from tests.integration.conftest import Server, run
-from tools import dashboard, dashboard_switches, laptop_db
+from tools import chat_tools, dashboard, dashboard_switches, laptop_db, vault_key
 
 OURS = {REQUEST_HEADER: "1", "Origin": "http://127.0.0.1"}
 SKILL = {"kind": "skill", "id": "triage-failing-build"}
@@ -204,6 +204,51 @@ def test_set_up_a_passkey_then_approve_and_refuse_over_http(
         refused = client.post(f"/api/registry/requests/{request}/refuse", json={}, headers=HERE)
         assert refused.json()["requests"] == []
         assert states(client)["triage-failing-build"] == "off"
+
+
+def test_the_server_token_saved_with_windows_hello_goes_with_each_call_to_our_server(
+    ui: Path, laptop_url: SecretStr, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    key_file = tmp_path / "vault.key"
+    vault_key.main(["make-key"], key_file=key_file)
+    seen: list[httpx.Request] = []
+
+    def server(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "Through the tunnel."}}]})
+
+    device = SoftAuthenticator()
+    argv = ["--enrol-passkey", "--vault-key", str(key_file), "--model-url", "https://llm.agentzaaheen.com"]
+    app = start(ui, laptop_url, argv, transport=httpx.MockTransport(server))
+    code = capsys.readouterr().out.split("The code to type on the Customize page is ")[1].split()[0]
+    token = {"client_id": "0" * 32 + ".access", "client_secret": "f" * 64}  # built here, never a real one
+    question = {"model_id": chat_tools.LOCAL_MODEL_ID, "question": "hi"}
+    with TestClient(app, base_url="http://localhost:8765") as client:
+        before = client.post("/api/chat", json=question, headers=HERE)
+        options = client.post("/api/passkey/enrol/options", json={"code": code}, headers=HERE).json()[
+            "options"
+        ]
+        client.post(
+            "/api/passkey/enrol", json={"code": code, "credential": device.register(options)}, headers=HERE
+        )
+        assert client.get("/api/server-token").json()["saved"] is False
+        unsigned = client.post("/api/server-token", json=token, headers=HERE)
+        sign = client.post("/api/server-token/options", json=token, headers=HERE).json()["options"]
+        saved = client.post(
+            "/api/server-token", json={**token, "credential": device.sign(sign)}, headers=HERE
+        )
+        after = client.post("/api/chat", json=question, headers=HERE)
+        claude = client.get("/api/claude-key").json()
+
+    assert (before.status_code, before.json()) == (502, {"detail": "net.auth"})  # nothing saved: nothing sent
+    assert unsigned.json() == {"detail": "server_token.needs_passkey"}
+    assert saved.json()["saved"] is True
+    assert token["client_secret"] not in saved.text
+    assert after.json()["answer"] == "Through the tunnel."
+    assert claude["saved"] is False  # its own slot: saving it never touches the Claude key
+    (call,) = seen
+    assert call.headers["CF-Access-Client-Id"] == token["client_id"]
+    assert call.headers["CF-Access-Client-Secret"] == token["client_secret"]
 
 
 def ask_after_switching_off(client: TestClient) -> str:

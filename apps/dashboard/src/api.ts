@@ -428,6 +428,10 @@ export const ClaudeKeyStatus = z.strictObject({
 });
 export type ClaudeKeyStatus = z.infer<typeof ClaudeKeyStatus>;
 
+// The laptop's Cloudflare service token for our server: the same shape, never either part itself.
+export const ServerTokenStatus = ClaudeKeyStatus;
+export type ServerTokenStatus = ClaudeKeyStatus;
+
 // WebAuthn options as JSON, handed straight to the browser's own parser (it checks them).
 const PasskeyOptions = z.strictObject({ options: z.record(z.string(), z.unknown()) });
 
@@ -543,6 +547,12 @@ export const api = {
     postJson("/api/claude-key", { key, credential }, ClaudeKeyStatus),
   claudeKeyOptions: async (key: string) =>
     (await postJson("/api/claude-key/options", { key }, PasskeyOptions)).options,
+  // The server access token: two parts, saved the same way as the Claude key.
+  serverToken: () => getJson("/api/server-token", ServerTokenStatus),
+  saveServerToken: (client_id: string, client_secret: string, credential?: unknown) =>
+    postJson("/api/server-token", { client_id, client_secret, credential }, ServerTokenStatus),
+  serverTokenOptions: async (client_id: string, client_secret: string) =>
+    (await postJson("/api/server-token/options", { client_id, client_secret }, PasskeyOptions)).options,
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),

@@ -233,6 +233,42 @@ def test_a_model_address_off_the_laptop_is_refused(
     assert "net.blocked" in capsys.readouterr().out
 
 
+def test_our_server_through_the_tunnel_is_allowed_and_without_a_database_sends_no_token(
+    ui: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen: list[httpx.Request] = []
+
+    def server(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(302, headers={"Location": "https://example.cloudflareaccess.com/"})
+
+    apps: list[FastAPI] = []
+    code = dashboard.main(
+        ["--model-url", "https://llm.agentzaaheen.com"],
+        static_dir=ui,
+        serve=lambda app, _h, _p: apps.append(app),
+        transport=httpx.MockTransport(server),
+    )
+    assert code == 0
+    assert "chat connected to our server's model" in capsys.readouterr().out
+    response = TestClient(apps[0], base_url="http://127.0.0.1").post(
+        "/api/chat",
+        json={"model_id": chat_tools.LOCAL_MODEL_ID, "question": "hi"},
+        headers={"X-AgentZaaheen-Request": "1"},
+    )
+    assert (response.status_code, response.json()) == (502, {"detail": "net.blocked"})  # Cloudflare's login
+    assert str(seen[0].url) == "https://llm.agentzaaheen.com/v1/chat/completions"
+    assert "CF-Access-Client-Id" not in seen[0].headers
+
+
+def test_only_our_server_is_reached_over_https_and_only_it_needs_the_token() -> None:
+    assert dashboard.model_reach("http://127.0.0.1:8766", None) == (frozenset(), None)
+    assert dashboard.model_reach("https://llm.agentzaaheen.com", None) == (
+        frozenset({"llm.agentzaaheen.com"}),
+        None,
+    )
+
+
 # ---------------------------------------------------------------- the Customize page (F06)
 
 
