@@ -7,6 +7,12 @@ The only POST in the core (ADR-024). It may reach:
 - a named host on this client's allowlist over https (our server's model,
   reached through the tunnel; later an opt-in cloud model, ADR-023).
 
+Our server's model sits behind Cloudflare Access, which refuses every request
+without the laptop's service token. With ``access``, the token is opened fresh
+for each call (so a replaced token is used at once and nothing keeps a copy)
+and sent as Cloudflare's two headers; it is never sent over plain http. A token
+that cannot be opened ends the call as ``net.auth`` before anything is sent.
+
 Redirects are refused, the answer is size-capped and must be a JSON object,
 and a failure carries a code, never the prompt, the answer or a key. A model
 call is not retried: on a CPU it can take a minute, and the person asking can
@@ -17,9 +23,9 @@ from __future__ import annotations
 
 import ipaddress
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from types import TracebackType
-from typing import Self
+from typing import Protocol, Self
 from urllib.parse import urlsplit
 
 import httpx
@@ -33,11 +39,31 @@ from agentzaaheen.core.net.client import (
     refuse_status,
 )
 from agentzaaheen.core.net.errors import NetError, NetErrorCode
-from agentzaaheen.core.sdk import elapsed_ms, get_logger, say, span
+from agentzaaheen.core.sdk import SourceError, elapsed_ms, get_logger, say, span
 
 LOOPBACK = "127.0.0.1"
+SERVER_MODEL_HOST = "llm.agentzaaheen.com"  # our server's model, through the Cloudflare tunnel
 CHAT_PATH = "/v1/chat/completions"
 _OPERATION = f"POST {CHAT_PATH}"
+ACCESS_ID_HEADER = "CF-Access-Client-Id"
+ACCESS_SECRET_HEADER = "CF-Access-Client-Secret"  # noqa: S105  # a header's name, not a secret
+
+
+class AccessToken(Protocol):
+    """A Cloudflare Access service token (the policy layer's ``ServiceToken`` in real use)."""
+
+    @property
+    def client_id(self) -> str:
+        """The token's Client ID (``….access``)."""
+        ...
+
+    @property
+    def client_secret(self) -> SecretStr:
+        """The token's Client Secret."""
+        ...
+
+
+AccessSource = Callable[[], Awaitable[AccessToken]]
 
 
 def check_model_url(base_url: str, allowed_hosts: frozenset[str]) -> str:
@@ -80,13 +106,15 @@ class ModelClient:
         *,
         allowed_hosts: frozenset[str] = frozenset(),
         api_key: SecretStr | None = None,
+        access: AccessSource | None = None,
         timeout_s: float = 180.0,
         max_response_bytes: int = 1024 * 1024,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base = check_model_url(base_url, allowed_hosts)
-        if api_key is not None and _is_loopback(self._base):
+        if (api_key is not None or access is not None) and _is_loopback(self._base):
             raise NetError(NetErrorCode.BLOCKED, "a key is never sent over plain http")
+        self._access = access
         self._limit = max_response_bytes
         headers = {"Accept": "application/json"}
         if api_key is not None:
@@ -135,8 +163,10 @@ class ModelClient:
             raise exc.at(_OPERATION, 1, 1) from None
 
     async def _ask(self, body: dict[str, object]) -> str:
+        headers = await self._access_headers()
         try:
-            async with self._http.stream("POST", self._base + CHAT_PATH, json=body) as response:
+            url = self._base + CHAT_PATH
+            async with self._http.stream("POST", url, json=body, headers=headers) as response:
                 refuse_status(response.status_code)
                 raw = await read_capped(response, self._limit)
         except httpx.TimeoutException:
@@ -144,6 +174,19 @@ class ModelClient:
         except httpx.TransportError:
             raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the model server") from None
         return _first_answer(decode_object(raw))
+
+    async def _access_headers(self) -> dict[str, str]:
+        """Cloudflare's two headers for this one call, or none without ``access``."""
+        if self._access is None:
+            return {}
+        try:
+            token = await self._access()
+        except SourceError:
+            raise NetError(NetErrorCode.AUTH, "the server access token could not be opened") from None
+        return {
+            ACCESS_ID_HEADER: token.client_id,
+            ACCESS_SECRET_HEADER: token.client_secret.get_secret_value(),
+        }
 
 
 def _first_answer(payload: dict[str, object]) -> str:

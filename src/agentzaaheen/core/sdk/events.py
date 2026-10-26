@@ -270,6 +270,11 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="Saving the Claude API key ended as {verdict}.",
         why="The Chairman saved the Claude key on the Customize page; the audit log keeps the same decision.",
     ),
+    "server_token_decided": LogEvent(
+        "info",
+        what="Saving the server access token ended as {verdict}.",
+        why="The Chairman saved it on the Customize page; the audit log keeps the same decision.",
+    ),
     # ---- the database (one line per write: what kind of record, never its contents)
     "store_saved": LogEvent(
         "info",

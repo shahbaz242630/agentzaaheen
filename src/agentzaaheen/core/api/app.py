@@ -55,6 +55,7 @@ from agentzaaheen.core.api.registry import (
 )
 from agentzaaheen.core.api.removal import WorkspaceRemoval, removal_routes
 from agentzaaheen.core.api.scout import WorkspaceScout, scout_routes
+from agentzaaheen.core.api.server_token import ServerTokens, server_token_routes
 from agentzaaheen.core.api.summaries import WorkspaceSummaries, summary_routes
 from agentzaaheen.core.api.views import (
     ChatAnswer,
@@ -371,6 +372,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     summaries: WorkspaceSummaries | None = None,
     logs: LogReader | None = None,
     claude_key: ClaudeKeys | None = None,
+    server_token: ServerTokens | None = None,
     on_start: Callable[[], Awaitable[None]] | None = None,
     on_close: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
@@ -388,7 +390,8 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     ``logs`` reads the kept log files for the Logs page (with ``--log-dir``); without it the page says
     no logs are kept.
     ``claude_key`` saves the Claude API key into the vault after Windows Hello (with a database);
-    without it the Customize page says it cannot be saved here.
+    without it the Customize page says it cannot be saved here. ``server_token`` does the same for the
+    Cloudflare service token that lets the laptop reach our server's model through the tunnel.
     ``on_start`` runs once the server is up, inside its event loop (the morning job starts there);
     ``on_close`` runs when the server stops (the laptop database's pool is closed there).
 
@@ -452,6 +455,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     summary_routes(app, summaries, _refuse_foreign)
     log_routes(app, logs)
     claude_key_routes(app, claude_key, _refuse_foreign)
+    server_token_routes(app, server_token, _refuse_foreign)
 
     async def answer(question: ChatQuestion, facts: str, sample: bool, workspace: str | None) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:

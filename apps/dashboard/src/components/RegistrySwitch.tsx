@@ -35,6 +35,11 @@ const REASON: Record<string, string> = {
   "claude_key.no_vault": "The vault has no master key yet. Run: uv run python -m tools.vault_key make-key, then restart the dashboard.",
   "claude_key.read_only": "Saving the Claude key needs the laptop database. Start the dashboard with --switches.",
   "claude_key.store_unavailable": "The laptop database did not answer. Is it running?",
+  "server_token.bad_token": "That doesn't look like a Cloudflare service token. Copy both parts again from Cloudflare.",
+  "server_token.passkey_failed": "Windows Hello did not confirm it, so the token was not saved. Please try again.",
+  "server_token.no_vault": "The vault has no master key yet. Run: uv run python -m tools.vault_key make-key, then restart the dashboard.",
+  "server_token.read_only": "Saving the server token needs the laptop database. Start the dashboard with --switches.",
+  "server_token.store_unavailable": "The laptop database did not answer. Is it running?",
 };
 
 export function reason(code: string | null): string {

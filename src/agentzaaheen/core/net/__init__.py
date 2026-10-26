@@ -47,7 +47,13 @@ from agentzaaheen.core.net.claude import CLAUDE_HOST, ClaudeClient, ClaudeReply
 from agentzaaheen.core.net.client import DownloadPolicy, JsonClient, NetPolicy, check_base_url, check_path
 from agentzaaheen.core.net.errors import NetError, NetErrorCode
 from agentzaaheen.core.net.heartbeat import HEALTHCHECKS_PING_HOST, HeartbeatClient, check_ping_url
-from agentzaaheen.core.net.model import ModelClient, check_model_url
+from agentzaaheen.core.net.model import (
+    SERVER_MODEL_HOST,
+    AccessSource,
+    AccessToken,
+    ModelClient,
+    check_model_url,
+)
 from agentzaaheen.core.net.otlp import OtlpSender, check_otlp_endpoint
 from agentzaaheen.core.net.probe import StatusProbe, check_probe_url
 from agentzaaheen.core.net.push import NTFY_HOST, PushClient
@@ -56,6 +62,9 @@ __all__ = [
     "CLAUDE_HOST",
     "HEALTHCHECKS_PING_HOST",
     "NTFY_HOST",
+    "SERVER_MODEL_HOST",
+    "AccessSource",
+    "AccessToken",
     "ClaudeClient",
     "ClaudeReply",
     "DownloadPolicy",

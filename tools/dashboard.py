@@ -82,6 +82,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 import httpx
 import uvicorn
@@ -95,7 +96,15 @@ from agentzaaheen.core.api.uptime import CARD_ID as UPTIME_CARD
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.auth import Site
 from agentzaaheen.core.llm_gateway import Tool
-from agentzaaheen.core.net import HEALTHCHECKS_PING_HOST, ModelClient, NetError, NetPolicy, check_ping_url
+from agentzaaheen.core.net import (
+    HEALTHCHECKS_PING_HOST,
+    SERVER_MODEL_HOST,
+    AccessSource,
+    ModelClient,
+    NetError,
+    NetPolicy,
+    check_ping_url,
+)
 from agentzaaheen.core.policy import Standing
 from agentzaaheen.core.registry import Registry, load_registry
 from agentzaaheen.core.registry.roles import RoleLibrary, load_roles
@@ -119,7 +128,14 @@ from tools.dashboard_sources import (
 )
 from tools.dashboard_summaries import AlertLog, LaptopSummaries
 from tools.dashboard_supabase import SupabaseProject, supabase_list, supabase_portfolio
-from tools.dashboard_switches import LaptopClaudeKeys, LaptopSwitches, Prepare, connect, off_connectors
+from tools.dashboard_switches import (
+    LaptopClaudeKeys,
+    LaptopServerTokens,
+    LaptopSwitches,
+    Prepare,
+    connect,
+    off_connectors,
+)
 from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options, tracing_from
 from tools.dashboard_uptime import ntfy_topic, start_watch, uptime_list, uptime_portfolio
 from tools.fix_guides import Project, fixes_list
@@ -320,7 +336,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--export-contract", action="store_true", help="rewrite the UI's contract fixture")
     parser.add_argument("--paddle-key-env", help="env var holding the live READ-ONLY Zaaheen Paddle key")
     parser.add_argument("--github-token-env", help="env var holding the READ-ONLY GitHub token")
-    parser.add_argument("--model-url", help="the chat's model server, e.g. http://127.0.0.1:8766")
+    parser.add_argument(
+        "--model-url",
+        help="the chat's model server: http://127.0.0.1:8766 (this laptop) or https://llm.agentzaaheen.com"
+        " (our server, through the tunnel; with --switches it sends the saved server token)",
+    )
     parser.add_argument(
         "--bundles", type=Path, action="append", default=[], help="show plugin bundles in DIR"
     )
@@ -496,12 +516,14 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         summaries=summaries,
         logs=LogFolder(ns.log_dir.expanduser()) if ns.log_dir is not None else None,
         claude_key=LaptopClaudeKeys(switches) if switches is not None else None,
+        server_token=LaptopServerTokens(switches) if switches is not None else None,
         on_start=summaries.start if summaries is not None else None,
         on_close=_closer(switches, scout, summaries),
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
-        what += "; chat connected to the local model"
+        server = urlsplit(ns.model_url).scheme == "https"
+        what += "; chat connected to our server's model" if server else "; chat connected to the local model"
     if switches is not None:
         what += "; switches remembered in the laptop database"
     if summaries is not None:
@@ -525,7 +547,10 @@ def _scout(  # noqa: PLR0913  # the model, the database, GitHub, the roles, more
     if switches is None or not model_url:
         return None
     try:
-        model = ModelClient(model_url, timeout_s=SCOUT_TIMEOUT_S, transport=transport)
+        hosts, access = model_reach(model_url, switches)
+        model = ModelClient(
+            model_url, allowed_hosts=hosts, access=access, timeout_s=SCOUT_TIMEOUT_S, transport=transport
+        )
     except NetError:
         return None  # the chat says why the address was refused
     return LaptopScout(
@@ -645,7 +670,8 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
         tools, skills = tools_for(
             registry, PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport=transport, fixes=fixes, logs=logs
         )
-        return model_chat(model_url, transport, tools, skills)
+        hosts, _ = model_reach(model_url, None)
+        return model_chat(model_url, transport, tools, skills, allowed_hosts=hosts)
 
     def build(standing: Standing) -> tuple[list[Tool], str]:
         return tools_for(
@@ -661,12 +687,29 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
         )
 
     # Board inspection needs the audit log (the laptop database), so it exists only with switches.
+    hosts, access = model_reach(model_url, switches)
     return model_chat(
         model_url,
         transport,
         switched=Switched(build=build, standing=switches.standing),
         inspect=switches.recorder(workspaces),
+        allowed_hosts=hosts,
+        access=access,
     )
+
+
+def model_reach(
+    model_url: str, switches: LaptopSwitches | None
+) -> tuple[frozenset[str], AccessSource | None]:
+    """The hosts and token a model address needs: our server's model through the tunnel needs both.
+
+    Over https only our own server may be reached, with the service token saved on the Customize page
+    (opened for each call; none without a database, so Cloudflare refuses). The laptop's own model
+    (plain http to 127.0.0.1) needs neither.
+    """
+    if urlsplit(model_url).scheme != "https":
+        return frozenset(), None
+    return frozenset({SERVER_MODEL_HOST}), (switches.server_token if switches is not None else None)
 
 
 def _library(folder: Path) -> RoleLibrary:

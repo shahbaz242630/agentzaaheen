@@ -5,6 +5,7 @@ import {
   ApiError,
   api,
   type ClaudeKeyStatus,
+  type ServerTokenStatus,
   type ItemState,
   type Kind,
   type PasskeyStatus,
@@ -12,6 +13,7 @@ import {
 } from "../api";
 import { PasskeyProblem, approveWithPasskey, onPasskeyAddress, setUpPasskey, withPasskeyIfNeeded } from "../passkey";
 import { ClaudeKeyPanel } from "./ClaudeKeyPanel";
+import { ServerTokenPanel } from "./ServerTokenPanel";
 import { PasskeyPanel } from "./PasskeyPanel";
 import { ConnectorCard, PluginCard, SkillCard, skillTitle } from "./RegistryCards";
 import { RequestList, SwitchControl, reason } from "./RegistrySwitch";
@@ -79,6 +81,7 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [passkey, setPasskey] = useState<PasskeyStatus | null>(null);
   const [claudeKey, setClaudeKey] = useState<ClaudeKeyStatus | null>(null);
+  const [serverToken, setServerToken] = useState<ServerTokenStatus | null>(null);
 
   useEffect(() => {
     if (!page.switches) return;
@@ -97,6 +100,14 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
       },
       () => {
         if (live) setClaudeKey(null);
+      },
+    );
+    api.serverToken().then(
+      (status) => {
+        if (live) setServerToken(status);
+      },
+      () => {
+        if (live) setServerToken(null);
       },
     );
     return () => {
@@ -170,6 +181,25 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
     );
   }
 
+  function saveServerToken(clientId: string, clientSecret: string) {
+    setBusy(true);
+    setError(null);
+    withPasskeyIfNeeded(
+      () => api.saveServerToken(clientId, clientSecret),
+      () => api.serverTokenOptions(clientId, clientSecret),
+      (credential) => api.saveServerToken(clientId, clientSecret, credential),
+    ).then(
+      (status) => {
+        setServerToken(status);
+        setBusy(false);
+      },
+      (failure: unknown) => {
+        setError(explain(failure));
+        setBusy(false);
+      },
+    );
+  }
+
   function control(kind: Kind, id: string, state: ItemState) {
     if (!page.switches) return undefined;
     return (
@@ -211,6 +241,15 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
           canSign={passkey?.enrolled === true && onPasskeyAddress()}
           busy={busy}
           onSave={saveClaudeKey}
+        />
+      )}
+
+      {page.switches && serverToken?.switches === true && (
+        <ServerTokenPanel
+          status={serverToken}
+          canSign={passkey?.enrolled === true && onPasskeyAddress()}
+          busy={busy}
+          onSave={saveServerToken}
         />
       )}
 
