@@ -41,6 +41,9 @@ from agentzaaheen.core.policy import (
     ClaudeKeyVerdict,
     Ledger,
     LifecycleVerdict,
+    ModelKeyControl,
+    ModelKeyStatus,
+    ModelKeyVerdict,
     PasskeyApprovals,
     RegistryControl,
     Removal,
@@ -68,7 +71,7 @@ from agentzaaheen.core.store import (
 )
 from agentzaaheen.core.vault import Keyring
 from tools import laptop_db
-from tools.vault_key import CLAUDE_WORKSPACE, claude_slot, server_token_slot
+from tools.vault_key import CLAUDE_WORKSPACE, claude_slot, model_key_slot, server_token_slot
 
 LAPTOP_TENANT = laptop_db.LAPTOP_TENANT
 START_LAPTOP_DB = "uv run python -m tools.laptop_db up"
@@ -139,6 +142,7 @@ class LaptopSwitches:
         self._summaries: SummaryControl | None = None
         self._claude_key: ClaudeKeyControl | None = None
         self._server_token: ServerTokenControl | None = None
+        self._model_key: ModelKeyControl | None = None
         self._keyring = keyring
         self._site = site
         self._enrol_code = enrol_code
@@ -181,6 +185,14 @@ class LaptopSwitches:
                     LAPTOP_TENANT,
                     CLAUDE_WORKSPACE,
                     slot=server_token_slot(db, self._keyring),
+                    passkeys=passkeys,
+                    clock=self._clock,
+                )
+                self._model_key = ModelKeyControl(
+                    db,
+                    LAPTOP_TENANT,
+                    CLAUDE_WORKSPACE,
+                    slot=model_key_slot(db, self._keyring),
                     passkeys=passkeys,
                     clock=self._clock,
                 )
@@ -273,6 +285,19 @@ class LaptopSwitches:
     async def server_token(self) -> ServiceToken:
         """The token for one call to our server's model; raises ``SourceError`` when it cannot be opened."""
         return await (await self.server_token_control()).token_source()()
+
+    # ---- our server model's own key (F10 slice 6): the same passkey, opened for each call to our server
+
+    async def model_key_control(self) -> ModelKeyControl:
+        """Saving and opening the server model's key (opens the database on first use)."""
+        await self._open()
+        if self._model_key is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._model_key
+
+    async def model_key(self) -> SecretStr:
+        """The key for one call to our server's model; raises ``SourceError`` when it cannot be opened."""
+        return await (await self.model_key_control()).key_source()()
 
     async def claude_lines(self, now: datetime) -> tuple[str, ...]:
         """The briefing's Claude lines: runs that did not run in the day before ``now``, caps at 80%."""
@@ -438,3 +463,22 @@ class LaptopServerTokens:
     ) -> ServerTokenVerdict:
         """Seal the token once this exact save is signed."""
         return await (await self._switches.server_token_control()).save(client_id, client_secret, credential)
+
+
+class LaptopModelKeys:
+    """The model key routes' view of the laptop database (its own object, like the server token's)."""
+
+    def __init__(self, switches: LaptopSwitches) -> None:
+        self._switches = switches
+
+    async def status(self) -> ModelKeyStatus:
+        """Whether the vault is ready and a key is saved."""
+        return await (await self._switches.model_key_control()).status()
+
+    async def options(self, key: SecretStr) -> dict[str, Any]:
+        """Options for Windows Hello to sign saving exactly ``key``."""
+        return await (await self._switches.model_key_control()).options(key)
+
+    async def save(self, key: SecretStr, credential: dict[str, Any] | None) -> ModelKeyVerdict:
+        """Seal the key once this exact save is signed."""
+        return await (await self._switches.model_key_control()).save(key, credential)

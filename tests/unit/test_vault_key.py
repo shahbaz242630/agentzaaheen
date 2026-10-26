@@ -7,8 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from agentzaaheen.core.policy import key_problem, token_problem
+from agentzaaheen.core.policy import key_problem, model_key_problem, token_problem
 from agentzaaheen.core.policy.claude_key import MAX_KEY_CHARS
+from agentzaaheen.core.policy.model_key import MAX_KEY_CHARS as MAX_MODEL_KEY_CHARS
+from agentzaaheen.core.policy.model_key import MIN_KEY_CHARS as MIN_MODEL_KEY_CHARS
 from agentzaaheen.core.policy.server_token import MAX_PART_CHARS
 from tools import vault_key
 
@@ -83,3 +85,23 @@ SECRET = "f" * 64
 )
 def test_the_server_token_shape_check(client_id: str, secret: str, why: str | None) -> None:
     assert token_problem(client_id, secret) == why
+
+
+@pytest.mark.parametrize(
+    ("raw", "why"),
+    [
+        ("a1" * 32, None),  # the server's shape: 64 letters and digits
+        ("a" * MIN_MODEL_KEY_CHARS, None),  # exactly at the shortest
+        ("a" * MAX_MODEL_KEY_CHARS, None),  # exactly at the longest
+        ("", "it is empty"),
+        ("a" * (MIN_MODEL_KEY_CHARS - 1), "it is too short"),
+        ("a" * (MAX_MODEL_KEY_CHARS + 1), "it is too long"),
+        ("a1" * 16 + " " + "a1" * 16, "it contains spaces or other characters the key never has"),
+        ("a1" * 32 + "\n", "it contains spaces or other characters the key never has"),
+        ("0" * 32 + ".access", "it contains spaces or other characters the key never has"),
+        ("a1" * 32 + "é", "it contains spaces or other characters the key never has"),
+        ("sk-ant-" + "a" * 40, "that is a Claude key, not the server's"),
+    ],
+)
+def test_the_server_model_key_shape_check(raw: str, why: str | None) -> None:
+    assert model_key_problem(raw) == why

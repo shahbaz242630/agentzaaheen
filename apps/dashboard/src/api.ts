@@ -432,6 +432,10 @@ export type ClaudeKeyStatus = z.infer<typeof ClaudeKeyStatus>;
 export const ServerTokenStatus = ClaudeKeyStatus;
 export type ServerTokenStatus = ClaudeKeyStatus;
 
+// Our server model's own key: the same shape again, never the key itself.
+export const ModelKeyStatus = ClaudeKeyStatus;
+export type ModelKeyStatus = ClaudeKeyStatus;
+
 // WebAuthn options as JSON, handed straight to the browser's own parser (it checks them).
 const PasskeyOptions = z.strictObject({ options: z.record(z.string(), z.unknown()) });
 
@@ -553,6 +557,12 @@ export const api = {
     postJson("/api/server-token", { client_id, client_secret, credential }, ServerTokenStatus),
   serverTokenOptions: async (client_id: string, client_secret: string) =>
     (await postJson("/api/server-token/options", { client_id, client_secret }, PasskeyOptions)).options,
+  // Our server model's own key: one part, saved the same way as the Claude key.
+  modelKey: () => getJson("/api/model-key", ModelKeyStatus),
+  saveModelKey: (key: string, credential?: unknown) =>
+    postJson("/api/model-key", { key, credential }, ModelKeyStatus),
+  modelKeyOptions: async (key: string) =>
+    (await postJson("/api/model-key/options", { key }, PasskeyOptions)).options,
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),

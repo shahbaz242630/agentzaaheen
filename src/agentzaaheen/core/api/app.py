@@ -43,6 +43,7 @@ from agentzaaheen.core.api.agents import AgentSwitches, agent_routes
 from agentzaaheen.core.api.claude_key import ClaudeKeys, claude_key_routes
 from agentzaaheen.core.api.facts import portfolio_facts, project_facts, uses_sample
 from agentzaaheen.core.api.logs import LogReader, log_routes
+from agentzaaheen.core.api.model_key import ModelKeys, model_key_routes
 from agentzaaheen.core.api.profile import WorkspaceProfiles, profile_routes
 from agentzaaheen.core.api.registry import (
     EnrolAnswer,
@@ -373,6 +374,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     logs: LogReader | None = None,
     claude_key: ClaudeKeys | None = None,
     server_token: ServerTokens | None = None,
+    model_key: ModelKeys | None = None,
     on_start: Callable[[], Awaitable[None]] | None = None,
     on_close: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
@@ -391,7 +393,8 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     no logs are kept.
     ``claude_key`` saves the Claude API key into the vault after Windows Hello (with a database);
     without it the Customize page says it cannot be saved here. ``server_token`` does the same for the
-    Cloudflare service token that lets the laptop reach our server's model through the tunnel.
+    Cloudflare service token that lets the laptop reach our server's model through the tunnel, and
+    ``model_key`` for that model's own key (the server answers only calls that carry it).
     ``on_start`` runs once the server is up, inside its event loop (the morning job starts there);
     ``on_close`` runs when the server stops (the laptop database's pool is closed there).
 
@@ -456,6 +459,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     log_routes(app, logs)
     claude_key_routes(app, claude_key, _refuse_foreign)
     server_token_routes(app, server_token, _refuse_foreign)
+    model_key_routes(app, model_key, _refuse_foreign)
 
     async def answer(question: ChatQuestion, facts: str, sample: bool, workspace: str | None) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:

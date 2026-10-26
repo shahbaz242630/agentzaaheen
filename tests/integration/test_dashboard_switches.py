@@ -206,7 +206,7 @@ def test_set_up_a_passkey_then_approve_and_refuse_over_http(
         assert states(client)["triage-failing-build"] == "off"
 
 
-def test_the_server_token_saved_with_windows_hello_goes_with_each_call_to_our_server(
+def test_the_server_token_and_model_key_saved_with_windows_hello_go_with_each_call_to_our_server(
     ui: Path, laptop_url: SecretStr, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     key_file = tmp_path / "vault.key"
@@ -222,6 +222,7 @@ def test_the_server_token_saved_with_windows_hello_goes_with_each_call_to_our_se
     app = start(ui, laptop_url, argv, transport=httpx.MockTransport(server))
     code = capsys.readouterr().out.split("The code to type on the Customize page is ")[1].split()[0]
     token = {"client_id": "0" * 32 + ".access", "client_secret": "f" * 64}  # built here, never a real one
+    model_key = {"key": "a1" * 32}  # built here, never the real one
     question = {"model_id": chat_tools.LOCAL_MODEL_ID, "question": "hi"}
     with TestClient(app, base_url="http://localhost:8765") as client:
         before = client.post("/api/chat", json=question, headers=HERE)
@@ -237,18 +238,32 @@ def test_the_server_token_saved_with_windows_hello_goes_with_each_call_to_our_se
         saved = client.post(
             "/api/server-token", json={**token, "credential": device.sign(sign)}, headers=HERE
         )
+        token_only = client.post("/api/chat", json=question, headers=HERE)
+        assert client.get("/api/model-key").json()["saved"] is False
+        unsigned_key = client.post("/api/model-key", json=model_key, headers=HERE)
+        sign = client.post("/api/model-key/options", json=model_key, headers=HERE).json()["options"]
+        saved_key = client.post(
+            "/api/model-key", json={**model_key, "credential": device.sign(sign)}, headers=HERE
+        )
         after = client.post("/api/chat", json=question, headers=HERE)
         claude = client.get("/api/claude-key").json()
+        still_token = client.get("/api/server-token").json()
 
     assert (before.status_code, before.json()) == (502, {"detail": "net.auth"})  # nothing saved: nothing sent
     assert unsigned.json() == {"detail": "server_token.needs_passkey"}
     assert saved.json()["saved"] is True
     assert token["client_secret"] not in saved.text
+    assert (token_only.status_code, token_only.json()) == (502, {"detail": "net.auth"})  # no key, no call
+    assert unsigned_key.json() == {"detail": "model_key.needs_passkey"}
+    assert saved_key.json()["saved"] is True
+    assert model_key["key"] not in saved_key.text
     assert after.json()["answer"] == "Through the tunnel."
-    assert claude["saved"] is False  # its own slot: saving it never touches the Claude key
-    (call,) = seen
+    assert claude["saved"] is False  # their own slots: saving one never touches another
+    assert still_token["saved"] is True
+    (call,) = seen  # only the call with both was sent
     assert call.headers["CF-Access-Client-Id"] == token["client_id"]
     assert call.headers["CF-Access-Client-Secret"] == token["client_secret"]
+    assert call.headers["Authorization"] == f"Bearer {model_key['key']}"
 
 
 def ask_after_switching_off(client: TestClient) -> str:

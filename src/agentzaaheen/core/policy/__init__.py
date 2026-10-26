@@ -68,6 +68,12 @@ from agentzaaheen.core.policy.gate import (
     decide,
 )
 from agentzaaheen.core.policy.ledger import Ledger, load_kill_switches
+from agentzaaheen.core.policy.model_key import (
+    ModelKeyControl,
+    ModelKeyStatus,
+    ModelKeyVerdict,
+    model_key_problem,
+)
 from agentzaaheen.core.policy.passkey_approvals import PasskeyApprovals
 from agentzaaheen.core.policy.registry_control import (
     OUTSIDE_KINDS,
@@ -117,6 +123,9 @@ __all__ = [
     "KillSwitches",
     "Ledger",
     "LifecycleVerdict",
+    "ModelKeyControl",
+    "ModelKeyStatus",
+    "ModelKeyVerdict",
     "Operation",
     "PasskeyApprovals",
     "Pending",
@@ -146,6 +155,7 @@ __all__ = [
     "decide",
     "key_problem",
     "load_kill_switches",
+    "model_key_problem",
     "slug_of",
     "token_problem",
     "verify_chain",
