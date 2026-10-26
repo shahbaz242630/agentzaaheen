@@ -243,7 +243,8 @@ class RunRecord(_Record):
     tenant_id: UUID
     project_id: UUID
     agent: str = Field(min_length=1, max_length=64)
-    agent_version: str = Field(pattern=r"^\d+\.\d+\.\d+$")
+    # A plugin's "1.2.3", or the fingerprint of the frozen role pack the agent ran (F11, ADR-039).
+    agent_version: str = Field(pattern=r"^(\d+\.\d+\.\d+|[0-9a-f]{64})$")
     trigger_event_ids: tuple[UUID, ...] = ()
     prompt_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     model: ModelInfo | None = None

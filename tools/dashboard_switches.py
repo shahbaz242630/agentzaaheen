@@ -48,6 +48,7 @@ from agentzaaheen.core.policy import (
     RegistryControl,
     Removal,
     Role,
+    RunsReport,
     ScoutControl,
     ServerTokenControl,
     ServerTokenStatus,
@@ -63,6 +64,8 @@ from agentzaaheen.core.registry.roles import RoleLibrary
 from agentzaaheen.core.store import (
     Database,
     DatabaseSettings,
+    EngagedSwitch,
+    KillSwitchRows,
     ModelCallMisses,
     ModelCalls,
     StoreError,
@@ -213,6 +216,17 @@ class LaptopSwitches:
     async def view(self, workspace: WorkspaceRow) -> WorkspaceAgentsOut:
         """A workspace's agents, switch and cap."""
         return await (await self._agents_now()).view(workspace)
+
+    async def runs_report(self, workspace: WorkspaceRow, since: datetime) -> RunsReport:
+        """A workspace's agent runs since ``since`` that did not run or were skipped (its daily summary)."""
+        return await (await self._agents_now()).runs_report(workspace, since)
+
+    async def stop_switches(self) -> list[EngagedSwitch]:
+        """Every stop switch that is on (the briefing names each one, F11)."""
+        await self._open()
+        if self._db is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return await KillSwitchRows(self._db.scoped(LAPTOP_TENANT)).engaged()
 
     async def give(self, workspace: WorkspaceRow, role_id: str) -> AgentVerdict:
         """Give a workspace an agent."""

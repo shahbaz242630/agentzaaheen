@@ -127,6 +127,7 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "model_calls": read_add,  # a cost is added, never changed: a cap can only fill up
         "model_call_misses": read_add,  # a run that did not run stays written down
         "customer_name_prints": read_add,  # fingerprints only; removed only with the workspace
+        "run_starts": read_add,  # a run's start, written before it works, never changed (F11)
     }
 
 

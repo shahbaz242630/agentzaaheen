@@ -9,6 +9,8 @@ reaches the briefing (ADR-031).
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -17,11 +19,15 @@ from agentzaaheen.core.api.summary import (
     AgentsFact,
     AlertsFact,
     DailySummary,
+    MissedFact,
     ScoutFact,
+    SkippedFact,
+    StopFact,
     Unread,
     briefing,
     first_line,
     read_summary,
+    stop_lines,
     summarise,
 )
 from agentzaaheen.core.api.views import (
@@ -223,3 +229,81 @@ def test_a_saved_summary_reads_back_and_a_broken_one_reads_as_none() -> None:
 def test_counts_read_naturally(count: int) -> None:
     made = summary(detail(card("code", "Code", entries=(Entry(text="x", tone=Tone.WARN),) * count)))
     assert ("1 thing to look at" if count == 1 else "2 things to look at") in first_line(made)
+
+
+# ---- F11: runs that did not run, runs skipped, and stop switches (Chairman, 26 Oct 2026)
+
+DUBAI = ZoneInfo("Asia/Dubai")
+
+
+def _agents(**more: Any) -> AgentsFact:
+    return AgentsFact(agents=2, on=1, workspace_on=True, spent_minor=0, cap_minor=500, **more)
+
+
+def test_runs_that_did_not_run_are_named_and_make_the_project_need_a_look() -> None:
+    missed = (
+        MissedFact(role="monitoring", reason="run.interrupted"),
+        MissedFact(role="sales", reason="run.agent_cap_used"),
+    )
+    made = summary(detail(card("uptime", "Uptime")), agents=_agents(missed=missed, missed_count=2))
+    assert first_line(made) == (
+        "All fine; 1 of 2 agents on; "
+        "2 agent runs did not run (monitoring: interrupted; sales: agent cap used)."
+    )
+    _, lines = briefing([made], day=DAY, local_time="07:00", late=False)
+    assert lines[0] == "1 project; 1 need a look."
+
+
+def test_more_runs_than_are_named_are_still_counted() -> None:
+    missed = tuple(MissedFact(role="monitoring", reason="run.crashed") for _ in range(5))
+    made = summary(detail(card("uptime", "Uptime")), agents=_agents(missed=missed, missed_count=12))
+    assert (
+        "12 agent runs did not run "
+        "(monitoring: crashed; monitoring: crashed; monitoring: crashed; and 9 more)" in first_line(made)
+    )
+
+
+def test_skipped_runs_are_one_counted_line_and_do_not_need_a_look() -> None:
+    skipped = (SkippedFact(role="monitoring", reason="run.agent_paused", count=2),)
+    made = summary(detail(card("uptime", "Uptime")), agents=_agents(skipped=skipped, skipped_count=2))
+    assert first_line(made) == "All fine; 1 of 2 agents on; 2 agent runs skipped (monitoring: paused)."
+    _, lines = briefing([made], day=DAY, local_time="07:00", late=False)
+    assert lines[0] == "1 project; 0 need a look."
+
+
+def test_a_skip_with_no_known_role_still_counts() -> None:
+    skipped = (SkippedFact(reason="run.stop_all", count=1),)
+    made = summary(detail(card("uptime", "Uptime")), agents=_agents(skipped=skipped, skipped_count=1))
+    assert first_line(made).endswith("1 agent run skipped (an agent: stop-all switch on).")
+
+
+def test_every_stop_switch_that_is_on_is_named_with_its_time_in_dubai() -> None:
+    since = datetime(2026, 10, 26, 10, 2, tzinfo=UTC)  # 14:02 in Dubai
+    stops = [
+        StopFact(scope="all", since=since),
+        StopFact(scope="project", name="Eva", since=since),
+        StopFact(scope="agent", since=since + timedelta(hours=1)),
+        StopFact(scope="agent", since=since),
+    ]
+    assert stop_lines(stops, DUBAI) == (
+        "Stop switch ON: all agents stopped since 26 Oct 14:02.",
+        "Stop switch ON: Eva stopped since 26 Oct 14:02.",
+        "Stop switch ON: 2 agents paused (the oldest since 26 Oct 14:02).",
+    )
+    assert stop_lines([], DUBAI) == ()
+
+
+def test_stop_lines_come_first_in_the_briefing() -> None:
+    made = summary(detail(card("uptime", "Uptime")))
+    _, lines = briefing(
+        [made], day=DAY, local_time="07:00", late=False, keys=("A key ends.",), stops=("Stop switch ON: x.",)
+    )
+    assert lines[:3] == ("1 project; 0 need a look.", "Stop switch ON: x.", "A key ends.")
+
+
+def test_a_summary_saved_before_f11_still_reads_back() -> None:
+    made = summary(detail(card("uptime", "Uptime")), agents=_agents())
+    saved = made.model_dump(mode="json")
+    for name in ("missed", "missed_count", "skipped", "skipped_count"):
+        del saved["agents"][name]
+    assert read_summary(saved) == made

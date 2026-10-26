@@ -48,11 +48,18 @@ class Book(MemoryBook):
         super().__init__()
         self.calls: list[tuple[Use, str, int]] = []
 
-    async def add(
-        self, use: Use, model: str, micro: int, at: datetime, tokens: CallTokens | None = None
+    async def add(  # the book's own signature
+        self,
+        use: Use,
+        model: str,
+        micro: int,
+        at: datetime,
+        tokens: CallTokens | None = None,
+        *,
+        run_id: str | None = None,
     ) -> None:
         self.calls.append((use, model, micro))
-        await super().add(use, model, micro, at, tokens)
+        await super().add(use, model, micro, at, tokens, run_id=run_id)
 
 
 def run_tool(handler: object = answered, *extra: str, book: Book | None = None) -> int:

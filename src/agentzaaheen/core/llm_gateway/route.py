@@ -167,8 +167,12 @@ class ModelGate:
         say(self._log, "model_cloud_check_passed", model=entry.model_id, checked=len(parts))
         return await self._spend(role, entry, use, parts, max_output_tokens)
 
-    async def record(self, use: Use, model: ModelEntry, usage: Usage, answer_chars: int = 0) -> int:
+    async def record(  # the call's own facts
+        self, use: Use, model: ModelEntry, usage: Usage, answer_chars: int = 0, *, run_id: str | None = None
+    ) -> int:
         """Add what one call really cost (from the API's counts) and keep the counts; returns micro-USD.
+
+        ``run_id`` is the agent run the call was for, so the runner can add up the run's cost (F11).
 
         ``answer_chars`` is the visible answer's length: with ``usage.output_tokens`` it shows how
         much of the output was hidden thinking (Opus thinks on every call; F10 slice 3b).
@@ -182,7 +186,7 @@ class ModelGate:
                 cache_write=usage.cache_write_5m_tokens + usage.cache_write_1h_tokens,
                 answer_chars=answer_chars,
             )
-            await self._ledger.record(use, model.model_id, micro, tokens)
+            await self._ledger.record(use, model.model_id, micro, tokens, run_id=run_id)
         return micro
 
     async def _known_names(self) -> KnownNames | None:

@@ -11,7 +11,8 @@ What it does:
     workspace's daily summaries with the Board's morning briefings, what each
     Claude call cost, and our customers' names as keyed fingerprints only),
     and each workspace's agents, switch and cap with
-    the frozen role versions they run (ADR-039). Every table has a ``tenant_id`` and sits
+    the frozen role versions they run (ADR-039), and each agent run's start
+    (F11). Every table has a ``tenant_id`` and sits
     behind a database wall (row-level security, forced): each transaction
     names its tenant, and for project-level tables its workspace, through
     :meth:`Database.scoped`; one that names none is refused. The app connects
@@ -59,6 +60,7 @@ from agentzaaheen.core.store.registry_switches import (
     SwitchRow,
 )
 from agentzaaheen.core.store.revenue import MAX_ROWS, RevenueRows, SyncState
+from agentzaaheen.core.store.run_starts import RUN_INTERRUPTED, MissedRun, RunCalls, RunStart, RunStarts
 from agentzaaheen.core.store.scout import INTERRUPTED, ScoutRun, ScoutRuns
 from agentzaaheen.core.store.sealed import (
     Access,
@@ -91,6 +93,7 @@ __all__ = [
     "MAX_PAGE",
     "MAX_ROWS",
     "MIGRATIONS",
+    "RUN_INTERRUPTED",
     "Access",
     "AgentChange",
     "AgentRow",
@@ -114,6 +117,7 @@ __all__ = [
     "KillSwitchRows",
     "Migration",
     "MissRow",
+    "MissedRun",
     "ModelCallMisses",
     "ModelCalls",
     "NamePrints",
@@ -128,6 +132,9 @@ __all__ = [
     "RevenueRows",
     "RoleVersion",
     "RoleVersionRows",
+    "RunCalls",
+    "RunStart",
+    "RunStarts",
     "Scoped",
     "ScoutRun",
     "ScoutRuns",

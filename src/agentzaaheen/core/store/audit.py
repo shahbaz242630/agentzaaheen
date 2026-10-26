@@ -9,7 +9,7 @@ does not link to the previous one, and any UPDATE, DELETE or TRUNCATE.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -30,6 +30,14 @@ _PAGE = """
 SELECT tenant_id, seq, at, actor, action, outcome, reason_code, correlation_id, project_id, target_ref,
     details, prev_hash, hash
 FROM agentzaaheen.audit_log WHERE tenant_id = $1 AND seq > $2 ORDER BY seq LIMIT $3
+"""
+# Runs the runner did not start because they were not meant to (F11): counted for the daily summary.
+_SKIPPED = """
+SELECT reason_code, details->>'role' AS role FROM agentzaaheen.audit_log
+WHERE tenant_id = $1 AND project_id = $2 AND action = 'run.start' AND outcome = 'deny'
+    AND reason_code = ANY($3::text[]) AND at >= $4 AND at < $5
+ORDER BY seq
+LIMIT $6
 """
 _INSERT = """
 INSERT INTO agentzaaheen.audit_log (tenant_id, seq, at, actor, action, outcome, reason_code, correlation_id,
@@ -91,6 +99,15 @@ class AuditRows:
         """The newest row of a tenant's chain, or None if it is empty."""
         async with self._scope.connection() as conn:
             return _row(await conn.fetchrow(_HEAD, self._tenant))
+
+    async def skipped_runs(  # which workspace, which reasons, the window, how many
+        self, project_id: UUID, reasons: Sequence[str], start: datetime, end: datetime, *, limit: int = 5000
+    ) -> list[tuple[str, str | None]]:
+        """``(reason, role)`` of each run not started for one of ``reasons`` in ``[start, end)``."""
+        require_aware(start, end)
+        async with self._scope.connection() as conn:
+            rows = await conn.fetch(_SKIPPED, self._tenant, project_id, list(reasons), start, end, limit)
+        return [(r["reason_code"], r["role"]) for r in rows]
 
     async def all_rows(self) -> list[AuditRow]:
         """Every row of a tenant's chain, oldest first, read page by page."""

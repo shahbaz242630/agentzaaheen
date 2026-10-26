@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 
@@ -34,6 +35,8 @@ MAX_METRICS = 6
 MAX_LINES = 5
 MAX_CHANGES = 8
 MAX_ROLES = 40
+MAX_MISSED = 10  # runs that did not run, kept by name in a summary; more are only counted
+MISSED_SHOWN = 3  # of those, named in the one-line summary
 MAX_MESSAGE_BYTES = 3500  # under the push client's limit and the saved briefing's
 _SLUG = r"^[a-z0-9][a-z0-9-]{0,63}$"
 _CODE = r"^[a-z0-9_]+(\.[a-z0-9_]+)*$"
@@ -87,14 +90,47 @@ class AlertsFact(_View):
     counted_since: AwareDatetime
 
 
+class MissedFact(_View):
+    """One agent run that did not run in the window: its role and why (a code, F11)."""
+
+    role: str = Field(pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$", max_length=64)
+    reason: str = Field(pattern=_CODE, max_length=80)
+
+
+class SkippedFact(_View):
+    """Runs skipped as not meant to run (off, paused, stopped): one role and reason, counted."""
+
+    role: str | None = Field(default=None, pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$", max_length=64)
+    reason: str = Field(pattern=_CODE, max_length=80)
+    count: int = Field(ge=1)
+
+
+class StopFact(_View):
+    """A stop switch that is on: for everything, one project (by name) or one agent, and since when."""
+
+    scope: Literal["all", "project", "agent"]
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    since: AwareDatetime | None = None
+
+
 class AgentsFact(_View):
-    """The workspace's agents now: how many, how many on, and spend this month against its cap."""
+    """The workspace's agents now: how many, how many on, spend this month against its cap, and runs missed.
+
+    ``missed`` names up to :data:`MAX_MISSED` runs in the window that did not run (refused, crashed,
+    over time, interrupted); ``missed_count`` counts them all. ``skipped`` counts the runs not started
+    because they were not meant to run, by role and reason (Chairman, 26 Oct 2026: one line, never one
+    per run). Summaries saved before F11 have none of these.
+    """
 
     agents: int = Field(ge=0)
     on: int = Field(ge=0)
     workspace_on: bool
     spent_minor: int = Field(ge=0)
     cap_minor: int | None = Field(default=None, ge=0)
+    missed: tuple[MissedFact, ...] = Field(default=(), max_length=MAX_MISSED)
+    missed_count: int = Field(default=0, ge=0)
+    skipped: tuple[SkippedFact, ...] = Field(default=(), max_length=MAX_MISSED)
+    skipped_count: int = Field(default=0, ge=0)
 
 
 class ScoutFact(_View):
@@ -256,6 +292,10 @@ def first_line(summary: DailySummary) -> str:
         parts.append(_count(len(summary.changes), "number changed", "numbers changed"))
     if summary.agents is not None and summary.agents.agents:
         parts.append(f"{summary.agents.on} of {_count(summary.agents.agents, 'agent')} on")
+    if summary.agents is not None and summary.agents.missed_count:
+        parts.append(_missed(summary.agents))
+    if summary.agents is not None and summary.agents.skipped_count:
+        parts.append(_skipped(summary.agents))
     if summary.scout is not None and summary.scout.state == "done":
         parts.append(f"scout recommends {_count(len(summary.scout.recommended), 'role')}")
     return "; ".join(parts) + "."
@@ -269,22 +309,27 @@ def briefing(  # noqa: PLR0913  # the summaries, the day and time, then each kin
     late: bool,
     keys: Sequence[str] = (),
     claude: Sequence[str] = (),
+    stops: Sequence[str] = (),
 ) -> tuple[str, tuple[str, ...]]:
     """The Board's morning message: a title and its lines (one per workspace, worst first), no links.
 
     ``keys`` are the keys that end within 14 days or have ended (``tools.key_dates``), and
     ``claude`` the Board's Claude lines (runs that did not run, caps at 80%), written by
     ``llm_gateway.claude_lines`` from fixed templates; both come right after the count line, keys first.
+    ``stops`` are the stop switches that are on (:func:`stop_lines`): they come first of all.
     """
     title = f"Agent Zaaheen briefing, {day.strftime('%a')} {day.day} {day.strftime('%b')}"
     lines: list[str] = []
     if late:
         lines.append(f"Made late, at {local_time}: the dashboard was not running at the usual time.")
     if summaries:
-        needs = [s for s in summaries if s.health in {Health.ALERT, Health.WARN} or s.unread]
+        needs = [
+            s for s in summaries if s.health in {Health.ALERT, Health.WARN} or s.unread or _any_missed(s)
+        ]
         lines.append(f"{_count(len(summaries), 'project')}; {len(needs)} need a look.")
     else:
         lines.append("No project has a summary today.")
+    lines.extend(stops)
     lines.extend(keys)
     lines.extend(claude)
     end = "Details on the dashboard."
@@ -307,3 +352,66 @@ def _bytes(line: str) -> int:
 def _worst_first(summaries: Sequence[DailySummary]) -> list[DailySummary]:
     order = {Health.ALERT: 0, Health.WARN: 1, Health.UNKNOWN: 2, Health.OK: 3}
     return sorted(summaries, key=lambda s: (order[s.health], 0 if s.unread else 1))
+
+
+def _missed(agents: AgentsFact) -> str:
+    """'2 agent runs did not run (monitoring: interrupted; sales: agent cap used)': codes in plain words."""
+    shown = agents.missed[:MISSED_SHOWN]
+    named = "; ".join(f"{m.role}: {m.reason.removeprefix('run.').replace('_', ' ')}" for m in shown)
+    rest = agents.missed_count - len(shown)
+    more = f"; and {rest} more" if rest > 0 and named else ""
+    runs = _count(agents.missed_count, "agent run")
+    return f"{runs} did not run ({named}{more})" if named else f"{runs} did not run"
+
+
+def _any_missed(summary: DailySummary) -> bool:
+    return summary.agents is not None and summary.agents.missed_count > 0
+
+
+# The reasons a run was skipped, in our own words (codes from ``policy.SKIPPED_REASONS``).
+SKIP_WORDS = {
+    "run.stop_all": "stop-all switch on",
+    "run.workspace_frozen": "project stopped",
+    "run.agent_paused": "paused",
+    "run.agent_off": "switched off",
+    "run.workspace_off": "project switched off",
+    "run.no_agent": "agent removed",
+}
+
+
+def _skipped(agents: AgentsFact) -> str:
+    """'2 agent runs skipped (monitoring: paused)': one line, by role and reason, never one per run."""
+    shown = agents.skipped[:MISSED_SHOWN]
+    named = "; ".join(
+        f"{s.role or 'an agent'}: {SKIP_WORDS.get(s.reason, s.reason.removeprefix('run.').replace('_', ' '))}"
+        for s in shown
+    )
+    more = "; and more" if len(agents.skipped) > len(shown) else ""
+    return f"{_count(agents.skipped_count, 'agent run')} skipped ({named}{more})"
+
+
+def stop_lines(stops: Sequence[StopFact], zone: ZoneInfo) -> tuple[str, ...]:
+    """The briefing's stop switch lines: every switch that is on, always (Chairman, 26 Oct 2026)."""
+    lines: list[str] = []
+    for stop in stops:
+        if stop.scope == "all":
+            lines.append(f"Stop switch ON: all agents stopped{_since(stop, zone)}.")
+        elif stop.scope == "project":
+            lines.append(f"Stop switch ON: {stop.name or 'a project'} stopped{_since(stop, zone)}.")
+    paused = [s for s in stops if s.scope == "agent"]
+    if paused:
+        known = [s for s in paused if s.since is not None]
+        oldest = f" (the oldest{_since(min(known, key=_when), zone)})" if known else ""
+        lines.append(f"Stop switch ON: {_count(len(paused), 'agent')} paused{oldest}.")
+    return tuple(lines)
+
+
+def _when(stop: StopFact) -> datetime:
+    return stop.since or datetime.max.replace(tzinfo=ZoneInfo("UTC"))
+
+
+def _since(stop: StopFact, zone: ZoneInfo) -> str:
+    if stop.since is None:
+        return ""
+    at = stop.since.astimezone(zone)
+    return f" since {at.day} {at.strftime('%b %H:%M')}"

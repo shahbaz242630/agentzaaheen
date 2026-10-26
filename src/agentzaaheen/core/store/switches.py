@@ -15,7 +15,8 @@ ON CONFLICT (tenant_id, scope, ref) DO UPDATE SET
     engaged = EXCLUDED.engaged, changed_by = EXCLUDED.changed_by, changed_at = EXCLUDED.changed_at
 """
 _ENGAGED = (
-    "SELECT scope, ref FROM agentzaaheen.kill_switches WHERE tenant_id = $1 AND engaged ORDER BY scope, ref"
+    "SELECT scope, ref, changed_at FROM agentzaaheen.kill_switches WHERE tenant_id = $1 AND engaged"
+    " ORDER BY scope, ref"
 )
 
 
@@ -29,10 +30,11 @@ class SwitchScope(StrEnum):
 
 @dataclass(frozen=True)
 class EngagedSwitch:
-    """One switch that is currently on. ``ref`` is empty for ``ALL``."""
+    """One switch that is currently on. ``ref`` is empty for ``ALL``; ``since`` is when it was turned on."""
 
     scope: SwitchScope
     ref: str
+    since: datetime | None = None
 
 
 class KillSwitchRows:
@@ -60,4 +62,6 @@ class KillSwitchRows:
         """Every switch that is on for this tenant."""
         async with self._scope.connection() as conn:
             records = await conn.fetch(_ENGAGED, self._tenant)
-        return [EngagedSwitch(scope=SwitchScope(r["scope"]), ref=r["ref"]) for r in records]
+        return [
+            EngagedSwitch(scope=SwitchScope(r["scope"]), ref=r["ref"], since=r["changed_at"]) for r in records
+        ]

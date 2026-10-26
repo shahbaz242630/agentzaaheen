@@ -3,7 +3,8 @@
 One row per call that was sent, added once and never changed: the spend caps
 add up a month's rows, so no restart can reset them. No prompt, no answer:
 only when, what for, which model, the cost in millionths of a USD and, since
-migration 0015, the call's token counts and the visible answer's length.
+migration 0015, the call's token counts and the visible answer's length; since
+0016, the agent run it was for (so a run's cost can be added up, F11).
 """
 
 from __future__ import annotations
@@ -16,8 +17,8 @@ from agentzaaheen.core.store.db import Scoped, require_aware
 
 _ADD = """
 INSERT INTO agentzaaheen.model_calls (tenant_id, call_id, at, use, model, cost_micro,
-    tokens_in, tokens_out, cache_read, cache_write, answer_chars)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    tokens_in, tokens_out, cache_read, cache_write, answer_chars, run_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 """
 _SPENT = """
 SELECT coalesce(sum(cost_micro), 0)::bigint FROM agentzaaheen.model_calls
@@ -61,10 +62,17 @@ class ModelCalls:
         self._scope = scope
         self._tenant = scope.tenant_id
 
-    async def add(
-        self, use: str, model: str, cost_micro: int, *, at: datetime, tokens: CallTokens | None = None
+    async def add(  # noqa: PLR0913  # each is a separate column
+        self,
+        use: str,
+        model: str,
+        cost_micro: int,
+        *,
+        at: datetime,
+        tokens: CallTokens | None = None,
+        run_id: str | None = None,
     ) -> UUID:
-        """Save one call's cost (and its counts, when known); returns the new row's id."""
+        """Save one call's cost (and its counts and run, when known); returns the new row's id."""
         require_aware(at)
         if cost_micro < 0:
             raise ValueError("a cost cannot be negative")
@@ -81,7 +89,7 @@ class ModelCalls:
         )
         call_id = uuid4()
         async with self._scope.write("a model call's cost") as conn:
-            await conn.execute(_ADD, self._tenant, call_id, at, use, model, cost_micro, *counts)
+            await conn.execute(_ADD, self._tenant, call_id, at, use, model, cost_micro, *counts, run_id)
         return call_id
 
     async def spent(self, use: str, *, start: datetime, end: datetime) -> int:

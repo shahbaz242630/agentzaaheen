@@ -40,6 +40,8 @@ from agentzaaheen.core.store import (
     RevenueRows,
     RoleVersion,
     RoleVersionRows,
+    RunStart,
+    RunStarts,
     ScoutRuns,
     SealedRow,
     SealedSecrets,
@@ -140,6 +142,9 @@ async def _fill_every_table(url: str) -> None:
             MissRow(NOW, "heads", "heads", "claude-opus-5-5", "model.declined", None, "run-1")
         )
         await NamePrints(here).add({("single", bytes(32))}, key_id="names-1", at=NOW)
+        await RunStarts(here).open(
+            RunStart(uuid4(), uuid4(), "monitoring", "f" * 64, NOW, NOW + timedelta(minutes=1))
+        )
 
 
 async def _count(url: str, table: str, tenant: UUID, workspace: UUID | None) -> int:

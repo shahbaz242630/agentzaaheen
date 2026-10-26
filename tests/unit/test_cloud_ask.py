@@ -236,12 +236,21 @@ class CountingBook(MemoryBook):
     def __init__(self) -> None:
         super().__init__()
         self.tokens: list[CallTokens | None] = []
+        self.run_ids: list[str | None] = []
 
-    async def add(
-        self, use: Use, model: str, micro: int, at: datetime, tokens: CallTokens | None = None
+    async def add(  # the book's own signature
+        self,
+        use: Use,
+        model: str,
+        micro: int,
+        at: datetime,
+        tokens: CallTokens | None = None,
+        *,
+        run_id: str | None = None,
     ) -> None:
         self.tokens.append(tokens)
-        await super().add(use, model, micro, at, tokens)
+        self.run_ids.append(run_id)
+        await super().add(use, model, micro, at, tokens, run_id=run_id)
 
 
 def test_an_answered_call_keeps_its_counts_and_the_answers_length() -> None:
@@ -254,3 +263,16 @@ def test_an_answered_call_keeps_its_counts_and_the_answers_length() -> None:
     assert book.tokens == [
         CallTokens(tokens_in=20_000, tokens_out=3_000, cache_read=900, cache_write=400, answer_chars=7)
     ]
+
+
+def test_an_answered_call_names_its_run_in_the_spend_book() -> None:
+    # F11: the runner adds up a run's cost from the calls made for it, so each call keeps its run.
+    book = CountingBook()
+    gate = ModelGate(
+        SpendLedger(book, clock=lambda: OCT), FixedNames(KnownNames.of(["Fatima Al Mansoori"], PRINTER))
+    )
+    asker = CloudAsk(
+        gate, FakeDoor(ClaudeReply("Fix it.", "end_turn", 10, 5, 0, 0, 0)), MemoryMisses(), clock=lambda: OCT
+    )
+    assert ask(asker).outcome == "answered"
+    assert book.run_ids == ["run-42"]
