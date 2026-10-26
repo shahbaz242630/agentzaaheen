@@ -12,6 +12,9 @@ without the laptop's service token. With ``access``, the token is opened fresh
 for each call (so a replaced token is used at once and nothing keeps a copy)
 and sent as Cloudflare's two headers; it is never sent over plain http. A token
 that cannot be opened ends the call as ``net.auth`` before anything is sent.
+The model itself answers only calls that carry its own key: with ``model_key``,
+that key is opened the same way for each call and sent as ``Authorization:
+Bearer``, under the same rules.
 
 The answer is asked for as a stream (``stream: true``). Cloudflare drops a
 request whose answer has not started within about 100 seconds, and a long
@@ -78,6 +81,7 @@ class AccessToken(Protocol):
 
 
 AccessSource = Callable[[], Awaitable[AccessToken]]
+KeySource = Callable[[], Awaitable[SecretStr]]
 
 
 def check_model_url(base_url: str, allowed_hosts: frozenset[str]) -> str:
@@ -121,14 +125,18 @@ class ModelClient:
         allowed_hosts: frozenset[str] = frozenset(),
         api_key: SecretStr | None = None,
         access: AccessSource | None = None,
+        model_key: KeySource | None = None,
         timeout_s: float = 180.0,
         max_response_bytes: int = 1024 * 1024,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base = check_model_url(base_url, allowed_hosts)
-        if (api_key is not None or access is not None) and _is_loopback(self._base):
+        if (api_key is not None or access is not None or model_key is not None) and _is_loopback(self._base):
             raise NetError(NetErrorCode.BLOCKED, "a key is never sent over plain http")
+        if api_key is not None and model_key is not None:
+            raise NetError(NetErrorCode.BLOCKED, "the model key comes from one place only")
         self._access = access
+        self._model_key = model_key
         self._limit = max_response_bytes
         self._deadline_s = timeout_s  # the whole call; httpx's own timeout is per read
         headers = {"Accept": "application/json"}
@@ -178,7 +186,7 @@ class ModelClient:
             raise exc.at(_OPERATION, 1, 1) from None
 
     async def _ask(self, body: dict[str, object]) -> str:
-        headers = await self._access_headers()
+        headers = await self._access_headers() | await self._key_header()
         try:
             url = self._base + CHAT_PATH
             async with (
@@ -207,6 +215,16 @@ class ModelClient:
             ACCESS_ID_HEADER: token.client_id,
             ACCESS_SECRET_HEADER: token.client_secret.get_secret_value(),
         }
+
+    async def _key_header(self) -> dict[str, str]:
+        """The model's own key for this one call, or none without ``model_key``."""
+        if self._model_key is None:
+            return {}
+        try:
+            key = await self._model_key()
+        except SourceError:
+            raise NetError(NetErrorCode.AUTH, "the server model key could not be opened") from None
+        return {"Authorization": f"Bearer {key.get_secret_value()}"}
 
 
 async def _read_stream(response: httpx.Response, limit: int) -> str:

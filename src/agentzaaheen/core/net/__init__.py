@@ -51,6 +51,7 @@ from agentzaaheen.core.net.model import (
     SERVER_MODEL_HOST,
     AccessSource,
     AccessToken,
+    KeySource,
     ModelClient,
     check_model_url,
 )
@@ -70,6 +71,7 @@ __all__ = [
     "DownloadPolicy",
     "HeartbeatClient",
     "JsonClient",
+    "KeySource",
     "ModelClient",
     "NetError",
     "NetErrorCode",

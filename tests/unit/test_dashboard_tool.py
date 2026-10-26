@@ -259,12 +259,14 @@ def test_our_server_through_the_tunnel_is_allowed_and_without_a_database_sends_n
     assert (response.status_code, response.json()) == (502, {"detail": "net.blocked"})  # Cloudflare's login
     assert str(seen[0].url) == "https://llm.agentzaaheen.com/v1/chat/completions"
     assert "CF-Access-Client-Id" not in seen[0].headers
+    assert "Authorization" not in seen[0].headers
 
 
-def test_only_our_server_is_reached_over_https_and_only_it_needs_the_token() -> None:
-    assert dashboard.model_reach("http://127.0.0.1:8766", None) == (frozenset(), None)
+def test_only_our_server_is_reached_over_https_and_only_it_needs_the_token_and_key() -> None:
+    assert dashboard.model_reach("http://127.0.0.1:8766", None) == (frozenset(), None, None)
     assert dashboard.model_reach("https://llm.agentzaaheen.com", None) == (
         frozenset({"llm.agentzaaheen.com"}),
+        None,
         None,
     )
 

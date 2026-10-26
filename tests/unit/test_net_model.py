@@ -415,3 +415,96 @@ def test_cloudflares_login_redirect_is_refused_not_followed() -> None:
     assert caught.net_code is NetErrorCode.BLOCKED
     assert caught.status == 302
     assert TOKEN_SECRET not in str(caught)
+
+
+# ---------------------------------------------------------------- the server model's own key (F10 slice 6)
+
+MODEL_KEY = "a1" * 32  # built here, never the real one
+
+
+def model_keys(*keys: str) -> tuple[Callable[[], Awaitable[SecretStr]], list[int]]:
+    """A key source that hands out ``keys`` in turn and counts how often it was opened."""
+    opened: list[int] = []
+
+    async def source() -> SecretStr:
+        opened.append(1)
+        return SecretStr(keys[min(len(opened), len(keys)) - 1])
+
+    return source, opened
+
+
+def test_the_model_key_and_the_token_are_opened_for_each_call_and_both_sent() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return answer("ok")(request)
+
+    token, _ = tokens(TOKEN_SECRET)
+    key, opened = model_keys(MODEL_KEY, "b2" * 32)
+
+    async def body() -> None:
+        async with ModelClient(
+            f"https://{SERVER}",
+            allowed_hosts=frozenset({SERVER}),
+            access=token,
+            model_key=key,
+            transport=httpx.MockTransport(handler),
+        ) as c:
+            for _ in range(2):
+                await c.chat(QUESTION, max_tokens=64, temperature=0.2)
+
+    asyncio.run(body())
+    assert len(opened) == 2  # once per call: a replaced key is used at once
+    assert [r.headers["Authorization"] for r in seen] == [f"Bearer {MODEL_KEY}", f"Bearer {'b2' * 32}"]
+    assert [r.headers["CF-Access-Client-Secret"] for r in seen] == [TOKEN_SECRET, TOKEN_SECRET]
+
+
+def test_a_model_key_that_cannot_be_opened_sends_nothing_and_is_an_auth_error() -> None:
+    seen: list[httpx.Request] = []
+
+    async def locked() -> SecretStr:
+        raise SourceError(SourceErrorCode.AUTH, "no key saved", detail_code="credential.missing")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return answer("ok")(request)
+
+    token, _ = tokens(TOKEN_SECRET)
+    caught = failure(
+        handler, base=f"https://{SERVER}", allowed_hosts=frozenset({SERVER}), access=token, model_key=locked
+    )
+    assert caught.net_code is NetErrorCode.AUTH
+    assert "model key" in str(caught)
+    assert seen == []
+
+
+def test_the_model_key_is_never_sent_over_plain_http() -> None:
+    key, opened = model_keys(MODEL_KEY)
+    with pytest.raises(NetError) as caught:
+        ModelClient(LOCAL, model_key=key)
+    assert caught.value.net_code is NetErrorCode.BLOCKED
+    assert opened == []
+
+
+def test_the_model_key_comes_from_one_place_only() -> None:
+    key, _ = model_keys(MODEL_KEY)
+    with pytest.raises(NetError) as caught:
+        ModelClient(
+            f"https://{SERVER}", allowed_hosts=frozenset({SERVER}), api_key=SecretStr(FAKE_KEY), model_key=key
+        )
+    assert caught.value.net_code is NetErrorCode.BLOCKED
+
+
+def test_a_refused_model_key_is_an_auth_error_that_never_carries_the_key() -> None:
+    token, _ = tokens(TOKEN_SECRET)
+    key, _ = model_keys(MODEL_KEY)
+    caught = failure(
+        lambda _: httpx.Response(401, json={"error": {"message": "Invalid API Key"}}),
+        base=f"https://{SERVER}",
+        allowed_hosts=frozenset({SERVER}),
+        access=token,
+        model_key=key,
+    )
+    assert caught.net_code is NetErrorCode.AUTH
+    assert MODEL_KEY not in str(caught)

@@ -40,6 +40,11 @@ const REASON: Record<string, string> = {
   "server_token.no_vault": "The vault has no master key yet. Run: uv run python -m tools.vault_key make-key, then restart the dashboard.",
   "server_token.read_only": "Saving the server token needs the laptop database. Start the dashboard with --switches.",
   "server_token.store_unavailable": "The laptop database did not answer. Is it running?",
+  "model_key.bad_key": "That doesn't look like our server model's key. Copy it again: it is letters and digits only.",
+  "model_key.passkey_failed": "Windows Hello did not confirm it, so the model key was not saved. Please try again.",
+  "model_key.no_vault": "The vault has no master key yet. Run: uv run python -m tools.vault_key make-key, then restart the dashboard.",
+  "model_key.read_only": "Saving the model key needs the laptop database. Start the dashboard with --switches.",
+  "model_key.store_unavailable": "The laptop database did not answer. Is it running?",
 };
 
 export function reason(code: string | null): string {

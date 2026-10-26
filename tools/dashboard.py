@@ -100,6 +100,7 @@ from agentzaaheen.core.net import (
     HEALTHCHECKS_PING_HOST,
     SERVER_MODEL_HOST,
     AccessSource,
+    KeySource,
     ModelClient,
     NetError,
     NetPolicy,
@@ -130,6 +131,7 @@ from tools.dashboard_summaries import AlertLog, LaptopSummaries
 from tools.dashboard_supabase import SupabaseProject, supabase_list, supabase_portfolio
 from tools.dashboard_switches import (
     LaptopClaudeKeys,
+    LaptopModelKeys,
     LaptopServerTokens,
     LaptopSwitches,
     Prepare,
@@ -339,7 +341,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model-url",
         help="the chat's model server: http://127.0.0.1:8766 (this laptop) or https://llm.agentzaaheen.com"
-        " (our server, through the tunnel; with --switches it sends the saved server token)",
+        " (our server, through the tunnel; with --switches it sends the saved server token and model key)",
     )
     parser.add_argument(
         "--bundles", type=Path, action="append", default=[], help="show plugin bundles in DIR"
@@ -517,6 +519,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         logs=LogFolder(ns.log_dir.expanduser()) if ns.log_dir is not None else None,
         claude_key=LaptopClaudeKeys(switches) if switches is not None else None,
         server_token=LaptopServerTokens(switches) if switches is not None else None,
+        model_key=LaptopModelKeys(switches) if switches is not None else None,
         on_start=summaries.start if summaries is not None else None,
         on_close=_closer(switches, scout, summaries),
     )
@@ -547,9 +550,14 @@ def _scout(  # noqa: PLR0913  # the model, the database, GitHub, the roles, more
     if switches is None or not model_url:
         return None
     try:
-        hosts, access = model_reach(model_url, switches)
+        hosts, access, key = model_reach(model_url, switches)
         model = ModelClient(
-            model_url, allowed_hosts=hosts, access=access, timeout_s=SCOUT_TIMEOUT_S, transport=transport
+            model_url,
+            allowed_hosts=hosts,
+            access=access,
+            model_key=key,
+            timeout_s=SCOUT_TIMEOUT_S,
+            transport=transport,
         )
     except NetError:
         return None  # the chat says why the address was refused
@@ -670,7 +678,7 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
         tools, skills = tools_for(
             registry, PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport=transport, fixes=fixes, logs=logs
         )
-        hosts, _ = model_reach(model_url, None)
+        hosts, _, _ = model_reach(model_url, None)
         return model_chat(model_url, transport, tools, skills, allowed_hosts=hosts)
 
     def build(standing: Standing) -> tuple[list[Tool], str]:
@@ -687,7 +695,7 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
         )
 
     # Board inspection needs the audit log (the laptop database), so it exists only with switches.
-    hosts, access = model_reach(model_url, switches)
+    hosts, access, key = model_reach(model_url, switches)
     return model_chat(
         model_url,
         transport,
@@ -695,21 +703,25 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
         inspect=switches.recorder(workspaces),
         allowed_hosts=hosts,
         access=access,
+        model_key=key,
     )
 
 
 def model_reach(
     model_url: str, switches: LaptopSwitches | None
-) -> tuple[frozenset[str], AccessSource | None]:
-    """The hosts and token a model address needs: our server's model through the tunnel needs both.
+) -> tuple[frozenset[str], AccessSource | None, KeySource | None]:
+    """The host, token and key a model address needs: our server's model through the tunnel needs all three.
 
-    Over https only our own server may be reached, with the service token saved on the Customize page
-    (opened for each call; none without a database, so Cloudflare refuses). The laptop's own model
-    (plain http to 127.0.0.1) needs neither.
+    Over https only our own server may be reached, with the service token (for Cloudflare) and the
+    model's own key (for llama-server) saved on the Customize page, each opened for each call; none
+    without a database, so the call is refused. The laptop's own model (plain http to 127.0.0.1) needs
+    none of them.
     """
     if urlsplit(model_url).scheme != "https":
-        return frozenset(), None
-    return frozenset({SERVER_MODEL_HOST}), (switches.server_token if switches is not None else None)
+        return frozenset(), None, None
+    if switches is None:
+        return frozenset({SERVER_MODEL_HOST}), None, None
+    return frozenset({SERVER_MODEL_HOST}), switches.server_token, switches.model_key
 
 
 def _library(folder: Path) -> RoleLibrary:
