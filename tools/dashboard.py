@@ -141,6 +141,7 @@ from tools.dashboard_switches import (
 from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options, tracing_from
 from tools.dashboard_uptime import ntfy_topic, start_watch, uptime_list, uptime_portfolio
 from tools.fix_guides import Project, fixes_list
+from tools.key_dates import KeyDate, key_dates_list
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
@@ -375,6 +376,11 @@ def _parser() -> argparse.ArgumentParser:
         help="env var holding the Healthchecks ping address told after each sent briefing (needs --switches)",
     )
     parser.add_argument(
+        "--keys",
+        type=Path,
+        help="the key list (names, end dates, how to renew; no secrets): the briefing warns 14 days before",
+    )
+    parser.add_argument(
         "--briefing-zone",
         default=DEFAULT_ZONE,
         help="the time zone of the 05:00 summaries and the 07:00 briefing (needs --switches)",
@@ -430,6 +436,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         uptime = uptime_list(ns.uptime, projects)
         backends = supabase_list(ns.supabase, projects)
         fixes = fixes_list(ns.fixes, projects)
+        key_dates = key_dates_list(ns.keys)
         off = off_connectors(connected.standing, registry) if connected else frozenset[str]()
         alerts = AlertLog(clock)  # the phone alerts, counted for the daily summaries
         with span("dashboard start"):  # every start-up read in one trace
@@ -498,6 +505,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         directory=directory,
         alerts=alerts,
         watched=frozenset(uptime) if uptime and "uptime" not in off else frozenset(),
+        key_dates=key_dates,
         clock=clock,
         transport=transport,
     )
@@ -600,6 +608,7 @@ def _summaries(  # noqa: PLR0913  # the options, the database, the facts' source
     directory: WorkspaceDirectory,
     alerts: AlertLog,
     watched: frozenset[str],
+    key_dates: Sequence[KeyDate] = (),
     clock: Clock,
     transport: httpx.AsyncBaseTransport | None,
 ) -> LaptopSummaries | None:
@@ -622,6 +631,7 @@ def _summaries(  # noqa: PLR0913  # the options, the database, the facts' source
         agents=switches.view,
         scout=scout_of,
         claude=switches.claude_lines,
+        key_dates=key_dates,
         alerts=alerts,
         watched=watched,
         topic=topic,

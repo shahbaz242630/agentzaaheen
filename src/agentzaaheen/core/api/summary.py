@@ -261,18 +261,20 @@ def first_line(summary: DailySummary) -> str:
     return "; ".join(parts) + "."
 
 
-def briefing(
+def briefing(  # noqa: PLR0913  # the summaries, the day and time, then each kind of extra line
     summaries: Sequence[DailySummary],
     *,
     day: date,
     local_time: str,
     late: bool,
+    keys: Sequence[str] = (),
     claude: Sequence[str] = (),
 ) -> tuple[str, tuple[str, ...]]:
     """The Board's morning message: a title and its lines (one per workspace, worst first), no links.
 
-    ``claude`` are the Board's Claude lines (runs that did not run, caps at 80%), written by
-    ``llm_gateway.claude_lines`` from fixed templates; they come right after the count line.
+    ``keys`` are the keys that end within 14 days or have ended (``tools.key_dates``), and
+    ``claude`` the Board's Claude lines (runs that did not run, caps at 80%), written by
+    ``llm_gateway.claude_lines`` from fixed templates; both come right after the count line, keys first.
     """
     title = f"Agent Zaaheen briefing, {day.strftime('%a')} {day.day} {day.strftime('%b')}"
     lines: list[str] = []
@@ -283,6 +285,7 @@ def briefing(
         lines.append(f"{_count(len(summaries), 'project')}; {len(needs)} need a look.")
     else:
         lines.append("No project has a summary today.")
+    lines.extend(keys)
     lines.extend(claude)
     end = "Details on the dashboard."
     used = sum(_bytes(line) for line in lines) + _bytes(end)

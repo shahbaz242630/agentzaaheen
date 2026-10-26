@@ -51,6 +51,7 @@ from agentzaaheen.core.scheduler import Plan, local_day, plan, window_start
 from agentzaaheen.core.scheduler.briefing import Briefed
 from agentzaaheen.core.sdk import SourceError, get_logger, say
 from agentzaaheen.core.store import BriefingRow, ScoutRun, StoreError, SummaryRow, WorkspaceRow
+from tools.key_dates import KeyDate, key_lines
 
 CHECK_EVERY_S = 60.0
 RETRY_AFTER = timedelta(minutes=15)
@@ -107,6 +108,7 @@ class LaptopSummaries:
         agents: Agents | None = None,
         scout: Scout | None = None,
         claude: ClaudeLines | None = None,
+        key_dates: Sequence[KeyDate] = (),
         alerts: AlertLog | None = None,
         watched: frozenset[str] = frozenset(),
         topic: SecretStr | None = None,
@@ -122,6 +124,7 @@ class LaptopSummaries:
         self._agents = agents
         self._scout = scout
         self._claude = claude
+        self._key_dates = tuple(key_dates)
         self._alerts = alerts
         self._watched = watched
         self._topic = topic
@@ -310,6 +313,7 @@ class LaptopSummaries:
                 day=due.day,
                 local_time=due.local_time,
                 late=due.late,
+                keys=key_lines(self._key_dates, due.day),
                 claude=await self._claude_lines(),
             )
             await control.open_briefing(due.day, title=title, message="\n".join(lines))
