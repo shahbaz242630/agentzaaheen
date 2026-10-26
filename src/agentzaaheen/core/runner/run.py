@@ -36,14 +36,16 @@ Checkpoints 2 (every tool call: ``policy.gate``), 3 (answer shape) and 4
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from pydantic import ValidationError
 
+from agentzaaheen.core.llm_gateway import ChatModel
 from agentzaaheen.core.policy import (
     SKIPPED_REASONS,
     AgentControl,
@@ -55,7 +57,8 @@ from agentzaaheen.core.policy import (
     RunRefusal,
     load_kill_switches,
 )
-from agentzaaheen.core.runner.agent import AgentResult, AgentWork, RunTicket, _mint
+from agentzaaheen.core.runner.agent import AgentResult, AgentWork, RunTicket, SystemWork, _mint
+from agentzaaheen.core.runner.shape import AgentFailedError, CheckedModel, NeedsALookError
 from agentzaaheen.core.sdk import (
     DataClass,
     Finding,
@@ -70,7 +73,6 @@ from agentzaaheen.core.sdk import (
     say,
 )
 from agentzaaheen.core.store import (
-    AgentRow,
     AgentRows,
     Database,
     Records,
@@ -81,6 +83,9 @@ from agentzaaheen.core.store import (
     StoreError,
 )
 
+_FINGERPRINT = re.compile(r"^[0-9a-f]{64}$")
+_CODE = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)*$")
+_SYSTEM = UUID("6f1c7c9e-2b1d-5e57-9a54-7a7a3b0e5c11")  # the namespace of built-in jobs' fixed ids
 CLOSE_GRACE = timedelta(seconds=60)  # after the time budget: time to save the end before "interrupted"
 _ACTOR = "system:runner"
 
@@ -115,6 +120,7 @@ class RunReport:
     code: str | None
     run_id: UUID | None = None
     findings: int = 0
+    detail: str | None = None  # needs a look: the last refused answer's code
 
     @property
     def started(self) -> bool:
@@ -125,15 +131,18 @@ class RunReport:
 class Runner:
     """Starts every agent run of one tenant, through the checkpoints, and closes it."""
 
-    def __init__(  # the database, whose, the job's door, the tools, the clock
+    def __init__(  # noqa: PLR0913  # the database, whose, the job's door, the tools, the clock, the model
         self,
         db: Database,
         tenant_id: UUID,
         agents: AgentControl,
         tools: Mapping[str, ToolSpec],
         clock: Callable[[], datetime],
+        *,
+        model: ChatModel | None = None,
     ) -> None:
         self._db = db
+        self._model = model  # agents never get it: only a CheckedModel that answers in their shape
         self._tenant = tenant_id
         self._agents = agents
         self._tools = dict(tools)
@@ -157,24 +166,59 @@ class Runner:
         agent = permit.agent or await AgentRows(scope).get(agent_id)
         if agent is None:  # pragma: no cover  # may_run said the agent exists a moment ago
             return await self._not_started(workspace_id, agent_id, RunRefusal.NO_AGENT, now)
+        who = _Who(agent_id, agent.role_id, agent.version)
         if permit.refusal is not None:
-            return await self._denied(scope, agent, permit.refusal, now)
+            return await self._denied(scope, who, permit.refusal, now)
         pack = await RoleVersionRows(self._db.scoped(self._tenant)).get(agent.role_id, agent.version)
         if pack is None:
-            return await self._denied(scope, agent, RunCode.NO_FROZEN_PACK, now)
-        refused = self._check_tools(work, agent, pack.permission)
+            return await self._denied(scope, who, RunCode.NO_FROZEN_PACK, now)
+        refused = self._check_tools(work, agent.role_id, pack.permission)
         if refused is not None:
-            return await self._denied(scope, agent, refused, now)
-        run_id = uuid4()
+            return await self._denied(scope, who, refused, now)
+        return await self._start_and_work(scope, who, work, pack=pack.files, now=now, run_id=uuid4())
+
+    async def run_system(
+        self, workspace_id: UUID, work: SystemWork, *, run_id: UUID | None = None
+    ) -> RunReport:
+        """Run a built-in job (the scout) for ``workspace_id``: stop switches, tools, start, time, shape, end.
+
+        It has no workspace agent, switch or cap (it is read-only and spends nothing); a stop switch still
+        stops it. ``run_id`` lets the job's own record (the scout's run) share the run's id.
+        """
+        if not _FINGERPRINT.fullmatch(work.version):
+            raise ValueError("a built-in job must name the SHA-256 of its instructions")
+        await self._agents.close_interrupted(workspace_id)
+        now = self._clock()
+        scope = self._db.scoped(self._tenant, workspace_id)
+        who = _Who(system_agent_id(work.role_id), work.role_id, work.version)
+        stopped = _stopped(await load_kill_switches(self._db, self._tenant), workspace_id, who.agent_id)
+        if stopped is not None:
+            return await self._not_started(workspace_id, who.agent_id, stopped, now, role=work.role_id)
+        refused = self._check_tools(work, work.role_id, "read")  # built-in jobs only ever read
+        if refused is not None:
+            return await self._denied(scope, who, refused, now)
+        return await self._start_and_work(scope, who, work, pack={}, now=now, run_id=run_id or uuid4())
+
+    async def _start_and_work(  # noqa: PLR0913  # where, who, its instructions, the code, when, which run
+        self,
+        scope: Scoped,
+        who: _Who,
+        work: AgentWork,
+        *,
+        pack: Mapping[str, str],
+        now: datetime,
+        run_id: UUID,
+    ) -> RunReport:
+        workspace_id = scope.require_workspace()
         deadline = now + timedelta(seconds=work.budget.seconds) + CLOSE_GRACE
-        start = RunStart(run_id, agent_id, agent.role_id, agent.version, now, deadline)
+        start = RunStart(run_id, who.agent_id, who.role_id, who.version, now, deadline)
         try:
             opened = await RunStarts(scope).open(start)
         except StoreError as exc:
             say(
                 self._log,
                 "agent_run_not_started",
-                agent_id=str(agent_id),
+                agent_id=str(who.agent_id),
                 reason=RunCode.START_NOT_WRITTEN.value,
                 code=exc.code.value,
             )
@@ -183,17 +227,17 @@ class Runner:
                 AuditOutcome.DENY,
                 RunCode.START_NOT_WRITTEN,
                 workspace_id=workspace_id,
-                agent_id=agent_id,
+                agent_id=who.agent_id,
                 now=now,
             )
             return RunReport(None, RunCode.START_NOT_WRITTEN)
-        if not opened:  # pragma: no cover  # a fresh uuid4 is never already started
+        if not opened:  # a run id given twice (a built-in job's own record): never run it again
             return RunReport(None, RunCode.START_NOT_WRITTEN)
         say(
             self._log,
             "agent_run_started",
-            role=agent.role_id,
-            agent_id=str(agent_id),
+            role=who.role_id,
+            agent_id=str(who.agent_id),
             run_id=str(run_id),
             seconds=work.budget.seconds,
         )
@@ -202,30 +246,37 @@ class Runner:
             AuditOutcome.ALLOW,
             None,
             workspace_id=workspace_id,
-            agent_id=agent_id,
+            agent_id=who.agent_id,
             now=now,
             run_id=run_id,
+        )
+        checked = (
+            CheckedModel(self._model, role=who.role_id, run_id=str(run_id))
+            if self._model is not None
+            else None
         )
         ticket = _mint(
             run_id=run_id,
             workspace_id=workspace_id,
-            agent_id=agent_id,
-            role_id=agent.role_id,
-            version=agent.version,
-            pack=pack.files,
+            agent_id=who.agent_id,
+            role_id=who.role_id,
+            version=who.version,
+            pack=pack,
             tools=work.tools,
             budget=work.budget,
             started_at=now,
+            model=checked,
         )
-        outcome, code, result = await _work(work, ticket)
-        return await self._end(scope, start, outcome, code, result)
+        worked = await _work(work, ticket)
+        steps = checked.attempts if checked is not None else 0
+        return await self._end(scope, start, worked, steps)
 
-    def _check_tools(self, work: AgentWork, agent: AgentRow, permission: str) -> RunCode | None:
-        if work.role_id != agent.role_id:
+    def _check_tools(self, work: AgentWork, role_id: str, permission: str) -> RunCode | None:
+        if work.role_id != role_id:
             return RunCode.WRONG_ROLE
         ceiling = ToolLevel(permission)
         try:
-            AgentPolicy(agent=agent.role_id, tools=work.tools, ceiling=ceiling, budget=work.budget)
+            AgentPolicy(agent=role_id, tools=work.tools, ceiling=ceiling, budget=work.budget)
         except ValidationError:
             return RunCode.TOO_MANY_TOOLS
         for name in sorted(work.tools):
@@ -236,14 +287,8 @@ class Runner:
                 return RunCode.TOOL_ABOVE_PERMISSION
         return None
 
-    async def _end(  # the run, how it went, and what it found
-        self,
-        scope: Scoped,
-        start: RunStart,
-        outcome: RunOutcome,
-        code: str | None,
-        result: AgentResult | None,
-    ) -> RunReport:
+    async def _end(self, scope: Scoped, start: RunStart, worked: _Worked, steps: int) -> RunReport:
+        outcome, code, result = worked.outcome, worked.code, worked.result
         now = self._clock()
         workspace = scope.require_workspace()
         drafts = result.findings if result is not None else ()
@@ -266,7 +311,7 @@ class Runner:
                 prompt_hash=start.version,
                 data_class_max=data_class,
                 trust=trust,
-                steps=0,
+                steps=steps,
                 tokens_in=calls.tokens_in,
                 tokens_out=calls.tokens_out,
                 cost_minor_units=calls.cost_minor,
@@ -294,7 +339,9 @@ class Runner:
                 now=now,
                 run_id=start.run_id,
             )
-            return RunReport(RunOutcome.COULD_NOT_RUN, RunCode.END_NOT_WRITTEN, start.run_id)
+            return RunReport(
+                RunOutcome.COULD_NOT_RUN, RunCode.END_NOT_WRITTEN, start.run_id, detail=worked.detail
+            )
         say(
             self._log,
             "agent_run_ended",
@@ -316,17 +363,20 @@ class Runner:
             run_id=start.run_id,
             extra={"outcome": outcome.value},
         )
-        return RunReport(outcome, code, start.run_id, len(findings))
+        return RunReport(outcome, code, start.run_id, len(findings), worked.detail)
 
-    async def _not_started(self, workspace_id: UUID, agent_id: UUID, code: str, now: datetime) -> RunReport:
+    async def _not_started(  # where, who, why, when, and the role when already known
+        self, workspace_id: UUID, agent_id: UUID, code: str, now: datetime, *, role: str | None = None
+    ) -> RunReport:
         say(self._log, "agent_run_not_started", agent_id=str(agent_id), reason=code, code=code)
-        role: dict[str, str] = {}
-        try:  # the role names the skip in the daily summary; without one it is still counted
-            agent = await AgentRows(self._db.scoped(self._tenant, workspace_id)).get(agent_id)
-            if agent is not None:
-                role["role"] = agent.role_id
-        except StoreError:
-            pass
+        named: dict[str, str] = {"role": role} if role is not None else {}
+        if role is None:
+            try:  # the role names the skip in the daily summary; without one it is still counted
+                agent = await AgentRows(self._db.scoped(self._tenant, workspace_id)).get(agent_id)
+                if agent is not None:
+                    named["role"] = agent.role_id
+            except StoreError:
+                pass
         await self._audit(
             "run.start",
             AuditOutcome.DENY,
@@ -334,19 +384,19 @@ class Runner:
             workspace_id=workspace_id,
             agent_id=agent_id,
             now=now,
-            extra=role,
+            extra=named,
         )
         return RunReport(None, code)
 
-    async def _denied(self, scope: Scoped, agent: AgentRow, code: str, now: datetime) -> RunReport:
+    async def _denied(self, scope: Scoped, who: _Who, code: str, now: datetime) -> RunReport:
         """A run that did not run: its own row (outcome ``denied``), so the briefing names it."""
         workspace = scope.require_workspace()
         record = RunRecord(
             tenant_id=self._tenant,
             project_id=workspace,
-            agent=str(agent.agent_id),
-            agent_version=agent.version,
-            prompt_hash=agent.version,
+            agent=str(who.agent_id),
+            agent_version=who.version,
+            prompt_hash=who.version,
             data_class_max=DataClass.PUBLIC,
             trust=Trust.TRUSTED,
             steps=0,
@@ -361,8 +411,8 @@ class Runner:
         say(
             self._log,
             "agent_run_denied",
-            role=agent.role_id,
-            agent_id=str(agent.agent_id),
+            role=who.role_id,
+            agent_id=str(who.agent_id),
             reason=code,
             code=code,
         )
@@ -372,7 +422,7 @@ class Runner:
             say(
                 self._log,
                 "agent_run_end_not_saved",
-                role=agent.role_id,
+                role=who.role_id,
                 run_id=str(record.id),
                 code=exc.code.value,
             )
@@ -381,7 +431,7 @@ class Runner:
             AuditOutcome.DENY,
             code,
             workspace_id=workspace,
-            agent_id=agent.agent_id,
+            agent_id=who.agent_id,
             now=now,
             run_id=record.id,
         )
@@ -417,20 +467,50 @@ class Runner:
         )
 
 
-async def _work(work: AgentWork, ticket: RunTicket) -> tuple[RunOutcome, str | None, AgentResult | None]:
+@dataclass(frozen=True)
+class _Who:
+    """Who a run is for: the agent (or a built-in job's fixed id), its role, and what it runs."""
+
+    agent_id: UUID
+    role_id: str
+    version: str
+
+
+@dataclass(frozen=True)
+class _Worked:
+    """How the agent's part went. ``detail``: the last refused answer's code when it needs a look."""
+
+    outcome: RunOutcome
+    code: str | None
+    result: AgentResult | None = None
+    detail: str | None = None
+
+
+def system_agent_id(role_id: str) -> UUID:
+    """The fixed id a built-in job's runs are saved under (the same on every machine)."""
+    return uuid5(_SYSTEM, role_id)
+
+
+async def _work(work: AgentWork, ticket: RunTicket) -> _Worked:
     """Run the agent inside its time budget. Whatever goes wrong becomes an outcome, never a crash."""
     log = get_logger("agentzaaheen.runner")
     try:
         async with asyncio.timeout(work.budget.seconds):
             result = await work.run(ticket)
     except TimeoutError:
-        return RunOutcome.BUDGET_EXCEEDED, RunCode.TIME_BUDGET, None
+        return _Worked(RunOutcome.BUDGET_EXCEEDED, RunCode.TIME_BUDGET)
+    except NeedsALookError as exc:
+        return _Worked(RunOutcome.COULD_NOT_RUN, exc.code, detail=exc.last)
+    except AgentFailedError as exc:  # a known reason, said by the agent (a source down, a store refused)
+        code = exc.code if _CODE.fullmatch(exc.code) and len(exc.code) <= 64 else RunCode.CRASHED.value
+        return _Worked(RunOutcome.COULD_NOT_RUN, code)
     except Exception as exc:  # noqa: BLE001  # an agent's bug ends its run, never the runner
         say(log, "agent_run_crashed", role=work.role_id, kind=type(exc).__name__)
-        return RunOutcome.COULD_NOT_RUN, RunCode.CRASHED, None
+        return _Worked(RunOutcome.COULD_NOT_RUN, RunCode.CRASHED)
     if not isinstance(result, AgentResult):
-        return RunOutcome.COULD_NOT_RUN, RunCode.BAD_RESULT, None
-    return (RunOutcome.OK if result.findings else RunOutcome.NOTHING_FOUND), None, result
+        return _Worked(RunOutcome.COULD_NOT_RUN, RunCode.BAD_RESULT)
+    done = RunOutcome.OK if result.findings or result.delivered else RunOutcome.NOTHING_FOUND
+    return _Worked(done, None, result)
 
 
 def _stopped(switches: KillSwitches, workspace_id: UUID, agent_id: UUID) -> RunCode | None:

@@ -141,6 +141,19 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         why="The database refused or could not be reached.",
         next="Nothing is lost: it is closed as interrupted after its deadline and named in the briefing.",
     ),
+    "agent_answer_refused": LogEvent(
+        "warning",
+        what="The {role} agent's answer (try {attempt}) was refused by the checks ({code}) in run {run_id}.",
+        why="Code checks every model answer against the role's shape; a wrong one goes back with the reason.",
+        next="Nothing to do: it is asked again, at most twice; after that the run needs a look.",
+    ),
+    "agent_needs_a_look": LogEvent(
+        "warning",
+        what="The {role} agent's run {run_id} needs a look: {attempt} answers in a row were refused "
+        "({code}).",
+        why="The model kept answering in the wrong shape; nothing was guessed or filled in.",
+        next="The morning briefing names it. Try again later, or check the model is the one expected.",
+    ),
     "agent_runs_interrupted": LogEvent(
         "warning",
         what="Agent runs that never finished were closed as interrupted: {count} ({run_ids}).",

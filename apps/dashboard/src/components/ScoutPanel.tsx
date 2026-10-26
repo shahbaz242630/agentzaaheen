@@ -21,8 +21,14 @@ const REASON: Record<string, string> = {
   "scout.not_allowed": "That is not allowed from here.",
   "scout.not_connected": "The scout needs the laptop database, the GitHub token and the local model on this run.",
   "scout.store_unavailable": "The laptop database did not answer. Is it running?",
-  "scout.not_json": "The model's answer was not in the required shape, so code refused it. Nothing was guessed.",
-  "scout.bad_answer": "The model's answer did not pass the checks, so code refused it. Nothing was guessed.",
+  "scout.not_json":
+    "The model's answer was not in the required shape, so code refused it, told the model why and asked twice more. Nothing was guessed.",
+  "scout.bad_answer":
+    "The model's answer did not pass the checks, so code refused it, told the model why and asked twice more. Nothing was guessed.",
+  "run.stop_all": "A stop switch is on for all agents, so the scout did not run.",
+  "run.workspace_frozen": "A stop switch is on for this project, so the scout did not run.",
+  "run.time_budget": "The scout ran out of time (25 minutes). Please try again.",
+  "run.start_not_written": "The laptop database did not answer. Is it running?",
   "scout.crashed": "The scout stopped on an error it did not expect. The dashboard log says where.",
   "scout.interrupted": "The dashboard stopped while the scout was working, so that run was closed.",
   "scout.unreadable": "The saved advice no longer reads as advice (it was saved by an older version).",

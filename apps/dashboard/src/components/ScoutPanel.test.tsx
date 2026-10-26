@@ -272,7 +272,9 @@ describe("the scout on the Agents tab", () => {
     });
     render(<AgentsPanel slug="sage" name="Sage" />);
     const box = await scoutBox();
-    expect(within(box).getByText(/not in the required shape, so code refused it. Nothing was guessed./)).toBeInTheDocument();
+    expect(
+      within(box).getByText(/not in the required shape, so code refused it, told the model why and asked twice more/),
+    ).toBeInTheDocument();
     await userEvent.click(within(box).getByRole("button", { name: "Ask the scout again" }));
     expect(await within(box).findByText(/The local model is thinking/)).toBeInTheDocument();
     expect(calls(fetch, "POST")).toEqual([{ path: SCOUT, body: {} }]);

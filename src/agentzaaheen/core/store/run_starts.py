@@ -54,10 +54,13 @@ ON CONFLICT (id) DO NOTHING
 RETURNING id
 """
 _MISSED = """
-SELECT r.id, coalesce(a.role_id, 'unknown') AS role_id, r.outcome, r.error_code, r.started_at
+SELECT r.id, coalesce(a.role_id, s.role_id, 'unknown') AS role_id, r.outcome, r.error_code, r.started_at
 FROM agentzaaheen.runs r
 LEFT JOIN agentzaaheen.agents a
     ON a.tenant_id = r.tenant_id AND a.project_id = r.project_id AND a.agent_id::text = r.agent
+-- A built-in job (the scout) has no agent row: its start names its role.
+LEFT JOIN agentzaaheen.run_starts s
+    ON s.tenant_id = r.tenant_id AND s.project_id = r.project_id AND s.run_id = r.id
 WHERE r.tenant_id = $1 AND r.project_id = $2 AND r.started_at >= $3 AND r.started_at < $4
     AND r.outcome NOT IN ('ok', 'nothing_found')
 ORDER BY r.started_at, r.id

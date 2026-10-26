@@ -571,6 +571,7 @@ def _scout(  # noqa: PLR0913  # the model, the database, GitHub, the roles, more
         return None  # the chat says why the address was refused
     return LaptopScout(
         control=switches.scout_control,
+        runner=lambda: switches.runner(model),
         repos=switches.repos_in_use,
         token=token,
         model=model,

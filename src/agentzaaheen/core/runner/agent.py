@@ -9,6 +9,12 @@ anywhere else raises :class:`RunnerOnlyError`, and a test fails if any code outs
 What an agent hands back is an :class:`AgentResult`: finding drafts only. The
 runner adds the tenant, the workspace and the run before anything is saved,
 so an agent cannot write into another workspace or claim another run.
+
+An agent never holds the model: its ticket carries a
+:class:`~agentzaaheen.core.runner.shape.CheckedModel`, which only answers in the
+role's shape (checkpoint 3, slice 2). A built-in job (:class:`SystemWork`, the
+scout) is not a workspace's agent: it names its own fixed instructions'
+fingerprint instead of a frozen role pack.
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from agentzaaheen.core.policy import Budget
+from agentzaaheen.core.runner.shape import CheckedModel
 from agentzaaheen.core.sdk import DataClass, Evidence, FindingKind, Severity, Trust
 
 MAX_FINDINGS = 50  # a run that "finds" more than this is not working; the rest would be noise
@@ -50,6 +57,7 @@ class RunTicket:
     tools: frozenset[str]
     budget: Budget
     started_at: datetime
+    model: CheckedModel | None
     seal: object = field(repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -68,10 +76,21 @@ def _mint(  # noqa: PLR0913  # each is a separate fact of the run
     tools: frozenset[str],
     budget: Budget,
     started_at: datetime,
+    model: CheckedModel | None,
 ) -> RunTicket:
     """A ticket with the runner's seal (for ``core.runner.run`` only)."""
     return RunTicket(
-        run_id, workspace_id, agent_id, role_id, version, dict(pack), tools, budget, started_at, _RUNNER
+        run_id,
+        workspace_id,
+        agent_id,
+        role_id,
+        version,
+        dict(pack),
+        tools,
+        budget,
+        started_at,
+        model,
+        _RUNNER,
     )
 
 
@@ -91,11 +110,15 @@ class FindingDraft(BaseModel):
 
 
 class AgentResult(BaseModel):
-    """What one run found. No findings means "nothing found", never "did not run"."""
+    """What one run found. No findings means "nothing found", never "did not run".
+
+    ``delivered`` is for work saved somewhere other than findings (the scout's advice): the run is "ok".
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     findings: tuple[FindingDraft, ...] = Field(default=(), max_length=MAX_FINDINGS)
+    delivered: bool = False
 
 
 class AgentWork(Protocol):
@@ -118,4 +141,16 @@ class AgentWork(Protocol):
 
     async def run(self, ticket: RunTicket) -> AgentResult:
         """Do one run's work and say what it found."""
+        ...
+
+
+class SystemWork(AgentWork, Protocol):
+    """A built-in job (the scout): no workspace agent, switch or cap; read-only, and it spends nothing.
+
+    ``version`` is the SHA-256 of its fixed instructions, so every run names exactly what it ran.
+    """
+
+    @property
+    def version(self) -> str:
+        """The fingerprint of its instructions (64 hex characters)."""
         ...
