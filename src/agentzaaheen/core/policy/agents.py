@@ -11,6 +11,13 @@ handle for the job's own workspace (from the job's saved record, never from
 anything the run asks for) and says yes only if the agent and its workspace
 are on, both caps are set, and neither is used up this month. No cap means
 no spending.
+
+:meth:`AgentControl.close_interrupted` and :meth:`AgentControl.runs_report` serve
+the runner (F11) and the daily summary: runs that never ended are closed as
+interrupted; the runs that did not run in a window are listed, and the runs
+skipped because they were not meant to run (:data:`SKIPPED_REASONS`: switched
+off, paused, stopped) are read back from the audit log to be counted (codes
+and our own role ids only).
 """
 
 from __future__ import annotations
@@ -30,11 +37,15 @@ from agentzaaheen.core.store import (
     AgentChange,
     AgentRow,
     AgentRows,
+    AuditRows,
     Database,
+    MissedRun,
     NewAgent,
     RoleVersion,
     RoleVersionRows,
+    RunStarts,
     Scoped,
+    StoreError,
     WorkspaceSettings,
 )
 
@@ -70,6 +81,36 @@ class RunRefusal(StrEnum):
     NO_AGENT_CAP = "run.no_agent_cap"
     WORKSPACE_CAP_USED = "run.workspace_cap_used"
     AGENT_CAP_USED = "run.agent_cap_used"
+
+
+# Why a job was skipped rather than run: it was not meant to run (Chairman, 26 Oct 2026: counted in one
+# line of the daily summary, never named run by run). The runner uses the same set (F11).
+SKIPPED_REASONS: frozenset[str] = frozenset(
+    {
+        "run.stop_all",
+        "run.workspace_frozen",
+        "run.agent_paused",
+        RunRefusal.NO_AGENT.value,
+        RunRefusal.AGENT_OFF.value,
+        RunRefusal.WORKSPACE_OFF.value,
+    }
+)
+
+
+@dataclass(frozen=True)
+class SkippedRun:
+    """A job skipped because it was not meant to run: its role (when known) and why."""
+
+    role_id: str | None
+    reason: str
+
+
+@dataclass(frozen=True)
+class RunsReport:
+    """A workspace's runs in a window that need a mention: did not run, or skipped."""
+
+    missed: list[MissedRun]
+    skipped: list[SkippedRun]
 
 
 @dataclass(frozen=True)
@@ -277,6 +318,35 @@ class AgentControl:
             )
             return RunPermit(refusal)
         return RunPermit(None, self._db.scoped(self._tenant, workspace_id), agent)
+
+    async def close_interrupted(self, workspace_id: UUID) -> list[UUID]:
+        """Close the workspace's runs that never ended (past their deadline) as interrupted, and say so."""
+        log = get_logger("agentzaaheen.agents")
+        try:
+            closed = await RunStarts(self._db.scoped(self._tenant, workspace_id)).close_interrupted(
+                self._clock()
+            )
+        except StoreError as exc:
+            say(log, "agent_runs_not_closed", code=exc.code.value)
+            return []
+        if closed:
+            say(
+                log,
+                "agent_runs_interrupted",
+                count=len(closed),
+                run_ids=",".join(str(r) for r in closed[:10]),
+            )
+        return closed
+
+    async def runs_report(self, workspace_id: UUID, since: datetime) -> RunsReport:
+        """The runs from ``since`` until now that did not run (dead ones closed first) or were skipped."""
+        await self.close_interrupted(workspace_id)
+        now = self._clock()
+        missed = await RunStarts(self._db.scoped(self._tenant, workspace_id)).missed(since, now)
+        skipped = await AuditRows(self._db.scoped(self._tenant)).skipped_runs(
+            workspace_id, sorted(SKIPPED_REASONS), since, now
+        )
+        return RunsReport(missed, [SkippedRun(role, reason) for reason, role in skipped])
 
     async def _audit(  # noqa: PLR0913  # each is a separate audit field
         self,

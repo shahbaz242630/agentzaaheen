@@ -37,6 +37,8 @@ DOORS = {
     "src/agentzaaheen/core/store/name_prints.py",
     # Saving name fingerprints: the workspace is the one the Chairman names on the command line.
     "tools/name_prints.py",
+    # The runner: the workspace comes from the job's own saved record (with may_run), never from the run.
+    "src/agentzaaheen/core/runner/run.py",
     # The Claude key's slot: always the fixed Agent Zaaheen workspace (Chairman, 25 Oct 2026), never chosen.
     "tools/vault_key.py",
 }

@@ -104,6 +104,56 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         why="Its switch, its workspace's switch or a spending cap said no; no cap means no spending.",
         next="Nothing to do unless it should be running: check its switch and caps on the workspace page.",
     ),
+    # ---- the runner (ADR-036, F11): every agent run starts and ends here
+    "agent_run_not_started": LogEvent(
+        "info",
+        what="Agent {agent_id} was not started ({reason}).",
+        why="It is switched off, paused, or a stop switch is on, so it was not meant to run.",
+        next="Nothing to do unless it should be running: check its switches on the workspace page.",
+    ),
+    "agent_run_denied": LogEvent(
+        "warning",
+        what="The {role} agent ({agent_id}) did not run: {reason}.",
+        why="One of the runner's checks said no before it started (a cap used up, a missing role copy, "
+        "or tools it may not have).",
+        next="The morning briefing names it. Check the agent's caps and role on the workspace page.",
+    ),
+    "agent_run_started": LogEvent(
+        "info",
+        what="The {role} agent started run {run_id}, with {seconds} seconds to finish.",
+        why="Every check before the run said yes, and the start was written down first.",
+    ),
+    "agent_run_ended": LogEvent(
+        "info",
+        what="The {role} agent's run {run_id} ended: {outcome} ({reason}), {findings} finding(s), "
+        "cost {cost_minor} cent(s).",
+        why="The run's end, its findings and its cost were saved together.",
+    ),
+    "agent_run_crashed": LogEvent(
+        "error",
+        what="The {role} agent's code failed during its run ({kind}).",
+        why="A bug in that agent's code; the runner ended the run as 'could not run'.",
+        next="The morning briefing names it; look at the agent's code for this error.",
+    ),
+    "agent_run_end_not_saved": LogEvent(
+        "error",
+        what="The end of the {role} agent's run {run_id} could not be saved ({code}).",
+        why="The database refused or could not be reached.",
+        next="Nothing is lost: it is closed as interrupted after its deadline and named in the briefing.",
+    ),
+    "agent_runs_interrupted": LogEvent(
+        "warning",
+        what="Agent runs that never finished were closed as interrupted: {count} ({run_ids}).",
+        why="A run started but never wrote its end: the laptop slept, the server restarted, "
+        "or it stopped halfway.",
+        next="The morning briefing names them; if it keeps happening, check the machine was awake.",
+    ),
+    "agent_runs_not_closed": LogEvent(
+        "warning",
+        what="Runs that never finished could not be checked ({code}).",
+        why="The database refused or could not be reached.",
+        next="Nothing to do unless it keeps happening; they are checked again before the next run.",
+    ),
     "board_inspection": LogEvent(
         "info",
         what="The Board's chat looked inside the {workspace} workspace with {tool}.",

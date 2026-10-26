@@ -33,24 +33,37 @@ from pydantic import SecretStr, ValidationError
 from agentzaaheen.core.api import Portfolio
 from agentzaaheen.core.api.agents import WorkspaceAgentsOut
 from agentzaaheen.core.api.summary import (
+    MAX_MISSED,
     AgentsFact,
     AlertsFact,
     DailySummary,
+    MissedFact,
     ScoutFact,
+    SkippedFact,
+    StopFact,
     Unread,
     briefing,
     read_summary,
+    stop_lines,
     summarise,
 )
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.llm_gateway.scout import ScoutReport
 from agentzaaheen.core.net import HeartbeatClient, PushClient
 from agentzaaheen.core.notify import Alert
-from agentzaaheen.core.policy import SummaryControl
+from agentzaaheen.core.policy import RunsReport, SkippedRun, SummaryControl
 from agentzaaheen.core.scheduler import Plan, local_day, plan, window_start
 from agentzaaheen.core.scheduler.briefing import Briefed
 from agentzaaheen.core.sdk import SourceError, get_logger, say
-from agentzaaheen.core.store import BriefingRow, ScoutRun, StoreError, SummaryRow, WorkspaceRow
+from agentzaaheen.core.store import (
+    BriefingRow,
+    EngagedSwitch,
+    ScoutRun,
+    StoreError,
+    SummaryRow,
+    SwitchScope,
+    WorkspaceRow,
+)
 from tools.key_dates import KeyDate, key_lines
 
 CHECK_EVERY_S = 60.0
@@ -61,6 +74,10 @@ UNMAKEABLE = "summary.not_valid"  # a fact broke the summary's own limits (a bug
 
 Clock = Callable[[], datetime]
 Agents = Callable[[WorkspaceRow], Awaitable[WorkspaceAgentsOut]]
+Runs = Callable[
+    [WorkspaceRow, datetime], Awaitable[RunsReport]
+]  # runs that did not run or were skipped (F11)
+Stops = Callable[[], Awaitable[Sequence[EngagedSwitch]]]  # the stop switches that are on (F11)
 Scout = Callable[[WorkspaceRow], Awaitable[ScoutRun | None]]
 # The Board's Claude lines for a briefing made at a given time (F10 slice 3a).
 ClaudeLines = Callable[[datetime], Awaitable[tuple[str, ...]]]
@@ -106,6 +123,8 @@ class LaptopSummaries:
         clock: Clock,
         zone: ZoneInfo,
         agents: Agents | None = None,
+        runs: Runs | None = None,
+        stops: Stops | None = None,
         scout: Scout | None = None,
         claude: ClaudeLines | None = None,
         key_dates: Sequence[KeyDate] = (),
@@ -122,6 +141,8 @@ class LaptopSummaries:
         self._clock = clock
         self._zone = zone
         self._agents = agents
+        self._runs = runs
+        self._stops = stops
         self._scout = scout
         self._claude = claude
         self._key_dates = tuple(key_dates)
@@ -234,7 +255,7 @@ class LaptopSummaries:
         self, workspace: WorkspaceRow, day: date, start: datetime, previous: SummaryRow | None
     ) -> DailySummary:
         not_read: list[Unread] = []
-        agents = await self._agents_fact(workspace, not_read)
+        agents = await self._agents_fact(workspace, start, not_read)
         scout = await self._scout_fact(workspace, not_read)
         alerts = (
             self._alerts.count(workspace.slug, start)
@@ -255,7 +276,9 @@ class LaptopSummaries:
             previous=read_summary(previous.facts) if previous is not None else None,
         )
 
-    async def _agents_fact(self, workspace: WorkspaceRow, not_read: list[Unread]) -> AgentsFact | None:
+    async def _agents_fact(
+        self, workspace: WorkspaceRow, start: datetime, not_read: list[Unread]
+    ) -> AgentsFact | None:
         if self._agents is None:
             return None
         try:
@@ -263,12 +286,25 @@ class LaptopSummaries:
         except StoreError as exc:
             not_read.append(Unread(title="Agents", reason=exc.code.value))
             return None
+        report = RunsReport([], [])
+        if self._runs is not None:
+            try:
+                report = await self._runs(workspace, start)
+            except StoreError as exc:  # never "none missed" when it could not be read
+                not_read.append(Unread(title="Agent runs", reason=exc.code.value))
+        missed, skipped = report.missed, _grouped(report.skipped)
         return AgentsFact(
             agents=len(seen.agents),
             on=sum(1 for agent in seen.agents if agent.enabled),
             workspace_on=seen.enabled,
             spent_minor=seen.spent_minor,
             cap_minor=seen.cap_minor,
+            missed=tuple(
+                MissedFact(role=m.role_id, reason=m.error_code or m.outcome) for m in missed[:MAX_MISSED]
+            ),
+            missed_count=len(missed),
+            skipped=skipped[:MAX_MISSED],
+            skipped_count=len(report.skipped),
         )
 
     async def _scout_fact(self, workspace: WorkspaceRow, not_read: list[Unread]) -> ScoutFact | None:
@@ -290,6 +326,25 @@ class LaptopSummaries:
             return None
         recommended = tuple(advice.role_id for advice in report.roles if advice.recommend)
         return ScoutFact(state="done", at=run.finished_at or run.started_at, recommended=recommended[:40])
+
+    async def _stop_lines(self) -> tuple[str, ...]:
+        """Every stop switch that is on, by name; if they cannot be read, the briefing says so."""
+        if self._stops is None:
+            return ()
+        try:
+            engaged = await self._stops()
+        except StoreError as exc:
+            return (f"Stop switches could not be read ({exc.code.value}).",)
+        names = {str(w.workspace_id): w.name for w in self._directory.all()}
+        facts = [
+            StopFact(
+                scope=s.scope.value,
+                name=names.get(s.ref) if s.scope is SwitchScope.PROJECT else None,
+                since=s.since,
+            )
+            for s in engaged
+        ]
+        return stop_lines(facts, self._zone)
 
     async def _claude_lines(self) -> tuple[str, ...]:
         """The Board's Claude lines; if they cannot be read, the briefing says so (never left out)."""
@@ -315,6 +370,7 @@ class LaptopSummaries:
                 late=due.late,
                 keys=key_lines(self._key_dates, due.day),
                 claude=await self._claude_lines(),
+                stops=await self._stop_lines(),
             )
             await control.open_briefing(due.day, title=title, message="\n".join(lines))
         saved = (await control.briefings(until=due.day, days=1))[0]
@@ -342,6 +398,14 @@ class LaptopSummaries:
                 await beat.ping("briefing")
         except SourceError:
             return  # the client said why; never retried: a missing ping makes Healthchecks alert the phone
+
+
+def _grouped(skipped: Sequence[SkippedRun]) -> tuple[SkippedFact, ...]:
+    """Skipped runs counted by role and reason, in the order each first happened."""
+    counts: dict[tuple[str | None, str], int] = {}
+    for run in skipped:
+        counts[run.role_id, run.reason] = counts.get((run.role_id, run.reason), 0) + 1
+    return tuple(SkippedFact(role=role, reason=reason, count=n) for (role, reason), n in counts.items())
 
 
 async def _has_day(control: SummaryControl, workspace: WorkspaceRow, day: date) -> bool:

@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import asyncpg
 import pytest
@@ -33,6 +33,8 @@ from agentzaaheen.core.store import (
     DailySummaries,
     Database,
     Records,
+    RunStart,
+    RunStarts,
     SealedRow,
     SealedSecrets,
     SlotKey,
@@ -43,7 +45,7 @@ from agentzaaheen.core.store import (
 )
 from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
 from tests.integration.test_policy_agents import ME, TENANT
-from tests.integration.test_store_records import run_record
+from tests.integration.test_store_records import finding, run_record
 from tests.unit.test_registry_roles import pack
 
 EVA = UUID("00000000-0000-4000-8000-0000000000f2")
@@ -52,7 +54,7 @@ NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 PROJECT_TABLES = (
     "events", "runs", "findings", "actions", "sealed_secrets", "revenue_subscriptions",
     "revenue_payments", "revenue_refunds", "source_syncs", "workspace_settings", "agents",
-    "workspace_sources", "scout_runs", "daily_summaries",
+    "workspace_sources", "scout_runs", "daily_summaries", "run_starts",
 )  # fmt: skip
 
 
@@ -103,10 +105,15 @@ async def _busy(db: Database, library: RoleLibrary, workspace: UUID) -> UUID:
         f"owner/busy-{workspace.hex[-4:]}", by="user:chairman", at=NOW
     )
     await DailySummaries(db.scoped(TENANT, workspace)).put(NOW.date(), {"busy": True}, made_at=NOW)
-    await Records(db.scoped(TENANT, workspace)).add_run(
-        run_record(
-            project_id=workspace, tenant_id=TENANT, agent=str(agent), cost_minor_units=10, started_at=NOW
-        )
+    ran = run_record(
+        project_id=workspace, tenant_id=TENANT, agent=str(agent), cost_minor_units=10, started_at=NOW
+    )
+    # A finding that names its run (F11): deleting for good must remove findings before their runs.
+    await Records(db.scoped(TENANT, workspace)).end_run(
+        ran, [finding(ran.id, tenant_id=TENANT, project_id=workspace)]
+    )
+    await RunStarts(db.scoped(TENANT, workspace)).open(
+        RunStart(uuid4(), agent, "monitoring", "f" * 64, NOW, NOW + timedelta(minutes=1))
     )
     return agent
 

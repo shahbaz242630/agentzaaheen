@@ -92,6 +92,13 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "cache_read",
         "cache_write",
         "stop",
+        # F11: the runner (our own outcome codes, counts, seconds and cents; run ids are UUIDs)
+        "seconds",
+        "outcome",
+        "findings",
+        "cost_minor",
+        "count",
+        "run_ids",
     }
 )
 

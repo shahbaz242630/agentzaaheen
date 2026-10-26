@@ -54,10 +54,17 @@ class SpendBook(Protocol):
         """What ``use`` has spent in ``month`` (``"2026-10"``)."""
         ...
 
-    async def add(
-        self, use: Use, model: str, micro: int, at: datetime, tokens: CallTokens | None = None
+    async def add(  # noqa: PLR0913  # the call's own facts
+        self,
+        use: Use,
+        model: str,
+        micro: int,
+        at: datetime,
+        tokens: CallTokens | None = None,
+        *,
+        run_id: str | None = None,
     ) -> None:
-        """Add one call's cost to ``use``, at the moment ``at`` (with its token counts, when known)."""
+        """Add one call's cost to ``use`` at the moment ``at`` (with its token counts and run, when known)."""
         ...
 
 
@@ -71,13 +78,15 @@ class MemoryBook:
         """What ``use`` has spent in ``month``."""
         return self._amounts.get((use, month), 0)
 
-    async def add(  # the model and counts are only kept in the database
+    async def add(  # noqa: PLR0913  # the model, counts and run are only kept in the database
         self,
         use: Use,
         model: str,  # noqa: ARG002
         micro: int,
         at: datetime,
         tokens: CallTokens | None = None,  # noqa: ARG002
+        *,
+        run_id: str | None = None,  # noqa: ARG002
     ) -> None:
         """Add one call's cost."""
         month = month_of(at)
@@ -95,11 +104,18 @@ class StoreBook:
         start, end = month_bounds(month)
         return await self._calls.spent(use.value, start=start, end=end)
 
-    async def add(
-        self, use: Use, model: str, micro: int, at: datetime, tokens: CallTokens | None = None
+    async def add(  # noqa: PLR0913  # the call's own facts
+        self,
+        use: Use,
+        model: str,
+        micro: int,
+        at: datetime,
+        tokens: CallTokens | None = None,
+        *,
+        run_id: str | None = None,
     ) -> None:
-        """Save one call's cost, and its counts when known, as its own row."""
-        await self._calls.add(use.value, model, micro, at=at, tokens=tokens)
+        """Save one call's cost, and its counts and run when known, as its own row."""
+        await self._calls.add(use.value, model, micro, at=at, tokens=tokens, run_id=run_id)
 
 
 @dataclass(frozen=True)
@@ -166,13 +182,15 @@ class SpendLedger:
             return SpendCheck("total_stop_reached", TOTAL, total, self._total)
         return SpendCheck(None, use.value, spent, self._caps[use])
 
-    async def record(self, use: Use, model: str, micro: int, tokens: CallTokens | None = None) -> None:
-        """Add one call's real cost, and say so; say it too if that call crossed an 80% line."""
+    async def record(  # the call's own facts
+        self, use: Use, model: str, micro: int, tokens: CallTokens | None = None, *, run_id: str | None = None
+    ) -> None:
+        """Add one call's real cost (for ``run_id``, when known) and say so; and if it crossed an 80% line."""
         now = self._clock()
         month = month_of(now)
         before = await self._book.spent(use, month)
         total_before = await self._total_spent(month)
-        await self._book.add(use, model, micro, now, tokens)
+        await self._book.add(use, model, micro, now, tokens, run_id=run_id)
         after = before + micro
         say(
             self._log,

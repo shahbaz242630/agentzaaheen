@@ -11,6 +11,7 @@ sends the change again with the signed answer. A signature fits nothing else.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
@@ -19,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agentzaaheen.core.api.workspaces import InWorkspace
 from agentzaaheen.core.auth import PasskeyError
-from agentzaaheen.core.policy import AgentControl, AgentVerdict, Channel, PasskeyApprovals, Role
+from agentzaaheen.core.policy import AgentControl, AgentVerdict, Channel, PasskeyApprovals, Role, RunsReport
 from agentzaaheen.core.registry.roles import RoleLibrary
 from agentzaaheen.core.store import StoreError, WorkspaceRow
 
@@ -145,6 +146,10 @@ class DashboardAgents:
             RoleChoice(id=p.id, title=p.title, mission=p.mission, permission=p.permission)
             for p in library.packs
         )
+
+    async def runs_report(self, workspace: WorkspaceRow, since: datetime) -> RunsReport:
+        """The workspace's runs since ``since`` that did not run or were skipped (its daily summary, F11)."""
+        return await self._control.runs_report(workspace.workspace_id, since)
 
     async def view(self, workspace: WorkspaceRow) -> WorkspaceAgentsOut:
         """The workspace's agents, switch, cap and spend this month."""

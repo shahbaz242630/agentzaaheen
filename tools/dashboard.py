@@ -629,6 +629,8 @@ def _summaries(  # noqa: PLR0913  # the options, the database, the facts' source
         clock=clock,
         zone=zoneinfo.ZoneInfo(ns.briefing_zone),
         agents=switches.view,
+        runs=switches.runs_report,
+        stops=switches.stop_switches,
         scout=scout_of,
         claude=switches.claude_lines,
         key_dates=key_dates,

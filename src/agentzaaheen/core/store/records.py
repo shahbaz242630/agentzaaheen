@@ -149,6 +149,18 @@ class Records:
         async with self._scope.write("an agent run") as conn:
             await conn.execute(_INSERT_RUN, *values)
 
+    async def end_run(self, run: RunRecord, findings: Sequence[Finding]) -> None:
+        """Store a run's end and its findings together: all of it is saved, or none of it (F11)."""
+        require_aware(run.started_at)
+        if any(f.run_id != run.id for f in findings):
+            raise ValueError("every finding must name the run it came from")
+        values = _values(run, _RUN_COLUMNS, frozenset({"model"}))
+        rows = [_values(f, _FINDING_COLUMNS, frozenset({"evidence", "metric_refs"})) for f in findings]
+        async with self._scope.write("an agent run's end and its findings") as conn:
+            await conn.execute(_INSERT_RUN, *values)
+            for row in rows:
+                await conn.execute(_INSERT_FINDING, *row)
+
     async def get_run(self, run_id: UUID) -> RunRecord | None:
         """One run record, or None."""
         async with self._scope.connection() as conn:

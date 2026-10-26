@@ -19,16 +19,19 @@ from pydantic import SecretStr
 
 from agentzaaheen.core.api import SamplePortfolio
 from agentzaaheen.core.api.agents import AgentOut, WorkspaceAgentsOut
-from agentzaaheen.core.api.summary import AgentsFact, ScoutFact, read_summary
+from agentzaaheen.core.api.summary import AgentsFact, MissedFact, ScoutFact, SkippedFact, read_summary
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.notify import Alert
-from agentzaaheen.core.policy import SummaryControl
+from agentzaaheen.core.policy import RunsReport, SkippedRun, SummaryControl
 from agentzaaheen.core.store import (
     BriefingRow,
+    EngagedSwitch,
+    MissedRun,
     ScoutRun,
     StoreError,
     StoreErrorCode,
     SummaryRow,
+    SwitchScope,
     WorkspaceRow,
 )
 from tools.dashboard import _briefing_ping
@@ -217,3 +220,60 @@ def test_the_briefing_ping_address_is_checked_at_start(capsys: pytest.CaptureFix
     assert "evil" not in said  # the value is never shown
     assert _briefing_ping(env, "PING", None) is not None
     assert "Healthchecks will alert every morning" in capsys.readouterr().out
+
+
+# ---- F11: runs that did not run, runs skipped, and stop switches
+
+
+def _view_one() -> Any:
+    agent = AgentOut(id=uuid4(), role_id="monitoring", title="Monitoring", enabled=True, model="local-gemma",
+                     cap_minor=500, spent_minor=0, newer_version=False)  # fmt: skip
+
+    async def view(_w: WorkspaceRow) -> WorkspaceAgentsOut:
+        return WorkspaceAgentsOut(enabled=True, cap_minor=900, spent_minor=0, agents=(agent,), switches=True)
+
+    return view
+
+
+def test_missed_and_skipped_runs_reach_the_summary_skips_counted_by_role_and_reason() -> None:
+    since: list[datetime] = []
+
+    async def runs(_w: WorkspaceRow, start: datetime) -> RunsReport:
+        since.append(start)
+        missed = [MissedRun(uuid4(), "monitoring", "could_not_run", "run.interrupted", NOW)]
+        skipped = [SkippedRun("monitoring", "run.agent_paused")] * 3 + [SkippedRun(None, "run.stop_all")]
+        return RunsReport(missed, skipped)
+
+    agents = run_(Store(), agents=_view_one(), runs=runs).agents
+    assert agents.missed == (MissedFact(role="monitoring", reason="run.interrupted"),)
+    assert agents.missed_count == 1
+    assert agents.skipped == (
+        SkippedFact(role="monitoring", reason="run.agent_paused", count=3),
+        SkippedFact(role=None, reason="run.stop_all", count=1),
+    )
+    assert agents.skipped_count == 4
+    assert since == [NOW - timedelta(days=1)]  # the summary's own window: 05:00 to 05:00
+
+
+def test_runs_that_cannot_be_read_are_listed_never_taken_as_none_missed() -> None:
+    async def down(_w: WorkspaceRow, _s: datetime) -> RunsReport:
+        raise StoreError(StoreErrorCode.UNAVAILABLE, "down")
+
+    summary = run_(Store(), agents=_view_one(), runs=down)
+    assert ("Agent runs", "store.unavailable") in [(u.title, u.reason) for u in summary.unread]
+
+
+def test_stop_switches_are_named_by_project_and_a_failed_read_is_said() -> None:
+    async def on() -> list[EngagedSwitch]:
+        return [EngagedSwitch(SwitchScope.PROJECT, str(EVA.workspace_id), NOW)]
+
+    async def down() -> list[EngagedSwitch]:
+        raise StoreError(StoreErrorCode.UNAVAILABLE, "down")
+
+    assert asyncio.run(job(Store(), stops=on)._stop_lines()) == (
+        "Stop switch ON: Eva stopped since 25 Oct 05:00.",
+    )
+    assert asyncio.run(job(Store(), stops=down)._stop_lines()) == (
+        "Stop switches could not be read (store.unavailable).",
+    )
+    assert asyncio.run(job(Store())._stop_lines()) == ()
