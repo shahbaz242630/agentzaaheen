@@ -3,7 +3,9 @@
 Public interface:
     :func:`watch` judges one project's newest uptime check against its
     bookmark :data:`BOOKMARK`; :func:`watch_heartbeats` judges its
-    Healthchecks checks against :data:`HEARTBEATS_BOOKMARK`. Each says what to
+    Healthchecks checks against :data:`HEARTBEATS_BOOKMARK`;
+    :func:`watch_expiry` judges its certificate or domain dates against
+    :data:`CERTS_BOOKMARK` or :data:`DOMAINS_BOOKMARK`. Each says what to
     write down and the new bookmark.
 
 Must never:
@@ -11,6 +13,13 @@ Must never:
     watches' newest reads; the runner saves what it writes.
 """
 
+from agentzaaheen.plugins.agents.monitoring.expiry import (
+    CERTS_BOOKMARK,
+    CERTS_FRESH,
+    DOMAINS_BOOKMARK,
+    DOMAINS_FRESH,
+    watch_expiry,
+)
 from agentzaaheen.plugins.agents.monitoring.heartbeats import BOOKMARK as HEARTBEATS_BOOKMARK
 from agentzaaheen.plugins.agents.monitoring.heartbeats import watch_heartbeats
 from agentzaaheen.plugins.agents.monitoring.uptime import (
@@ -26,6 +35,10 @@ from agentzaaheen.plugins.agents.monitoring.uptime import (
 
 __all__ = [
     "BOOKMARK",
+    "CERTS_BOOKMARK",
+    "CERTS_FRESH",
+    "DOMAINS_BOOKMARK",
+    "DOMAINS_FRESH",
     "FRESH",
     "HEARTBEATS_BOOKMARK",
     "UNLISTED",
@@ -34,5 +47,6 @@ __all__ = [
     "Note",
     "Watched",
     "watch",
+    "watch_expiry",
     "watch_heartbeats",
 ]

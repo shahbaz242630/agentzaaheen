@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
-SDK_VERSION = "1.13.0"
+SDK_VERSION = "1.14.0"
 
 _DOTTED_NAME = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"
 

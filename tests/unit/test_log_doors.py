@@ -135,6 +135,24 @@ DOORS: list[tuple[str, Path, str, set[str]]] = [
         {"healthchecks_read_done", "healthchecks_read_failed"},
     ),
     (
+        "outside calls: certificate reads",
+        SRC / "core/net/cert.py",
+        "CertProbe.certificate_of",
+        {"cert_answered", "cert_failed"},
+    ),
+    (
+        "settings: domain list",
+        ROOT / "tools/dashboard_expiry.py",
+        "domains_list",
+        {"settings_loaded", "settings_refused"},
+    ),
+    (
+        "scheduled jobs: Monitoring reads certificate and domain dates",
+        ROOT / "tools/dashboard_expiry.py",
+        "ExpiryReader.refresh",
+        {"expiry_read_done", "expiry_read_failed"},
+    ),
+    (
         "settings: fix guides",
         ROOT / "tools/fix_guides.py",
         "fixes_list",

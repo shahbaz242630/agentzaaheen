@@ -106,6 +106,8 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "bookmarks",
         # F11 slice 5a: how many Healthchecks checks were read (never their names)
         "checks",
+        # F11 slice 5b: how many end dates could not be read (never the names)
+        "unread",
     }
 )
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
@@ -24,6 +24,9 @@ from agentzaaheen.core.runner import Runner
 from agentzaaheen.core.sdk import (
     CheckStatus,
     Expect,
+    ExpiryCheck,
+    ExpiryKind,
+    ExpiryReport,
     HeartbeatCheck,
     HeartbeatReport,
     SiteCheck,
@@ -38,11 +41,18 @@ from agentzaaheen.core.store import (
     StoreErrorCode,
     WorkspaceRow,
 )
-from agentzaaheen.plugins.agents.monitoring import BOOKMARK, HEARTBEATS_BOOKMARK, UNLISTED, UNREAD, UP
+from agentzaaheen.plugins.agents.monitoring import (
+    BOOKMARK,
+    CERTS_BOOKMARK,
+    HEARTBEATS_BOOKMARK,
+    UNLISTED,
+    UNREAD,
+    UP,
+)
 from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from tests.integration.test_policy_agents import ME
 from tests.unit.test_registry_roles import pack
-from tools.dashboard_monitoring import MONITORING_TOOLS, ROLE, LaptopMonitoring
+from tools.dashboard_monitoring import MONITORING_TOOLS, ROLE, DatesWatch, LaptopMonitoring
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000d1")
 EVA = UUID("00000000-0000-4000-8000-0000000000d2")
@@ -115,6 +125,7 @@ class Rounds:
         listed: frozenset[str],
         heartbeats: Heartbeats | None = None,
         checks: Mapping[str, tuple[str, ...]] | None = None,
+        dates: Sequence[DatesWatch] = (),
     ) -> None:
         self.latest: dict[str, UptimeReport] = {}
         self.broken: set[UUID] = set()
@@ -138,6 +149,7 @@ class Rounds:
             clock=lambda: NOW,
             heartbeats=heartbeats,
             checks=checks,
+            dates=dates,
             every_s=0.01,
         )
 
@@ -324,3 +336,48 @@ def test_healthchecks_is_not_read_when_no_agent_is_woken(test_db: ScratchDb, lib
             return await rounds.job.round(), heartbeats.refreshed
 
     assert run(body()) == (0, 0)
+
+
+class Certs:
+    """A pretend certificate reader: each refresh takes the read the test set."""
+
+    kind = ExpiryKind.CERT
+
+    def __init__(self) -> None:
+        self.latest: ExpiryReport | None = None
+        self.next: ExpiryReport | None = None
+        self.refreshed = 0
+
+    async def refresh(self) -> None:
+        self.refreshed += 1
+        self.latest = self.next
+
+
+def ending(days: int) -> ExpiryReport:
+    ends = NOW + timedelta(days=days)
+    host = ExpiryCheck(kind=ExpiryKind.CERT, name="eva.example.com", expires_at=ends, reason="cert.ok")
+    return ExpiryReport(kind=ExpiryKind.CERT, checks=(host,), fetched_at=NOW)
+
+
+def test_a_certificate_ending_soon_is_written_once_per_band_with_its_own_bookmark(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    async def body() -> tuple[list[asyncpg.Record], Mapping[str, str], int]:
+        async with open_db(test_db.app_url) as db:
+            agent = await _give(db, library, EVA)
+            certs = Certs()
+            watch = DatesWatch(certs, {"eva": ("eva.example.com",)})
+            rounds = Rounds(db, library, listed=frozenset({"eva"}), dates=[watch])
+            rounds.latest = {"eva": checked(up=True)}
+            for days in (80, 22, 21, 13):
+                certs.next = ending(days)
+                await rounds.job.round()
+            return await rounds.findings(), await rounds.mark(agent), certs.refreshed
+
+    findings, mark, refreshed = run(body())
+    assert sorted((f["title"], f["severity"]) for f in findings) == [  # every run starts at NOW: no order
+        ("Eva: 1 of 1 certificates need a look", "P2"),  # 13 days: renewal looks stuck
+        ("Eva: 1 of 1 certificates need a look", "P3"),  # 22 days: a heads-up; 21 days is not written again
+    ]
+    assert set(mark) == {BOOKMARK, CERTS_BOOKMARK}
+    assert refreshed == 4

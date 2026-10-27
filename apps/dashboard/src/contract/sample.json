@@ -933,6 +933,26 @@
   "registry": {
     "connectors": [
       {
+        "id": "expiry",
+        "name": "Certificate and domain dates",
+        "category": "Health",
+        "description": "When each site's certificate and each domain ends: dates and whether a certificate is valid, nothing else.",
+        "version": "0.1.0",
+        "level": "read",
+        "hosts": [
+          "the hosts in this laptop's uptime list (TLS handshake only, port 443)",
+          "rdap.verisign.com"
+        ],
+        "endpoints": [
+          "GET /com/v1/domain/{name}",
+          "GET /net/v1/domain/{name}"
+        ],
+        "key_slots": [],
+        "fingerprint": "c1917b27fa657529be8f37e7e1f262d2af44fd43513569459a18e30e010564cf",
+        "uses": [],
+        "state": "on"
+      },
+      {
         "id": "github",
         "name": "GitHub",
         "category": "Code",

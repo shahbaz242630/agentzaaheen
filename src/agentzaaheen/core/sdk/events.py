@@ -240,6 +240,16 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="The uptime check of {host} got http {http_status} in {duration_ms} ms.",
         why="The uptime check asks each listed address whether it is up; the page itself is never read.",
     ),
+    "cert_answered": LogEvent(
+        "info",
+        what="The certificate of {host} was read ({reason}).",
+        why="Monitoring checks when each site's certificate ends, every 6 hours.",
+    ),
+    "cert_failed": LogEvent(
+        "warning",
+        what="The certificate of {host} could not be read.",
+        explains="code",
+    ),
     "probe_failed": LogEvent(
         "warning",
         what="The uptime check of {host} got no usable answer.",
@@ -614,6 +624,17 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         why="The read was refused or did not answer ({code}).",
         next="The next round tries again in 5 minutes; after 15 minutes without a read, "
         "Monitoring writes that Healthchecks could not be read. Healthchecks still alerts the phone itself.",
+    ),
+    "expiry_read_done": LogEvent(
+        "info",
+        what="Read the end dates of {checks} {kind} names for Monitoring ({unread} could not be read).",
+        why="Monitoring reads certificate dates every 6 hours and domain dates once a day.",
+    ),
+    "expiry_read_failed": LogEvent(
+        "warning",
+        what="Could not read the {kind} end dates, so Monitoring keeps the last read.",
+        why="It stopped with an unexpected {code} problem.",
+        next="It tries again in the next 5-minute round; Monitoring says when the dates are too old.",
     ),
     "monitoring_round_failed": LogEvent(
         "warning",
