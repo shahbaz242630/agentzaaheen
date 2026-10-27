@@ -60,8 +60,9 @@ function windowsHello(outcome: "signs" | "cancels" = "signs") {
   return credentials;
 }
 
-function show() {
+async function show() {
   render(<CustomizeView page={page} projectName={(id) => id} onChange={vi.fn()} />);
+  await userEvent.click(screen.getByRole("tab", { name: /Passkeys/ }));
 }
 
 afterEach(() => {
@@ -70,6 +71,17 @@ afterEach(() => {
 });
 
 describe("the Claude key on the Customize page", () => {
+  it("lives on the Passkeys tab, in the same bar as Connectors, Skills and Plugins", async () => {
+    serve(NONE, {});
+    render(<CustomizeView page={page} projectName={(id) => id} onChange={vi.fn()} />);
+    const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent.replace(/\s*\d+$/, ""));
+    expect(tabs).toEqual(["Connectors", "Skills", "Plugins", "Passkeys"]);
+    expect(screen.queryByPlaceholderText("sk-ant-…")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: /Passkeys/ }));
+    expect(await screen.findByPlaceholderText("sk-ant-…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Discover" })).not.toBeInTheDocument(); // no shelves for keys
+  });
+
   it("saving asks Windows Hello to sign that exact save, then says only that a key is saved", async () => {
     const credentials = windowsHello();
     const fetch = serve(NONE, {
@@ -79,7 +91,7 @@ describe("the Claude key on the Customize page", () => {
       ],
       "/api/claude-key/options": [[200, { options: { challenge: "c" } }]],
     });
-    show();
+    await show();
     expect(await screen.findByText(/No key saved yet/)).toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText("sk-ant-…"), KEY);
     await userEvent.click(screen.getByRole("button", { name: "Save key" }));
@@ -98,14 +110,14 @@ describe("the Claude key on the Customize page", () => {
   it("the key field hides what is typed", async () => {
     windowsHello();
     serve(NONE);
-    show();
+    await show();
     expect(await screen.findByPlaceholderText("sk-ant-…")).toHaveAttribute("type", "password");
   });
 
   it("something that is not a Claude key cannot be sent", async () => {
     windowsHello();
     const fetch = serve(NONE);
-    show();
+    await show();
     await userEvent.type(await screen.findByPlaceholderText("sk-ant-…"), "sk-proj-abc");
     expect(screen.getByRole("button", { name: "Save key" })).toBeDisabled();
     expect(screen.getByText(/start with sk-ant- and have no spaces/)).toBeInTheDocument();
@@ -119,7 +131,7 @@ describe("the Claude key on the Customize page", () => {
       "/api/claude-key": [[409, { detail: "claude_key.needs_passkey" }]],
       "/api/claude-key/options": [[200, { options: { challenge: "c" } }]],
     });
-    show();
+    await show();
     await userEvent.type(await screen.findByPlaceholderText("sk-ant-…"), KEY);
     await userEvent.click(screen.getByRole("button", { name: "Save key" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/Windows Hello was closed before confirming/);
@@ -129,7 +141,7 @@ describe("the Claude key on the Customize page", () => {
   it("without the vault's master key says how to make it, and offers no field", async () => {
     windowsHello();
     serve({ ...NONE, vault: false });
-    show();
+    await show();
     expect(await screen.findByText(/tools.vault_key make-key/)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("sk-ant-…")).not.toBeInTheDocument();
   });
@@ -137,7 +149,7 @@ describe("the Claude key on the Customize page", () => {
   it("without a passkey asks for one first", async () => {
     windowsHello();
     serve(NONE, {}, false);
-    show();
+    await show();
     expect(await screen.findByText(/Set up your passkey first: saving the key needs Windows Hello/)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("sk-ant-…")).not.toBeInTheDocument();
   });

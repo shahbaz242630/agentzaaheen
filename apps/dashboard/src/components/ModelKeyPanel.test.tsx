@@ -60,8 +60,9 @@ function windowsHello(outcome: "signs" | "cancels" = "signs") {
   return credentials;
 }
 
-function show() {
+async function show() {
   render(<CustomizeView page={page} projectName={(id) => id} onChange={vi.fn()} />);
+  await userEvent.click(screen.getByRole("tab", { name: /Passkeys/ }));
 }
 
 afterEach(() => {
@@ -79,7 +80,7 @@ describe("our server model's key on the Customize page", () => {
       ],
       "/api/model-key/options": [[200, { options: { challenge: "c" } }]],
     });
-    show();
+    await show();
     expect(await screen.findByRole("heading", { name: "Server model key" })).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Model key"), KEY);
     await userEvent.click(screen.getByRole("button", { name: "Save model key" }));
@@ -98,14 +99,14 @@ describe("our server model's key on the Customize page", () => {
   it("the key field hides what is typed", async () => {
     windowsHello();
     serve(NONE);
-    show();
+    await show();
     expect(await screen.findByLabelText("Model key")).toHaveAttribute("type", "password");
   });
 
   it("something too short cannot be sent", async () => {
     windowsHello();
     const fetch = serve(NONE);
-    show();
+    await show();
     await userEvent.type(await screen.findByLabelText("Model key"), "abc123");
     expect(screen.getByRole("button", { name: "Save model key" })).toBeDisabled();
     expect(screen.getByText(/32 or more letters and digits/)).toBeInTheDocument();
@@ -116,7 +117,7 @@ describe("our server model's key on the Customize page", () => {
   it("the Claude key pasted in this box is caught and not sent", async () => {
     windowsHello();
     const fetch = serve(NONE);
-    show();
+    await show();
     await userEvent.type(await screen.findByLabelText("Model key"), "sk-ant-api03-" + "k".repeat(40));
     expect(screen.getByRole("button", { name: "Save model key" })).toBeDisabled();
     expect(screen.getByText(/That is a Claude key/)).toBeInTheDocument();
@@ -129,7 +130,7 @@ describe("our server model's key on the Customize page", () => {
       "/api/model-key": [[409, { detail: "model_key.needs_passkey" }]],
       "/api/model-key/options": [[200, { options: { challenge: "c" } }]],
     });
-    show();
+    await show();
     await userEvent.type(await screen.findByLabelText("Model key"), KEY);
     await userEvent.click(screen.getByRole("button", { name: "Save model key" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/Windows Hello was closed before confirming/);
@@ -139,7 +140,7 @@ describe("our server model's key on the Customize page", () => {
   it("a key the server refuses is explained in plain words", async () => {
     windowsHello();
     serve(NONE, { "/api/model-key": [[409, { detail: "model_key.bad_key" }]] });
-    show();
+    await show();
     await userEvent.type(await screen.findByLabelText("Model key"), KEY);
     await userEvent.click(screen.getByRole("button", { name: "Save model key" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/doesn't look like our server model's key/);
@@ -148,7 +149,7 @@ describe("our server model's key on the Customize page", () => {
   it("without the vault's master key offers no field", async () => {
     windowsHello();
     serve({ ...NONE, vault: false });
-    show();
+    await show();
     expect(await screen.findByText(/Set up the vault's master key first/)).toBeInTheDocument();
     expect(screen.queryByLabelText("Model key")).not.toBeInTheDocument();
   });
@@ -156,7 +157,7 @@ describe("our server model's key on the Customize page", () => {
   it("without a passkey asks for one first", async () => {
     windowsHello();
     serve(NONE, {}, false);
-    show();
+    await show();
     expect(await screen.findByText(/the model key is saved with Windows Hello/)).toBeInTheDocument();
     expect(screen.queryByLabelText("Model key")).not.toBeInTheDocument();
   });
@@ -164,7 +165,7 @@ describe("our server model's key on the Customize page", () => {
   it("without a database the panel is not shown", async () => {
     windowsHello();
     serve({ ...NONE, switches: false });
-    show();
+    await show();
     expect(await screen.findByRole("heading", { name: "Customize" })).toBeInTheDocument();
     expect(screen.queryByText("Server model key")).not.toBeInTheDocument();
   });

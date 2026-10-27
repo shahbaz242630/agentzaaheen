@@ -31,27 +31,30 @@ export function PasskeyPanel({ status, onAddress, busy, onSetUp }: Props) {
       </p>
     );
   }
-  if (status.enrolled && !status.enrolment_open) {
-    return (
-      <p className="inline-flex items-center gap-1.5 text-sm text-muted">
-        <ShieldCheck className="size-4 text-ok" aria-hidden="true" />
-        Your passkey is set up: approvals ask Windows Hello.
-      </p>
-    );
-  }
   if (!status.enrolment_open) {
     return (
-      <p className="inline-flex items-center gap-1.5 text-sm text-muted">
-        <Fingerprint className="size-4 text-faint" aria-hidden="true" />
-        No passkey yet. Start the dashboard with --enrol-passkey to set one up.
-      </p>
+      <section aria-labelledby="passkey-title" className="rounded-2xl border border-line bg-panel p-5 shadow-[0_1px_2px_oklch(0_0_0/0.04)]">
+        <h2 id="passkey-title" className="flex items-center gap-2 font-semibold text-ink">
+          <Fingerprint className="size-4 text-faint" aria-hidden="true" />
+          Passkey
+        </h2>
+        {status.enrolled ? (
+          <p className="mt-0.5 inline-flex items-center gap-1.5 text-sm text-muted">
+            <ShieldCheck className="size-4 shrink-0 text-ok" aria-hidden="true" />
+            Your passkey is set up: approvals ask Windows Hello.
+          </p>
+        ) : (
+          <p className="mt-0.5 text-sm text-muted">No passkey yet. Start the dashboard with --enrol-passkey to set one up.</p>
+        )}
+      </section>
     );
   }
   const valid = /^[0-9a-f]{8}$/.test(code);
   const replacing = status.enrolled;
   return (
-    <section aria-labelledby="passkey-title" className="rounded-2xl border border-line bg-panel px-5 py-4">
-      <h2 id="passkey-title" className="font-semibold text-ink">
+    <section aria-labelledby="passkey-title" className="rounded-2xl border border-line bg-panel p-5 shadow-[0_1px_2px_oklch(0_0_0/0.04)]">
+      <h2 id="passkey-title" className="flex items-center gap-2 font-semibold text-ink">
+        <Fingerprint className="size-4 text-faint" aria-hidden="true" />
         {replacing ? "Replace your passkey" : "Set up your passkey"}
       </h2>
       <p className="mt-0.5 text-sm text-muted">

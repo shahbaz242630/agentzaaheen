@@ -83,8 +83,9 @@ function windowsHello(outcome: "signs" | "cancels" = "signs") {
   return credentials;
 }
 
-function show() {
+async function show() {
   render(<CustomizeView page={page} projectName={(id) => id} onChange={vi.fn()} />);
+  await userEvent.click(screen.getByRole("tab", { name: /Passkeys/ }));
 }
 
 async function paste(id: string, secret: string) {
@@ -107,7 +108,7 @@ describe("the server access token on the Customize page", () => {
       ],
       "/api/server-token/options": [[200, { options: { challenge: "c" } }]],
     });
-    show();
+    await show();
     expect(await screen.findByText(/No token saved yet/)).toBeInTheDocument();
     await paste(ID, SECRET);
     await userEvent.click(screen.getByRole("button", { name: "Save token" }));
@@ -128,7 +129,7 @@ describe("the server access token on the Customize page", () => {
   it("both fields hide what is typed", async () => {
     windowsHello();
     serve(NONE);
-    show();
+    await show();
     expect(await screen.findByPlaceholderText("….access")).toHaveAttribute("type", "password");
     expect(screen.getByPlaceholderText("Client Secret")).toHaveAttribute("type", "password");
   });
@@ -136,7 +137,7 @@ describe("the server access token on the Customize page", () => {
   it("a Client ID without .access cannot be sent", async () => {
     windowsHello();
     const fetch = serve(NONE);
-    show();
+    await show();
     await paste("abc123", SECRET);
     expect(screen.getByRole("button", { name: "Save token" })).toBeDisabled();
     expect(screen.getByText(/The Client ID ends with .access/)).toBeInTheDocument();
@@ -147,7 +148,7 @@ describe("the server access token on the Customize page", () => {
   it("swapped parts cannot be sent", async () => {
     windowsHello();
     const fetch = serve(NONE);
-    show();
+    await show();
     await paste(ID, ID);
     expect(screen.getByRole("button", { name: "Save token" })).toBeDisabled();
     expect(screen.getByText(/are the two swapped/)).toBeInTheDocument();
@@ -157,7 +158,7 @@ describe("the server access token on the Customize page", () => {
   it("a missing secret cannot be sent", async () => {
     windowsHello();
     serve(NONE);
-    show();
+    await show();
     await paste(ID, "");
     expect(screen.getByRole("button", { name: "Save token" })).toBeDisabled();
   });
@@ -168,7 +169,7 @@ describe("the server access token on the Customize page", () => {
       "/api/server-token": [[409, { detail: "server_token.needs_passkey" }]],
       "/api/server-token/options": [[200, { options: { challenge: "c" } }]],
     });
-    show();
+    await show();
     await paste(ID, SECRET);
     await userEvent.click(screen.getByRole("button", { name: "Save token" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/Windows Hello was closed before confirming/);
@@ -180,7 +181,7 @@ describe("the server access token on the Customize page", () => {
     serve(NONE, {
       "/api/server-token": [[409, { detail: "server_token.bad_token" }]],
     });
-    show();
+    await show();
     await paste(ID, SECRET);
     await userEvent.click(screen.getByRole("button", { name: "Save token" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/doesn't look like a Cloudflare service token/);
@@ -189,7 +190,7 @@ describe("the server access token on the Customize page", () => {
   it("without the vault's master key offers no fields", async () => {
     windowsHello();
     serve({ ...NONE, vault: false });
-    show();
+    await show();
     expect(await screen.findByText(/The vault needs its master key first/)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("….access")).not.toBeInTheDocument();
   });
@@ -197,7 +198,7 @@ describe("the server access token on the Customize page", () => {
   it("without a passkey asks for one first", async () => {
     windowsHello();
     serve(NONE, {}, false);
-    show();
+    await show();
     expect(await screen.findByText(/saving the token needs Windows Hello/)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("….access")).not.toBeInTheDocument();
   });
@@ -205,7 +206,7 @@ describe("the server access token on the Customize page", () => {
   it("without a database the panel is not shown", async () => {
     windowsHello();
     serve({ ...NONE, switches: false });
-    show();
+    await show();
     expect(await screen.findByRole("heading", { name: "Customize" })).toBeInTheDocument();
     expect(screen.queryByText("Server access token")).not.toBeInTheDocument();
   });

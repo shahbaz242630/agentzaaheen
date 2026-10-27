@@ -30,7 +30,7 @@ export function ServerTokenPanel({ status, canSign, busy, onSave }: Props) {
     "flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-line bg-panel px-3 py-1.5 focus-within:outline-2 focus-within:outline-brand";
   const input = "min-w-0 flex-1 bg-transparent font-mono text-sm text-ink outline-none placeholder:text-faint";
   return (
-    <section aria-labelledby="server-token-title" className="rounded-2xl border border-line bg-panel px-5 py-4">
+    <section aria-labelledby="server-token-title" className="rounded-2xl border border-line bg-panel p-5 shadow-[0_1px_2px_oklch(0_0_0/0.04)]">
       <h2 id="server-token-title" className="flex items-center gap-2 font-semibold text-ink">
         <Server className="size-4 text-faint" aria-hidden="true" />
         Server access token

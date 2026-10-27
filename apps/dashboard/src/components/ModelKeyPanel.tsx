@@ -30,7 +30,7 @@ export function ModelKeyPanel({ status, canSign, busy, onSave }: Props) {
     cleaned.length <= MAX_CHARS &&
     !cleaned.startsWith(CLAUDE_PREFIX);
   return (
-    <section aria-labelledby="model-key-title" className="rounded-2xl border border-line bg-panel px-5 py-4">
+    <section aria-labelledby="model-key-title" className="rounded-2xl border border-line bg-panel p-5 shadow-[0_1px_2px_oklch(0_0_0/0.04)]">
       <h2 id="model-key-title" className="flex items-center gap-2 font-semibold text-ink">
         <Cpu className="size-4 text-faint" aria-hidden="true" />
         Server model key
