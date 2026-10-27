@@ -54,6 +54,7 @@ from agentzaaheen.core.policy.audit import (
     append,
     verify_chain,
 )
+from agentzaaheen.core.policy.chats import ChatControl
 from agentzaaheen.core.policy.claude_key import (
     ClaudeKeyControl,
     ClaudeKeyStatus,
@@ -123,6 +124,7 @@ __all__ = [
     "ChainAnchor",
     "ChainReport",
     "Channel",
+    "ChatControl",
     "ClaudeKeyControl",
     "ClaudeKeyStatus",
     "ClaudeKeyVerdict",

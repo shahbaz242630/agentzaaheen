@@ -129,6 +129,8 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "customer_name_prints": read_add,  # fingerprints only; removed only with the workspace
         "run_starts": read_add,  # a run's start, written before it works, never changed (F11)
         "bookmarks": mirror,  # moved with a run's end; removed only with the workspace (F11 slice 4)
+        "chat_conversations": read_add,  # plus UPDATE on last use and how it ended (column grants, F19)
+        "chat_turns": read_add,  # a question and its answer, never changed; old ones go by the owner function
     }
 
 

@@ -30,6 +30,7 @@ from agentzaaheen.core.registry.roles import RoleLibrary, load_roles
 from agentzaaheen.core.store import (
     AgentRows,
     AuditRows,
+    ChatRows,
     DailySummaries,
     Database,
     Records,
@@ -54,7 +55,8 @@ NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 PROJECT_TABLES = (
     "events", "runs", "findings", "actions", "sealed_secrets", "revenue_subscriptions",
     "revenue_payments", "revenue_refunds", "source_syncs", "workspace_settings", "agents",
-    "workspace_sources", "scout_runs", "daily_summaries", "run_starts", "bookmarks",
+    "workspace_sources", "scout_runs", "daily_summaries", "run_starts", "bookmarks", "chat_conversations",
+    "chat_turns",
 )  # fmt: skip
 
 
@@ -114,6 +116,14 @@ async def _busy(db: Database, library: RoleLibrary, workspace: UUID) -> UUID:
     )
     await RunStarts(db.scoped(TENANT, workspace)).open(
         RunStart(uuid4(), agent, "monitoring", "f" * 64, NOW, NOW + timedelta(minutes=1))
+    )
+    await ChatRows(db.scoped(TENANT, workspace)).add(
+        "How is it going?",
+        "All well.",
+        model_id="gemma-local",
+        from_sample=False,
+        at=NOW,
+        idle_after=timedelta(hours=3),
     )
     return agent
 

@@ -37,6 +37,7 @@ from agentzaaheen.core.store.migrations import (
     m0015_model_call_tokens,
     m0016_run_starts,
     m0017_bookmarks,
+    m0018_chat_records,
 )
 
 
@@ -72,6 +73,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(15, m0015_model_call_tokens.NAME, m0015_model_call_tokens.SQL),
     Migration(16, m0016_run_starts.NAME, m0016_run_starts.SQL),
     Migration(17, m0017_bookmarks.NAME, m0017_bookmarks.SQL),
+    Migration(18, m0018_chat_records.NAME, m0018_chat_records.SQL),
 )
 LATEST_VERSION = MIGRATIONS[-1].version
 

@@ -118,6 +118,7 @@ from agentzaaheen.core.vault import NamePrinter, VaultError, load_master_key
 from tools import laptop_db, name_prints, vault_key
 from tools.chat_tools import LOCAL_MODEL_ID, Switched, model_chat, tools_for
 from tools.dashboard_adding import LaptopAdding
+from tools.dashboard_chats import ChatSweep
 from tools.dashboard_expiry import cert_hosts, cert_reader, domain_reader, domains_list
 from tools.dashboard_healthchecks import HealthchecksReader, healthchecks_list, healthchecks_reader
 from tools.dashboard_monitoring import MONITORING_TOOLS, DatesWatch, LaptopMonitoring
@@ -588,6 +589,8 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
             else None
         ),
     )
+    # Every chat kept 12 months (F19): old ones removed at start, then daily.
+    sweep = ChatSweep(switches.forget_old_chats, directory) if switches is not None else None
     page = registry_for(chosen, registry=registry, uptime=uptime, backends=backends)
     app = create_app(
         chosen,
@@ -607,8 +610,9 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
         claude_key=LaptopClaudeKeys(switches) if switches is not None else None,
         server_token=LaptopServerTokens(switches) if switches is not None else None,
         model_key=LaptopModelKeys(switches) if switches is not None else None,
-        on_start=_starter(summaries, monitoring),
-        on_close=_closer(switches, scout, summaries, monitoring),
+        chats=switches,
+        on_start=_starter(summaries, monitoring, sweep),
+        on_close=_closer(switches, scout, summaries, monitoring, sweep),
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
@@ -663,10 +667,10 @@ def _scout(  # noqa: PLR0913  # the model, the database, GitHub, the roles, more
 
 
 def _starter(
-    summaries: LaptopSummaries | None, monitoring: LaptopMonitoring | None
+    summaries: LaptopSummaries | None, monitoring: LaptopMonitoring | None, sweep: ChatSweep | None = None
 ) -> Callable[[], Awaitable[None]] | None:
-    """What to start once the server is up: the morning job and the Monitoring rounds."""
-    jobs = [job for job in (summaries, monitoring) if job is not None]
+    """What to start once the server is up: the morning job, the Monitoring rounds, the chat clean-up."""
+    jobs = [job for job in (summaries, monitoring, sweep) if job is not None]
     if not jobs:
         return None
 
@@ -682,12 +686,15 @@ def _closer(
     scout: LaptopScout | None,
     summaries: LaptopSummaries | None = None,
     monitoring: LaptopMonitoring | None = None,
+    sweep: ChatSweep | None = None,
 ) -> Callable[[], Awaitable[None]] | None:
-    """What to close when the server stops: Monitoring, the morning job, the scout, then the database."""
+    """What to close when the server stops: the jobs, the scout, then the database."""
     if switches is None:
         return None
 
     async def close() -> None:
+        if sweep is not None:
+            await sweep.close()
         if monitoring is not None:
             await monitoring.close()
         if summaries is not None:
