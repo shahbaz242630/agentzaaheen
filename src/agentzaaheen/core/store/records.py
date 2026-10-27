@@ -8,7 +8,8 @@ tenant is simply not found.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -17,6 +18,7 @@ import asyncpg
 from pydantic import BaseModel
 
 from agentzaaheen.core.sdk import Action, Event, Finding, RunRecord
+from agentzaaheen.core.store.bookmarks import MAX_BOOKMARKS, MOVE_BOOKMARK
 from agentzaaheen.core.store.db import Scoped, require_aware, written
 
 MAX_PAGE = 500
@@ -109,6 +111,14 @@ def _values(record: BaseModel, columns: Sequence[str], json_columns: frozenset[s
     return [as_json[c] if c in json_columns else _plain(typed[c]) for c in columns]
 
 
+def _agent_id(agent: str) -> UUID:
+    """The agent a run's bookmarks belong to: only an agent run (its id) has bookmarks."""
+    try:
+        return UUID(agent)
+    except ValueError:
+        raise ValueError("only a run by an agent id can move bookmarks") from None
+
+
 def _load[M: BaseModel](model: type[M], row: asyncpg.Record | None) -> M | None:
     return None if row is None else model.model_validate(dict(row))
 
@@ -149,17 +159,38 @@ class Records:
         async with self._scope.write("an agent run") as conn:
             await conn.execute(_INSERT_RUN, *values)
 
-    async def end_run(self, run: RunRecord, findings: Sequence[Finding]) -> None:
-        """Store a run's end and its findings together: all of it is saved, or none of it (F11)."""
+    async def end_run(
+        self,
+        run: RunRecord,
+        findings: Sequence[Finding],
+        bookmarks: Mapping[str, str] | None = None,
+        *,
+        moved_at: datetime | None = None,
+    ) -> None:
+        """Store a run's end, its findings, then its moved bookmarks: all of it is saved, or none of it (F11).
+
+        A bookmark (``bookmarks``, moved at ``moved_at``) is written after the findings in the same
+        transaction, so it never moves past a finding that was not saved.
+        """
         require_aware(run.started_at)
         if any(f.run_id != run.id for f in findings):
             raise ValueError("every finding must name the run it came from")
+        moves = dict(bookmarks or {})
+        if len(moves) > MAX_BOOKMARKS:
+            raise ValueError(f"at most {MAX_BOOKMARKS} bookmarks")
+        if moves and moved_at is None:
+            raise ValueError("say when the bookmarks moved")
+        agent_id = _agent_id(run.agent) if moves else None
+        if moved_at is not None:
+            require_aware(moved_at)
         values = _values(run, _RUN_COLUMNS, frozenset({"model"}))
         rows = [_values(f, _FINDING_COLUMNS, frozenset({"evidence", "metric_refs"})) for f in findings]
-        async with self._scope.write("an agent run's end and its findings") as conn:
+        async with self._scope.write("an agent run's end, its findings and its bookmarks") as conn:
             await conn.execute(_INSERT_RUN, *values)
             for row in rows:
                 await conn.execute(_INSERT_FINDING, *row)
+            for name, value in sorted(moves.items()):
+                await conn.execute(MOVE_BOOKMARK, *self._key, agent_id, name, value, run.id, moved_at)
 
     async def get_run(self, run_id: UUID) -> RunRecord | None:
         """One run record, or None."""

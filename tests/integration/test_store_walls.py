@@ -145,6 +145,8 @@ async def _fill_every_table(url: str) -> None:
         await RunStarts(here).open(
             RunStart(uuid4(), uuid4(), "monitoring", "f" * 64, NOW, NOW + timedelta(minutes=1))
         )
+        moved = run_record(agent=str(uuid4()))  # an agent run moves a bookmark (F11 slice 4)
+        await records.end_run(moved, [], {"uptime.state": "up"}, moved_at=NOW)
 
 
 async def _count(url: str, table: str, tenant: UUID, workspace: UUID | None) -> int:

@@ -10,6 +10,10 @@ What an agent hands back is an :class:`AgentResult`: finding drafts only. The
 runner adds the tenant, the workspace and the run before anything is saved,
 so an agent cannot write into another workspace or claim another run.
 
+An agent is handed its bookmarks (where it got to last time) on the ticket and
+says where it got to now in :attr:`AgentResult.bookmarks`; the runner moves them
+only together with the findings (slice 4).
+
 An agent never holds the model: its ticket carries a
 :class:`~agentzaaheen.core.runner.shape.CheckedModel`, which only answers in the
 role's shape (checkpoint 3, slice 2). A built-in job (:class:`SystemWork`, the
@@ -22,16 +26,21 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import Annotated, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from agentzaaheen.core.policy import Budget
 from agentzaaheen.core.runner.shape import CheckedModel
 from agentzaaheen.core.sdk import DataClass, Evidence, FindingKind, Severity, Trust
+from agentzaaheen.core.store import MAX_BOOKMARKS
 
 MAX_FINDINGS = 50  # a run that "finds" more than this is not working; the rest would be noise
+
+_BOOKMARK_NAME = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$"  # the same rule as the bookmarks table
+BookmarkName = Annotated[str, StringConstraints(pattern=_BOOKMARK_NAME, max_length=64)]
+BookmarkValue = Annotated[str, StringConstraints(min_length=1, max_length=256)]
 
 _RUNNER = object()  # the runner's own seal: only this package holds it
 
@@ -58,6 +67,7 @@ class RunTicket:
     budget: Budget
     started_at: datetime
     model: CheckedModel | None
+    bookmarks: Mapping[str, str]
     seal: object = field(repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -77,6 +87,7 @@ def _mint(  # noqa: PLR0913  # each is a separate fact of the run
     budget: Budget,
     started_at: datetime,
     model: CheckedModel | None,
+    bookmarks: Mapping[str, str],
 ) -> RunTicket:
     """A ticket with the runner's seal (for ``core.runner.run`` only)."""
     return RunTicket(
@@ -90,6 +101,7 @@ def _mint(  # noqa: PLR0913  # each is a separate fact of the run
         budget,
         started_at,
         model,
+        dict(bookmarks),
         _RUNNER,
     )
 
@@ -113,12 +125,15 @@ class AgentResult(BaseModel):
     """What one run found. No findings means "nothing found", never "did not run".
 
     ``delivered`` is for work saved somewhere other than findings (the scout's advice): the run is "ok".
+    ``bookmarks`` is where the agent got to; the runner moves them only when the run ended well and
+    every finding was saved with them.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     findings: tuple[FindingDraft, ...] = Field(default=(), max_length=MAX_FINDINGS)
     delivered: bool = False
+    bookmarks: dict[BookmarkName, BookmarkValue] = Field(default_factory=dict, max_length=MAX_BOOKMARKS)
 
 
 class AgentWork(Protocol):

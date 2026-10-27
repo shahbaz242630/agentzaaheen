@@ -114,9 +114,11 @@ from agentzaaheen.core.scheduler import DEFAULT_ZONE
 from agentzaaheen.core.sdk import SiteRule, span
 from agentzaaheen.core.store import ScoutRun, WorkspaceRow
 from agentzaaheen.core.telemetry import LogFile, LogFolder
-from tools import laptop_db, vault_key
+from agentzaaheen.core.vault import NamePrinter, VaultError, load_master_key
+from tools import laptop_db, name_prints, vault_key
 from tools.chat_tools import LOCAL_MODEL_ID, Switched, model_chat, tools_for
 from tools.dashboard_adding import LaptopAdding
+from tools.dashboard_monitoring import MONITORING_TOOLS, LaptopMonitoring
 from tools.dashboard_profile import LaptopProfiles, Repos
 from tools.dashboard_reread import HourlyReads, Reread
 from tools.dashboard_scout import LaptopScout
@@ -141,7 +143,7 @@ from tools.dashboard_switches import (
     off_connectors,
 )
 from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options, tracing_from
-from tools.dashboard_uptime import ntfy_topic, start_watch, uptime_list, uptime_portfolio
+from tools.dashboard_uptime import UptimeLive, ntfy_topic, start_watch, uptime_list, uptime_portfolio
 from tools.fix_guides import Project, fixes_list
 from tools.key_dates import KeyDate, key_dates_list
 
@@ -234,6 +236,7 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
     uptime: UptimeRules | None = None,
     backends: SupabaseList | None = None,
     alerts: AlertLog | None = None,
+    watchers: list[UptimeLive] | None = None,
 ) -> tuple[Portfolio | None, list[str]]:
     """The portfolio with every requested real source laid over the sample, and what is real.
 
@@ -281,6 +284,8 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
             raise _NotStartedError
         portfolio = uptime_portfolio(base, watcher, clock=clock)
         watcher.start()
+        if watchers is not None:
+            watchers.append(watcher)  # the Monitoring agents read its newest check
         live.append("uptime checks")
     if backends and "supabase" not in off:
         base = portfolio or SamplePortfolio(clock())
@@ -366,6 +371,12 @@ def _parser() -> argparse.ArgumentParser:
         help="the vault's master key file (with --switches: saving the Claude key needs it)",
     )
     parser.add_argument(
+        "--names-key",
+        type=Path,
+        default=name_prints.KEY_FILE,
+        help="the customer-name fingerprint key: agents' findings are checked for our customers' names",
+    )
+    parser.add_argument(
         "--enrol-passkey", action="store_true", help="allow the one-time passkey set-up (needs --switches)"
     )
     parser.add_argument(
@@ -448,9 +459,18 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         key_dates = key_dates_list(ns.keys)
         off = off_connectors(connected.standing, registry) if connected else frozenset[str]()
         alerts = AlertLog(clock)  # the phone alerts, counted for the daily summaries
+        watchers: list[UptimeLive] = []
         with span("dashboard start"):  # every start-up read in one trace
             portfolio, live = _real_data(
-                ns, env, clock, transport, off=off, uptime=uptime, backends=backends, alerts=alerts
+                ns,
+                env,
+                clock,
+                transport,
+                off=off,
+                uptime=uptime,
+                backends=backends,
+                alerts=alerts,
+                watchers=watchers,
             )
     except (_NotStartedError, ListNotUsableError):
         return 1
@@ -468,6 +488,8 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
             enrol_code=code,
             library=library,
             keyring=vault_key.load_keyring(ns.vault_key),
+            tools=MONITORING_TOOLS,
+            names=_name_printer(ns.names_key),
         )
         if code is not None:
             print(f"dashboard: passkey set-up is open. The code to type on the Customize page is {code}")
@@ -518,6 +540,18 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         clock=clock,
         transport=transport,
     )
+    monitoring = (
+        LaptopMonitoring(
+            runner=lambda: switches.runner(None),  # code only: no model
+            agents=switches.agents_doing,
+            directory=directory,
+            latest=lambda: watchers[0].latest,
+            listed=frozenset(uptime),
+            clock=clock,
+        )
+        if switches is not None and watchers
+        else None
+    )
     page = registry_for(chosen, registry=registry, uptime=uptime, backends=backends)
     app = create_app(
         chosen,
@@ -537,8 +571,8 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         claude_key=LaptopClaudeKeys(switches) if switches is not None else None,
         server_token=LaptopServerTokens(switches) if switches is not None else None,
         model_key=LaptopModelKeys(switches) if switches is not None else None,
-        on_start=summaries.start if summaries is not None else None,
-        on_close=_closer(switches, scout, summaries),
+        on_start=_starter(summaries, monitoring),
+        on_close=_closer(switches, scout, summaries, monitoring),
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
@@ -592,14 +626,34 @@ def _scout(  # noqa: PLR0913  # the model, the database, GitHub, the roles, more
     )
 
 
-def _closer(
-    switches: LaptopSwitches | None, scout: LaptopScout | None, summaries: LaptopSummaries | None = None
+def _starter(
+    summaries: LaptopSummaries | None, monitoring: LaptopMonitoring | None
 ) -> Callable[[], Awaitable[None]] | None:
-    """What to close when the server stops: the morning job and the scout's runs, then the database."""
+    """What to start once the server is up: the morning job and the Monitoring rounds."""
+    jobs = [job for job in (summaries, monitoring) if job is not None]
+    if not jobs:
+        return None
+
+    async def start() -> None:
+        for job in jobs:
+            await job.start()
+
+    return start
+
+
+def _closer(
+    switches: LaptopSwitches | None,
+    scout: LaptopScout | None,
+    summaries: LaptopSummaries | None = None,
+    monitoring: LaptopMonitoring | None = None,
+) -> Callable[[], Awaitable[None]] | None:
+    """What to close when the server stops: Monitoring, the morning job, the scout, then the database."""
     if switches is None:
         return None
 
     async def close() -> None:
+        if monitoring is not None:
+            await monitoring.close()
         if summaries is not None:
             await summaries.close()
         if scout is not None:
@@ -744,6 +798,21 @@ def model_reach(
     if switches is None:
         return frozenset({SERVER_MODEL_HOST}), None, None
     return frozenset({SERVER_MODEL_HOST}), switches.server_token, switches.model_key
+
+
+def _name_printer(path: Path) -> NamePrinter | None:
+    """The customer-name fingerprint key, if there is one (saying how agents' findings are checked)."""
+    if not path.is_file():
+        print("dashboard: no customer-name key, so agents' findings are checked for secrets and customer")
+        print("dashboard: details but not for our customers' names (see python -m tools.name_prints --help).")
+        return None
+    try:
+        printer = NamePrinter(load_master_key(path))
+    except VaultError as exc:
+        print(f"dashboard: the customer-name key at {path} could not be used ({exc.code}).")
+        return None
+    print("dashboard: agents' findings are also checked for our customers' names.")
+    return printer
 
 
 def _library(folder: Path) -> RoleLibrary:

@@ -44,6 +44,7 @@ from agentzaaheen.core.store.agents import (
     WorkspaceSettings,
 )
 from agentzaaheen.core.store.audit import AuditRow, AuditRows
+from agentzaaheen.core.store.bookmarks import MAX_BOOKMARKS, Bookmarks
 from agentzaaheen.core.store.db import Database, DatabaseSettings, Scoped
 from agentzaaheen.core.store.errors import StoreError, StoreErrorCode
 from agentzaaheen.core.store.migrations import LATEST_VERSION, MIGRATIONS, Migration, check_schema, migrate
@@ -90,6 +91,7 @@ from agentzaaheen.core.store.workspaces import (
 __all__ = [
     "INTERRUPTED",
     "LATEST_VERSION",
+    "MAX_BOOKMARKS",
     "MAX_PAGE",
     "MAX_ROWS",
     "MIGRATIONS",
@@ -103,6 +105,7 @@ __all__ = [
     "Archived",
     "AuditRow",
     "AuditRows",
+    "Bookmarks",
     "BriefingRow",
     "BriefingState",
     "Briefings",

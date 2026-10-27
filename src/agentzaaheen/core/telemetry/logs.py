@@ -102,6 +102,8 @@ LOG_FIELDS: frozenset[str] = frozenset(
         # F11 slice 3: the leak check (counts only, never what was found)
         "held_back",
         "retagged",
+        # F11 slice 4: how many bookmarks a run moved; the Monitoring agent's counts (never addresses)
+        "bookmarks",
     }
 )
 

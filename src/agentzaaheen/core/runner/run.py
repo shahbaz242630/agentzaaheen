@@ -13,7 +13,8 @@ code. In order; the first failure wins:
 4. The agent's **frozen** role pack (the copy stored when the role was given).
 5. The code is for that role; its tools are at most 6, every one known, none
    above the role's permission.
-6. The start is written down (``run_starts``) before the agent does anything.
+6. The agent's bookmarks (where it got to last time) are read.
+7. The start is written down (``run_starts``) before the agent does anything.
 
 A job that was not meant to run (switched off, paused, stopped) is **not
 started**: a log line and an audit entry, no run row. Any other refusal is a
@@ -26,6 +27,10 @@ and must finish inside its time budget.
 **After** (checkpoint 5): the run's end and its findings are saved together;
 its cost is added up from the Claude calls made for it (rounded up to the
 cent), so its caps count it; one plain-English line and one audit entry.
+The agent's bookmarks move in that same save, after its findings, and only
+when the run ended well with every finding kept (slice 4): a run that failed,
+or had a finding held back, leaves them where they were, so the next run
+sees the same thing again.
 A run that never reaches its end is closed later as interrupted (step 1, and
 the daily summary), with the cost of the calls it made.
 
@@ -81,6 +86,7 @@ from agentzaaheen.core.sdk import (
 )
 from agentzaaheen.core.store import (
     AgentRows,
+    Bookmarks,
     Database,
     Records,
     RoleVersionRows,
@@ -114,7 +120,10 @@ class RunCode(StrEnum):
     BAD_RESULT = "run.bad_result"
     END_NOT_WRITTEN = "run.end_not_written"
     LEAK_HELD_BACK = "run.leak_held_back"  # a finding held a secret: not saved (checkpoint 4)
+    BOOKMARKS_UNREADABLE = "run.bookmarks_unreadable"  # where the agent got to could not be read
 
+
+_ENDED_WELL = frozenset({RunOutcome.OK, RunOutcome.NOTHING_FOUND})
 
 # Not meant to run: said and audited (the daily summary counts them in one line), never a run row.
 _NOT_STARTED = SKIPPED_REASONS
@@ -130,6 +139,7 @@ class RunReport:
     findings: int = 0
     detail: str | None = None  # needs a look: the last refused answer's code
     held_back: int = 0  # findings not saved because they held a secret (checkpoint 4)
+    bookmarks: int = 0  # bookmarks moved with the run's end
 
     @property
     def started(self) -> bool:
@@ -221,6 +231,10 @@ class Runner:
         run_id: UUID,
     ) -> RunReport:
         workspace_id = scope.require_workspace()
+        try:
+            bookmarks = await Bookmarks(scope).of(who.agent_id)
+        except StoreError:
+            return await self._denied(scope, who, RunCode.BOOKMARKS_UNREADABLE, now)
         deadline = now + timedelta(seconds=work.budget.seconds) + CLOSE_GRACE
         start = RunStart(run_id, who.agent_id, who.role_id, who.version, now, deadline)
         try:
@@ -277,6 +291,7 @@ class Runner:
             budget=work.budget,
             started_at=now,
             model=checked,
+            bookmarks=bookmarks,
         )
         worked = await _work(work, ticket)
         steps = checked.attempts if checked is not None else 0
@@ -313,6 +328,9 @@ class Runner:
             Finding(tenant_id=self._tenant, project_id=workspace, run_id=start.run_id, **d.model_dump())
             for d in checked.kept
         ]
+        # Bookmarks move only past what was saved: nothing held back. (Only a run that ended well has a
+        # result; one that failed, timed out or needs a look has none, so its bookmarks stay too.)
+        moves = dict(result.bookmarks) if result is not None and not checked.held_back else {}
         trust, data_class = Trust.TRUSTED, DataClass.PUBLIC
         for finding in findings:
             trust = combine_trust(trust, finding.trust)
@@ -337,7 +355,7 @@ class Runner:
                 outcome=outcome,
                 error_code=code,
             )
-            await Records(scope).end_run(record, findings)
+            await Records(scope).end_run(record, findings, moves, moved_at=now)
         except StoreError as exc:
             # The start stays without an end: it is closed as interrupted after its deadline.
             say(
@@ -372,8 +390,9 @@ class Runner:
             reason=code or "none",
             findings=len(findings),
             cost_minor=calls.cost_minor,
+            bookmarks=len(moves),
         )
-        ok = outcome in {RunOutcome.OK, RunOutcome.NOTHING_FOUND}
+        ok = outcome in _ENDED_WELL
         await self._audit(
             "run.end",
             AuditOutcome.ALLOW if ok else AuditOutcome.DENY,
@@ -384,7 +403,9 @@ class Runner:
             run_id=start.run_id,
             extra={"outcome": outcome.value},
         )
-        return RunReport(outcome, code, start.run_id, len(findings), worked.detail, checked.held_back)
+        return RunReport(
+            outcome, code, start.run_id, len(findings), worked.detail, checked.held_back, len(moves)
+        )
 
     async def _known_names(self) -> KnownNames | None:
         """Our customers' names for the leak check, or ``None`` (no list, or it could not be read)."""
