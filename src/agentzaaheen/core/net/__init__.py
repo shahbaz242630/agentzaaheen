@@ -19,7 +19,9 @@ What it does:
     Healthchecks ping address, so a job that stops running raises an alert.
     :class:`ClaudeClient` is the one door to Claude (ADR-033): one Messages
     POST to ``api.anthropic.com`` only, pinned model ids, the key asked for
-    once per call, never retried, size-capped.
+    once per call, never retried, size-capped. :class:`CertProbe` reads a
+    certificate with one TLS handshake to an allowlisted name (whether it is
+    valid, and when it ends), and sends nothing after it.
 
 Public interface:
     ``JsonClient``, ``NetPolicy``, ``DownloadPolicy``, ``NetError``, ``NetErrorCode``,
@@ -27,7 +29,7 @@ Public interface:
     ``StatusProbe``, ``check_probe_url``, ``PushClient``, ``NTFY_HOST``,
     ``OtlpSender``, ``check_otlp_endpoint``, ``HeartbeatClient``,
     ``HEALTHCHECKS_PING_HOST``, ``check_ping_url``, ``ClaudeClient``, ``ClaudeReply``,
-    ``CLAUDE_HOST``.
+    ``CLAUDE_HOST``, ``CertProbe``.
     A ``JsonClient`` satisfies the SDK's ``JsonGetter`` protocol, which is all
     a connector ever sees.
 
@@ -36,13 +38,15 @@ How to test:
     test runs through ``httpx.MockTransport``).
 
 Must never:
-    Send anything but GET (the model chat POST, the Claude POST, the ntfy
+    Send anything but GET (the certificate handshake, which sends nothing
+    after it; the model chat POST, the Claude POST, the ntfy
     alert and the telemetry POST aside); follow a redirect (the one signed download aside,
     with no credentials); talk to a host not on the
     allowlist; put a key in a url, an error or a log line. No other module
     may import an HTTP library (import-linter).
 """
 
+from agentzaaheen.core.net.cert import CertProbe
 from agentzaaheen.core.net.claude import CLAUDE_HOST, ClaudeClient, ClaudeReply
 from agentzaaheen.core.net.client import DownloadPolicy, JsonClient, NetPolicy, check_base_url, check_path
 from agentzaaheen.core.net.errors import NetError, NetErrorCode
@@ -66,6 +70,7 @@ __all__ = [
     "SERVER_MODEL_HOST",
     "AccessSource",
     "AccessToken",
+    "CertProbe",
     "ClaudeClient",
     "ClaudeReply",
     "DownloadPolicy",

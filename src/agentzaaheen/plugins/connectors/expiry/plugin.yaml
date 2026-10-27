@@ -1,0 +1,16 @@
+id: expiry
+type: connector
+version: 0.1.0
+sdk: ">=1.14,<2"
+permissions: [read]
+egress: ["the hosts in this laptop's uptime list (TLS handshake only, port 443)", rdap.verisign.com]
+# The certificate read is a TLS handshake only (see egress): no request is sent, so it is no endpoint.
+endpoints:
+  - GET /com/v1/domain/{name}
+  - GET /net/v1/domain/{name}
+credentials: []
+data_class: internal
+interface:
+  display_name: Certificate and domain dates
+  category: Health
+  description: "When each site's certificate and each domain ends: dates and whether a certificate is valid, nothing else."

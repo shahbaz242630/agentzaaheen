@@ -118,8 +118,9 @@ from agentzaaheen.core.vault import NamePrinter, VaultError, load_master_key
 from tools import laptop_db, name_prints, vault_key
 from tools.chat_tools import LOCAL_MODEL_ID, Switched, model_chat, tools_for
 from tools.dashboard_adding import LaptopAdding
+from tools.dashboard_expiry import cert_hosts, cert_reader, domain_reader, domains_list
 from tools.dashboard_healthchecks import HealthchecksReader, healthchecks_list, healthchecks_reader
-from tools.dashboard_monitoring import MONITORING_TOOLS, LaptopMonitoring
+from tools.dashboard_monitoring import MONITORING_TOOLS, DatesWatch, LaptopMonitoring
 from tools.dashboard_profile import LaptopProfiles, Repos
 from tools.dashboard_reread import HourlyReads, Reread
 from tools.dashboard_scout import LaptopScout
@@ -389,6 +390,9 @@ def _parser() -> argparse.ArgumentParser:
         "--healthchecks", type=Path, help="each project's Healthchecks checks, for Monitoring (local list)"
     )
     parser.add_argument("--healthchecks-key-env", help="env var holding the read-only Healthchecks key")
+    parser.add_argument(
+        "--domains", type=Path, help="each project's own .com/.net domains, for Monitoring (local list)"
+    )
     parser.add_argument("--fixes", type=Path, help="give the chat the fix guides in this local file")
     parser.add_argument(
         "--roles",
@@ -461,6 +465,7 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
         uptime = uptime_list(ns.uptime, projects)
         backends = supabase_list(ns.supabase, projects)
         checks = healthchecks_list(ns.healthchecks, projects)
+        domains = domains_list(ns.domains, projects)
         fixes = fixes_list(ns.fixes, projects)
         key_dates = key_dates_list(ns.keys)
         off = off_connectors(connected.standing, registry) if connected else frozenset[str]()
@@ -557,6 +562,7 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
             if "healthchecks" not in off
             else None
         ),
+        dates=lambda: _dates_watches(uptime, domains, off=off, clock=clock, transport=transport),
         clock=clock,
     )
     page = registry_for(chosen, registry=registry, uptime=uptime, backends=backends)
@@ -670,7 +676,7 @@ def _closer(
     return close
 
 
-def _monitoring(  # noqa: PLR0913  # the database, the workspaces, both reads and their lists, the clock
+def _monitoring(  # noqa: PLR0913  # the database, the workspaces, the reads and their lists, the clock
     switches: LaptopSwitches | None,
     *,
     directory: WorkspaceDirectory,
@@ -678,6 +684,7 @@ def _monitoring(  # noqa: PLR0913  # the database, the workspaces, both reads an
     uptime: UptimeRules,
     checks: Mapping[str, tuple[str, ...]],
     reader: Callable[[], HealthchecksReader | None],
+    dates: Callable[[], Sequence[DatesWatch]],
     clock: Clock,
 ) -> LaptopMonitoring | None:
     """The Monitoring agents' 5-minute rounds, if there is a database and an uptime watch."""
@@ -692,7 +699,36 @@ def _monitoring(  # noqa: PLR0913  # the database, the workspaces, both reads an
         clock=clock,
         heartbeats=reader() if checks else None,
         checks=checks,
+        dates=dates(),
     )
+
+
+def _dates_watches(
+    uptime: UptimeRules,
+    domains: Mapping[str, tuple[str, ...]],
+    *,
+    off: frozenset[str],
+    clock: Clock,
+    transport: httpx.AsyncBaseTransport | None,
+) -> list[DatesWatch]:
+    """Certificate dates of every uptime host, domain dates of the listed domains (unless switched off)."""
+    if "expiry" in off:
+        print("dashboard: certificate and domain dates are switched off on the Customize page.")
+        return []
+    hosts = cert_hosts(uptime)
+    watches = []
+    certs = cert_reader(hosts, clock=clock)
+    if certs is not None:
+        watches.append(DatesWatch(certs, hosts))
+    named = domain_reader(domains, clock=clock, transport=transport)
+    if named is not None:
+        watches.append(DatesWatch(named, domains))
+    certified = sum(len(names) for names in hosts.values())
+    named_count = sum(len(names) for names in domains.values())
+    print(
+        f"dashboard: Monitoring checks {certified} certificates every 6 hours, {named_count} domains daily."
+    )
+    return watches
 
 
 def _summaries(  # noqa: PLR0913  # the options, the database, the facts' sources, the outside world

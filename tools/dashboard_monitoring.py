@@ -7,11 +7,14 @@ before anything runs. The agent reads the uptime watch's newest check
 (``uptime.read``) and the newest Healthchecks read (``healthchecks.read``,
 slice 5a): it never reaches the network itself. It compares each with its
 bookmark and writes a finding only when something changed; the runner saves
-the findings and moves the bookmarks together.
+the findings and moves the bookmarks together. Slice 5b adds the certificate
+dates (``certs.read``) and domain dates (``domains.read``).
 
 Healthchecks is read by code, once per round (one GET for every project), and
 only when the round has an agent to wake. Without a Healthchecks list on this
 machine, the agents leave Healthchecks out (the start-up line says so).
+Certificates are read at most every 6 hours and domains once a day, in the same
+way (``tools.dashboard_expiry``).
 
 An agent that is switched off is not woken (the runner would only count it
 as skipped 288 times a day). A stop switch still stops a woken agent, and the
@@ -24,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
 
@@ -32,6 +36,8 @@ from agentzaaheen.core.policy import Budget
 from agentzaaheen.core.runner import AgentResult, FindingDraft, Runner, RunTicket
 from agentzaaheen.core.sdk import (
     DataClass,
+    ExpiryKind,
+    ExpiryReport,
     HeartbeatReport,
     ToolLevel,
     ToolSpec,
@@ -43,9 +49,14 @@ from agentzaaheen.core.sdk import (
 from agentzaaheen.core.store import AgentRow, StoreError, WorkspaceRow
 from agentzaaheen.plugins.agents.monitoring import (
     BOOKMARK,
+    CERTS_BOOKMARK,
+    CERTS_FRESH,
+    DOMAINS_BOOKMARK,
+    DOMAINS_FRESH,
     HEARTBEATS_BOOKMARK,
     Note,
     watch,
+    watch_expiry,
     watch_heartbeats,
 )
 
@@ -53,6 +64,8 @@ ROLE = "monitoring"
 EVERY = timedelta(minutes=5)  # the role pack: "wakes every 5 minutes"
 UPTIME_READ = "uptime.read"
 HEALTHCHECKS_READ = "healthchecks.read"
+CERTS_READ = "certs.read"
+DOMAINS_READ = "domains.read"
 MONITORING_TOOLS: Mapping[str, ToolSpec] = {
     UPTIME_READ: ToolSpec(
         name=UPTIME_READ,
@@ -66,6 +79,23 @@ MONITORING_TOOLS: Mapping[str, ToolSpec] = {
         output_data_class=DataClass.INTERNAL,
         description="The newest Healthchecks read: each check's short name, status and last ping only.",
     ),
+    CERTS_READ: ToolSpec(
+        name=CERTS_READ,
+        level=ToolLevel.READ,
+        output_data_class=DataClass.INTERNAL,
+        description="The newest certificate read: each host's end date and whether it is valid.",
+    ),
+    DOMAINS_READ: ToolSpec(
+        name=DOMAINS_READ,
+        level=ToolLevel.READ,
+        output_data_class=DataClass.INTERNAL,
+        description="The newest domain read: each of our domains' end date, from the public registry.",
+    ),
+}
+# Each kind of end date: its bookmark and how old a read may be before it is "not read".
+_DATES = {
+    ExpiryKind.CERT: (CERTS_BOOKMARK, CERTS_FRESH),
+    ExpiryKind.DOMAIN: (DOMAINS_BOOKMARK, DOMAINS_FRESH),
 }
 # Code only: one step, no model tokens (the gate needs at least 1), and a minute is plenty.
 MONITORING_BUDGET = Budget(steps=1, tokens=1, seconds=60)
@@ -73,11 +103,20 @@ MONITORING_BUDGET = Budget(steps=1, tokens=1, seconds=60)
 Clock = Callable[[], datetime]
 
 
+@dataclass(frozen=True)
+class Dated:
+    """One kind of end date for one project: the newest read and the project's names in it."""
+
+    kind: ExpiryKind
+    report: ExpiryReport | None
+    names: tuple[str, ...]
+
+
 class MonitoringWork:
-    """One Monitoring run for one project: its newest uptime and Healthchecks reads against the bookmarks."""
+    """One Monitoring run for one project: its newest reads, each against its bookmark."""
 
     role_id = ROLE
-    tools = frozenset({UPTIME_READ, HEALTHCHECKS_READ})
+    tools = frozenset({UPTIME_READ, HEALTHCHECKS_READ, CERTS_READ, DOMAINS_READ})
     budget = MONITORING_BUDGET
 
     def __init__(  # noqa: PLR0913  # the project, both reads, what is listed for it, and the clock
@@ -90,6 +129,7 @@ class MonitoringWork:
         clock: Clock,
         heartbeats: HeartbeatReport | None = None,
         slugs: tuple[str, ...] | None = None,
+        dates: Sequence[Dated] = (),
     ) -> None:
         """``slugs``: the project's Healthchecks checks (``None``: no Healthchecks list here)."""
         self._project = project
@@ -99,6 +139,7 @@ class MonitoringWork:
         self._clock = clock
         self._heartbeats = heartbeats
         self._slugs = slugs
+        self._dates = tuple(dates)
 
     async def run(self, ticket: RunTicket) -> AgentResult:
         """Write a finding only where the project's state changed since its bookmark."""
@@ -120,6 +161,18 @@ class MonitoringWork:
                 slugs=self._slugs,
                 now=now,
                 seen=ticket.bookmarks.get(HEARTBEATS_BOOKMARK),
+            )
+        for dated in self._dates:
+            bookmark, fresh = _DATES[dated.kind]
+            watched[bookmark] = watch_expiry(
+                self._project,
+                self._name,
+                dated.report,
+                kind=dated.kind,
+                names=dated.names,
+                now=now,
+                seen=ticket.bookmarks.get(bookmark),
+                fresh=fresh,
             )
         notes = [each.note for each in watched.values() if each.note is not None]
         return AgentResult(
@@ -150,6 +203,25 @@ class HeartbeatReader(Protocol):
         ...
 
 
+class DatesReader(Protocol):
+    """Reads one kind of end date (``tools.dashboard_expiry.ExpiryReader``)."""
+
+    kind: ExpiryKind
+    latest: ExpiryReport | None
+
+    async def refresh(self) -> None:
+        """Read if due; a failure keeps the last read."""
+        ...
+
+
+@dataclass(frozen=True)
+class DatesWatch:
+    """One kind of end date to watch: its reader and each project's names."""
+
+    reader: DatesReader
+    names: Mapping[str, tuple[str, ...]]
+
+
 class LaptopMonitoring:
     """Wakes every workspace's Monitoring agents each ``every_s`` seconds, inside the server's event loop."""
 
@@ -164,6 +236,7 @@ class LaptopMonitoring:
         clock: Clock,
         heartbeats: HeartbeatReader | None = None,
         checks: Mapping[str, tuple[str, ...]] | None = None,
+        dates: Sequence[DatesWatch] = (),
         every_s: float = EVERY.total_seconds(),
     ) -> None:
         self._runner = runner
@@ -174,6 +247,7 @@ class LaptopMonitoring:
         self._clock = clock
         self._heartbeats = heartbeats
         self._checks = dict(checks or {})
+        self._dates = tuple(dates)
         self._every_s = every_s
         self._task: asyncio.Task[None] | None = None
         self._log = get_logger("agentzaaheen.monitoring")
@@ -195,6 +269,8 @@ class LaptopMonitoring:
         if self._heartbeats is not None:
             await self._heartbeats.refresh()  # once per round, for every project
             heartbeats = self._heartbeats.latest
+        for watched in self._dates:
+            await watched.reader.refresh()  # only when due: 6 hours for certificates, a day for domains
         reports = dict(self._latest())  # swapped whole by the uptime watch: one consistent view
         started = 0
         for workspace, agent in woken:
@@ -206,6 +282,10 @@ class LaptopMonitoring:
                 clock=self._clock,
                 heartbeats=heartbeats,
                 slugs=self._checks.get(workspace.slug, ()) if self._checks else None,
+                dates=[
+                    Dated(d.reader.kind, d.reader.latest, d.names.get(workspace.slug, ()))
+                    for d in self._dates
+                ],
             )
             report = await runner.run(workspace.workspace_id, agent.agent_id, work)
             started += int(report.started)

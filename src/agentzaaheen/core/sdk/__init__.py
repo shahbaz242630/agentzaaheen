@@ -9,7 +9,8 @@ What it does:
     reason code into plain English (:func:`explain`), the uptime shapes
     (an address's rule, its status and timing, never its page) and the
     backend health shapes (codes and numbers only), the heartbeat shapes
-    (each Healthchecks check's slug, status and last ping), the repository bundle
+    (each Healthchecks check's slug, status and last ping), the expiry
+    shapes (when each certificate and domain ends), the repository bundle
     the scout reads (paths and untrusted file text, secret files never), what a
     project is built with (languages, and providers code found), the model
     levels of the model map (ADR-033), and spans: :func:`span`
@@ -39,6 +40,14 @@ from agentzaaheen.core.sdk.backend import (
 )
 from agentzaaheen.core.sdk.code import REPO_PATTERN, BuildState, RepoHealth, RepoSource
 from agentzaaheen.core.sdk.events import LOG_EVENTS, LogEvent, elapsed_ms, say
+from agentzaaheen.core.sdk.expiry import (
+    HOST_NAME,
+    CertAnswer,
+    CertGetter,
+    ExpiryCheck,
+    ExpiryKind,
+    ExpiryReport,
+)
 from agentzaaheen.core.sdk.explain import KNOWN_CODES, Explanation, explain
 from agentzaaheen.core.sdk.heartbeats import (
     CHECK_SLUG,
@@ -154,6 +163,7 @@ from agentzaaheen.core.sdk.uptime import (
 __all__ = [
     "ALLOWED_ATTRIBUTES",
     "CHECK_SLUG",
+    "HOST_NAME",
     "KNOWN_CODES",
     "LOG_EVENTS",
     "MAX_CODE_BYTES",
@@ -179,11 +189,16 @@ __all__ = [
     "BuildLogSource",
     "BuildState",
     "BytesGetter",
+    "CertAnswer",
+    "CertGetter",
     "CheckStatus",
     "DataClass",
     "Event",
     "Evidence",
     "Expect",
+    "ExpiryCheck",
+    "ExpiryKind",
+    "ExpiryReport",
     "Explanation",
     "FailedStepLog",
     "Finding",
