@@ -155,10 +155,10 @@ def test_the_same_name_written_differently_gives_the_same_fingerprint() -> None:
 def test_a_long_name_list_still_checks_quickly() -> None:
     names = KnownNames.of((f"Customer Number{i} Example" for i in range(20_000)), PRINTER)
     text = "ordinary words " * 100_000
-    started = time.process_time()  # our own CPU time: other programs on the laptop cannot fail it
+    started = time.thread_time()  # this thread's CPU only: no other program or test thread counts
     assert not names.found_in(text)
     assert names.found_in("We heard from customer number19999 example today.")
-    assert time.process_time() - started < 5
+    assert time.thread_time() - started < 5
 
 
 # ---- tagged at the source (slice 2a)
@@ -212,9 +212,9 @@ def test_a_prompt_too_long_to_check_is_refused_unread() -> None:
 
 def test_a_hostile_part_cannot_make_the_check_slow() -> None:
     hostile = PromptPart(("a." * 200_000) + ("1 " * 200_000) + ("+" * 200_000), DataClass.PUBLIC)
-    started = time.process_time()  # our own CPU time: other programs on the laptop cannot fail it
+    started = time.thread_time()  # this thread's CPU only: no other program or test thread counts
     assert customer_data_in([hostile], CUSTOMERS) is None
-    assert time.process_time() - started < 5
+    assert time.thread_time() - started < 5
 
 
 def _subscription() -> Subscription:
