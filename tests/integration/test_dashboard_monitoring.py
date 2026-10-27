@@ -1,8 +1,9 @@
-"""The Monitoring agent through the real runner and database, as the dashboard runs it (F11 slice 4).
+"""The Monitoring agent through the real runner and database, as the dashboard runs it (F11 slices 4-5).
 
-Each round wakes every switched-on Monitoring agent; a change in uptime is
-written down once, as a finding saved with its bookmark; an agent switched
-off is not woken; one workspace's trouble never stops the others.
+Each round wakes every switched-on Monitoring agent; a change in uptime or in
+Healthchecks is written down once, as a finding saved with its bookmark; an
+agent switched off is not woken (and Healthchecks is not read for it); one
+workspace's trouble never stops the others.
 """
 
 from __future__ import annotations
@@ -20,7 +21,14 @@ from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.policy import AgentControl
 from agentzaaheen.core.registry.roles import RoleLibrary, load_roles
 from agentzaaheen.core.runner import Runner
-from agentzaaheen.core.sdk import Expect, SiteCheck, UptimeReport
+from agentzaaheen.core.sdk import (
+    CheckStatus,
+    Expect,
+    HeartbeatCheck,
+    HeartbeatReport,
+    SiteCheck,
+    UptimeReport,
+)
 from agentzaaheen.core.store import (
     AgentRow,
     AuditRows,
@@ -30,7 +38,7 @@ from agentzaaheen.core.store import (
     StoreErrorCode,
     WorkspaceRow,
 )
-from agentzaaheen.plugins.agents.monitoring import BOOKMARK, UNLISTED, UP
+from agentzaaheen.plugins.agents.monitoring import BOOKMARK, HEARTBEATS_BOOKMARK, UNLISTED, UNREAD, UP
 from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from tests.integration.test_policy_agents import ME
 from tests.unit.test_registry_roles import pack
@@ -78,10 +86,36 @@ async def _give(db: Database, library: RoleLibrary, workspace: UUID, *, on: bool
     return agent
 
 
+class Heartbeats:
+    """A pretend Healthchecks reader: each refresh takes the read the test set (None: the read failed)."""
+
+    def __init__(self) -> None:
+        self.next: HeartbeatReport | None = None
+        self.latest: HeartbeatReport | None = None
+        self.refreshed = 0
+
+    async def refresh(self) -> None:
+        self.refreshed += 1
+        if self.next is not None:
+            self.latest = self.next
+
+
+def beats(status: CheckStatus) -> HeartbeatReport:
+    return HeartbeatReport(checks=(HeartbeatCheck(slug="eva", status=status),), fetched_at=NOW)
+
+
 class Rounds:
     """The dashboard's job over the real runner, with the uptime watch's newest checks set by the test."""
 
-    def __init__(self, db: Database, library: RoleLibrary, *, listed: frozenset[str]) -> None:
+    def __init__(
+        self,
+        db: Database,
+        library: RoleLibrary,
+        *,
+        listed: frozenset[str],
+        heartbeats: Heartbeats | None = None,
+        checks: Mapping[str, tuple[str, ...]] | None = None,
+    ) -> None:
         self.latest: dict[str, UptimeReport] = {}
         self.broken: set[UUID] = set()
         self._db = db
@@ -102,6 +136,8 @@ class Rounds:
             latest=lambda: self.latest,
             listed=listed,
             clock=lambda: NOW,
+            heartbeats=heartbeats,
+            checks=checks,
             every_s=0.01,
         )
 
@@ -206,3 +242,85 @@ def test_the_rounds_run_on_their_own_and_stop_when_closed(test_db: ScratchDb, li
             return int(before)
 
     assert run(body()) >= 1
+
+
+def test_a_healthchecks_check_down_is_written_once_then_fine_once(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    async def body() -> tuple[list[asyncpg.Record], Mapping[str, str], int]:
+        async with open_db(test_db.app_url) as db:
+            agent = await _give(db, library, EVA)
+            heartbeats = Heartbeats()
+            rounds = Rounds(
+                db, library, listed=frozenset({"eva"}), heartbeats=heartbeats, checks={"eva": ("eva",)}
+            )
+            rounds.latest = {"eva": checked(up=True)}
+            for status in (CheckStatus.UP, CheckStatus.DOWN, CheckStatus.DOWN, CheckStatus.UP):
+                heartbeats.next = beats(status)
+                await rounds.job.round()
+            return await rounds.findings(), await rounds.mark(agent), heartbeats.refreshed
+
+    findings, mark, refreshed = run(body())
+    assert [(f["title"], f["severity"]) for f in findings] == [
+        ("Eva: 1 of 1 Healthchecks checks down", "P2"),
+        ("Eva: all 1 Healthchecks checks fine again", "P3"),
+    ]
+    assert mark == {BOOKMARK: UP, HEARTBEATS_BOOKMARK: UP}  # both moved, each with its own state
+    assert refreshed == 4  # once per round
+
+
+def test_healthchecks_listed_but_never_read_is_said_not_fine(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    async def body() -> tuple[list[asyncpg.Record], list[asyncpg.Record], Mapping[str, str]]:
+        async with open_db(test_db.app_url) as db:
+            await _give(db, library, EVA)
+            zaaheen = await _give(db, library, ZAAHEEN)
+            rounds = Rounds(db, library, listed=frozenset({"eva", "zaaheen"}), checks={"eva": ("eva",)})
+            rounds.latest = {"eva": checked(up=True), "zaaheen": checked(up=True)}
+            await rounds.job.round()  # a list but no reader: the key was missing
+            return (
+                await rounds.findings(),
+                await rounds.findings(ZAAHEEN),
+                await rounds.mark(zaaheen, ZAAHEEN),
+            )
+
+    eva, zaaheen, mark = run(body())
+    assert [f["title"] for f in eva] == ["Eva: Healthchecks could not be read"]
+    assert [f["title"] for f in zaaheen] == ["Zaaheen: no Healthchecks checks to watch"]
+    assert mark == {BOOKMARK: UP, HEARTBEATS_BOOKMARK: UNLISTED}
+
+
+def test_a_failed_read_after_a_good_one_keeps_the_last_state(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    async def body() -> tuple[list[asyncpg.Record], Mapping[str, str]]:
+        async with open_db(test_db.app_url) as db:
+            agent = await _give(db, library, EVA)
+            heartbeats = Heartbeats()
+            rounds = Rounds(
+                db, library, listed=frozenset({"eva"}), heartbeats=heartbeats, checks={"eva": ("eva",)}
+            )
+            rounds.latest = {"eva": checked(up=True)}
+            heartbeats.next = beats(CheckStatus.DOWN)
+            await rounds.job.round()
+            heartbeats.next = None  # the read failed: the reader keeps its last read
+            await rounds.job.round()
+            return await rounds.findings(), await rounds.mark(agent)
+
+    findings, mark = run(body())
+    assert [f["title"] for f in findings] == ["Eva: 1 of 1 Healthchecks checks down"]
+    assert mark[HEARTBEATS_BOOKMARK] not in {UP, UNREAD}
+
+
+def test_healthchecks_is_not_read_when_no_agent_is_woken(test_db: ScratchDb, library: RoleLibrary) -> None:
+    async def body() -> tuple[int, int]:
+        async with open_db(test_db.app_url) as db:
+            await _give(db, library, EVA, on=False)
+            heartbeats = Heartbeats()
+            rounds = Rounds(
+                db, library, listed=frozenset({"eva"}), heartbeats=heartbeats, checks={"eva": ("eva",)}
+            )
+            return await rounds.job.round(), heartbeats.refreshed
+
+    assert run(body()) == (0, 0)

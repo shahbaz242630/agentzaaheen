@@ -603,6 +603,18 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         why="The database refused the read ({code}).",
         next=f"The next round is in 5 minutes. {_SEE_DASHBOARD}",
     ),
+    "healthchecks_read_done": LogEvent(
+        "info",
+        what="Read {checks} Healthchecks checks for the Monitoring agents.",
+        why="Monitoring reads Healthchecks in each 5-minute round that has an agent to wake.",
+    ),
+    "healthchecks_read_failed": LogEvent(
+        "warning",
+        what="Could not read Healthchecks, so Monitoring keeps the last read.",
+        why="The read was refused or did not answer ({code}).",
+        next="The next round tries again in 5 minutes; after 15 minutes without a read, "
+        "Monitoring writes that Healthchecks could not be read. Healthchecks still alerts the phone itself.",
+    ),
     "monitoring_round_failed": LogEvent(
         "warning",
         what="One round of the Monitoring agents could not run.",

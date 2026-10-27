@@ -8,7 +8,8 @@ What it does:
     every module and plugin uses, and the error catalogue that puts every
     reason code into plain English (:func:`explain`), the uptime shapes
     (an address's rule, its status and timing, never its page) and the
-    backend health shapes (codes and numbers only), the repository bundle
+    backend health shapes (codes and numbers only), the heartbeat shapes
+    (each Healthchecks check's slug, status and last ping), the repository bundle
     the scout reads (paths and untrusted file text, secret files never), what a
     project is built with (languages, and providers code found), the model
     levels of the model map (ADR-033), and spans: :func:`span`
@@ -39,6 +40,12 @@ from agentzaaheen.core.sdk.backend import (
 from agentzaaheen.core.sdk.code import REPO_PATTERN, BuildState, RepoHealth, RepoSource
 from agentzaaheen.core.sdk.events import LOG_EVENTS, LogEvent, elapsed_ms, say
 from agentzaaheen.core.sdk.explain import KNOWN_CODES, Explanation, explain
+from agentzaaheen.core.sdk.heartbeats import (
+    CHECK_SLUG,
+    CheckStatus,
+    HeartbeatCheck,
+    HeartbeatReport,
+)
 from agentzaaheen.core.sdk.levels import ModelLevel
 from agentzaaheen.core.sdk.log import (
     REDACTED,
@@ -146,6 +153,7 @@ from agentzaaheen.core.sdk.uptime import (
 
 __all__ = [
     "ALLOWED_ATTRIBUTES",
+    "CHECK_SLUG",
     "KNOWN_CODES",
     "LOG_EVENTS",
     "MAX_CODE_BYTES",
@@ -171,6 +179,7 @@ __all__ = [
     "BuildLogSource",
     "BuildState",
     "BytesGetter",
+    "CheckStatus",
     "DataClass",
     "Event",
     "Evidence",
@@ -180,6 +189,8 @@ __all__ = [
     "Finding",
     "FindingKind",
     "FindingStatus",
+    "HeartbeatCheck",
+    "HeartbeatReport",
     "Interval",
     "JsonGetter",
     "JsonReader",

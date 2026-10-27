@@ -79,7 +79,7 @@ def watch(  # noqa: PLR0913  # which project, its check, the time, and the bookm
         )
     elif report is None or now - report.fetched_at > fresh:
         state = UNREAD
-        when = "no check yet" if report is None else f"the newest check is from {_at(report.fetched_at)}"
+        when = "no check yet" if report is None else f"the newest check is from {at(report.fetched_at)}"
         note = Note(
             FindingKind.RISK,
             Severity.P2,
@@ -99,7 +99,7 @@ def watch(  # noqa: PLR0913  # which project, its check, the time, and the bookm
                 FindingKind.INFO,
                 Severity.P3,
                 f"{shown}: all {len(report.sites)} addresses up again",
-                f"Every address answered as it should at {_at(report.fetched_at)}.",
+                f"Every address answered as it should at {at(report.fetched_at)}.",
                 (metric,),
             )
     if state == seen or (state == UP and seen is None):
@@ -113,7 +113,7 @@ def _down_note(shown: str, report: UptimeReport, down: list[SiteCheck]) -> Note:
         + (f", answered {site.status}" if site.status is not None else ", no answer")
         for site in down
     ]
-    body = f"Checked at {_at(report.fetched_at)}. Down:\n" + "\n".join(lines)
+    body = f"Checked at {at(report.fetched_at)}. Down:\n" + "\n".join(lines)
     return Note(
         FindingKind.INCIDENT,
         Severity.P2,
@@ -129,5 +129,6 @@ def _fingerprint(down: list[SiteCheck]) -> str:
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
-def _at(when: datetime) -> str:
+def at(when: datetime) -> str:
+    """A time as the notes say it: day, month and minute, in UTC."""
     return when.astimezone(UTC).strftime("%d %b %H:%M UTC")

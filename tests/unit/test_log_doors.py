@@ -123,6 +123,18 @@ DOORS: list[tuple[str, Path, str, set[str]]] = [
         {"settings_loaded", "settings_refused"},
     ),
     (
+        "settings: Healthchecks list",
+        ROOT / "tools/dashboard_healthchecks.py",
+        "healthchecks_list",
+        {"settings_loaded", "settings_refused"},
+    ),
+    (
+        "scheduled jobs: Monitoring reads Healthchecks",
+        ROOT / "tools/dashboard_healthchecks.py",
+        "HealthchecksReader.refresh",
+        {"healthchecks_read_done", "healthchecks_read_failed"},
+    ),
+    (
         "settings: fix guides",
         ROOT / "tools/fix_guides.py",
         "fixes_list",
