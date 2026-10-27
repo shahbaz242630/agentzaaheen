@@ -107,6 +107,11 @@ class SamplePortfolio:
             entries=(Entry(text=f"{source} is not connected yet.", tone=Tone.INFO),),
         )
 
+    def _slo(self) -> Card:
+        return self._not_connected(
+            "slo", "Uptime target", "External checker", ("Up (28 days)", "Error budget left")
+        )
+
     def _build(self) -> tuple[ProjectDetail, ...]:
         return (self._zaaheen(), self._sandoq_kin(), self._agent_x(), self._eva(), self._family_checkin())
 
@@ -209,6 +214,7 @@ class SamplePortfolio:
                     ),
                 ),
                 self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)", "Incidents")),
+                self._slo(),
                 self._not_connected("supabase", "Backend", "Supabase", _BACKEND_LABELS),
                 self._fresh(
                     "activity",
@@ -269,6 +275,7 @@ class SamplePortfolio:
                 ),
                 self._not_connected("github", "Code", "GitHub", _CODE_LABELS),
                 self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)",)),
+                self._slo(),
                 self._not_connected("supabase", "Backend", "Supabase", _BACKEND_LABELS),
             ),
         )
@@ -326,6 +333,7 @@ class SamplePortfolio:
                 self._not_connected("paddle", "Revenue", "Paddle", ("MRR", "Active subscribers")),
                 self._not_connected("github", "Code", "GitHub", _CODE_LABELS),
                 self._not_connected("uptime", "Uptime", "Uptime checker", ("Uptime (30 days)",)),
+                self._slo(),
                 self._not_connected("supabase", "Backend", "Supabase", _BACKEND_LABELS),
             ),
         )

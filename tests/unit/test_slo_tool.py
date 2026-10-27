@@ -19,6 +19,7 @@ from agentzaaheen.core.registry import Kind, State, load_registry
 from agentzaaheen.core.sdk import Severity, UptimeHistory, UptimeHour
 from agentzaaheen.plugins.connectors.availability import d1_answer
 from tools import chat_tools
+from tools.dashboard_reread import Reread
 from tools.dashboard_sources import ListNotUsableError
 from tools.slo_tool import (
     AVAILABILITY_CONNECTOR,
@@ -27,8 +28,10 @@ from tools.slo_tool import (
     FRESH,
     AvailabilityReader,
     SloBook,
+    TargetStandings,
     availability_reader,
     slo_book,
+    slo_portfolio,
     slo_status_tool,
     slo_text,
 )
@@ -302,3 +305,85 @@ def test_the_chat_gets_the_tool_while_check_slo_is_on_and_counts_while_the_conne
     assert on is not None
     assert "0.00% of 60 checks found it up" in run(on, "eva")
     assert slo_tool(None) is not None  # without switches: everything is on
+
+
+# ---------------------------------------------------------------- the card and Monitoring's standing
+
+
+def test_the_portfolio_reads_at_start_and_shows_a_card_where_a_project_has_a_place(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from agentzaaheen.core.api import SamplePortfolio  # noqa: PLC0415  # only these tests need the sample
+
+    cloudflare = Cloudflare(
+        httpx.Response(200, json=d1_answer([ROW])), httpx.Response(200, json=d1_answer([]))
+    )
+    counts = reader(cloudflare, [NOW])
+    reads: list[Reread] = []
+    book = SloBook((*OBJECTIVES, objective("family-checkin")), counts)  # Nearby has no place for the card
+    portfolio = slo_portfolio(SamplePortfolio(NOW), book, counts, clock=lambda: NOW, reads=reads)
+    assert len(cloudflare.seen) == 1  # read once at start
+    assert "2 projects show their uptime target" in capsys.readouterr().out
+    eva = portfolio.project("eva")
+    assert eva is not None
+    card = next(c for c in eva.cards if c.id == "slo")
+    assert (card.sample, card.metrics[0].detail) == (False, "of 60 checks; target 99.50%")
+    zaaheen = portfolio.project("zaaheen")
+    assert zaaheen is not None
+    assert (
+        next(c for c in zaaheen.cards if c.id == "slo").metrics[0].value.kind == "unknown"
+    )  # no rows for it
+    assert [r.source for r in reads] == ["availability"]
+
+    async def reread() -> int:
+        return await reads[0].read()
+
+    assert asyncio.run(reread()) == 0  # the hourly re-read always reads, even inside the hour
+    assert len(cloudflare.seen) == 2
+
+
+def test_before_the_first_read_the_card_says_never_read() -> None:
+    from agentzaaheen.core.api import SamplePortfolio  # noqa: PLC0415
+
+    counts = reader(Cloudflare(httpx.Response(403)), [NOW])
+    portfolio = slo_portfolio(
+        SamplePortfolio(NOW), SloBook(OBJECTIVES, counts), counts, clock=lambda: NOW, reads=[]
+    )
+    eva = portfolio.project("eva")
+    assert eva is not None
+    card = next(c for c in eva.cards if c.id == "slo")
+    assert card.freshness.value == "never"
+
+
+def test_monitoring_gets_each_projects_standing_from_code() -> None:
+    cloudflare = Cloudflare(httpx.Response(200, json=d1_answer([ROW])))
+    counts = reader(cloudflare, [NOW])
+    targets = TargetStandings(SloBook(OBJECTIVES, counts), counts, clock=lambda: NOW)
+    assert targets.listed == {"eva", "zaaheen"}  # the projects with an uptime target
+    assert targets.standing("eva") is None  # not read yet
+    asyncio.run(targets.refresh())
+    eva = targets.standing("eva")
+    assert eva is not None
+    assert (eva.objective, eva.target_bp, eva.up_bp, eva.checks, eva.read_at) == (
+        "eva-availability",
+        9950,
+        0,
+        60,
+        NOW,
+    )
+    assert eva.budget_left_bp is not None
+    assert eva.budget_left_bp < 0  # overspent
+    zaaheen = targets.standing("zaaheen")
+    assert zaaheen is not None
+    assert (zaaheen.up_bp, zaaheen.budget_left_bp) == (None, None)  # no checks counted: unknown, never fine
+    assert targets.standing("sandoq-kin") is None  # no target
+
+
+def test_monitorings_standing_is_rounded_down_so_never_better() -> None:
+    row = {"project": "zaaheen", "hour": int(TOP.timestamp()) // 3600, "total": 40_000, "good": 39_998}
+    counts = reader(Cloudflare(httpx.Response(200, json=d1_answer([row]))), [NOW])
+    targets = TargetStandings(SloBook(OBJECTIVES, counts), counts, clock=lambda: NOW)
+    asyncio.run(targets.refresh())
+    zaaheen = targets.standing("zaaheen")
+    assert zaaheen is not None
+    assert zaaheen.up_bp == 9_999  # 99.995%, never shown as 100%

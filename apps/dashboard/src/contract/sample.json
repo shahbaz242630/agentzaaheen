@@ -301,6 +301,39 @@
           ]
         },
         {
+          "id": "slo",
+          "title": "Uptime target",
+          "source": "External checker",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Up (28 days)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Error budget left",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "External checker is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
           "id": "supabase",
           "title": "Backend",
           "source": "Supabase",
@@ -508,6 +541,39 @@
           "entries": [
             {
               "text": "Uptime checker is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
+          "id": "slo",
+          "title": "Uptime target",
+          "source": "External checker",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Up (28 days)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Error budget left",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "External checker is not connected yet.",
               "tone": "info",
               "at": null
             }
@@ -734,6 +800,39 @@
           "entries": [
             {
               "text": "Uptime checker is not connected yet.",
+              "tone": "info",
+              "at": null
+            }
+          ]
+        },
+        {
+          "id": "slo",
+          "title": "Uptime target",
+          "source": "External checker",
+          "freshness": "never",
+          "last_success_at": null,
+          "sample": true,
+          "metrics": [
+            {
+              "label": "Up (28 days)",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            },
+            {
+              "label": "Error budget left",
+              "value": {
+                "kind": "unknown",
+                "reason": "source.not_connected"
+              },
+              "detail": null
+            }
+          ],
+          "entries": [
+            {
+              "text": "External checker is not connected yet.",
               "tone": "info",
               "at": null
             }

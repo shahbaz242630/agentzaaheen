@@ -30,6 +30,7 @@ from agentzaaheen.core.sdk import (
     HeartbeatCheck,
     HeartbeatReport,
     SiteCheck,
+    TargetStanding,
     UptimeReport,
 )
 from agentzaaheen.core.store import (
@@ -45,6 +46,7 @@ from agentzaaheen.plugins.agents.monitoring import (
     BOOKMARK,
     CERTS_BOOKMARK,
     HEARTBEATS_BOOKMARK,
+    TARGETS_BOOKMARK,
     UNLISTED,
     UNREAD,
     UP,
@@ -52,7 +54,7 @@ from agentzaaheen.plugins.agents.monitoring import (
 from tests.integration.conftest import ScratchDb, add_workspaces, open_db, run
 from tests.integration.test_policy_agents import ME
 from tests.unit.test_registry_roles import pack
-from tools.dashboard_monitoring import MONITORING_TOOLS, ROLE, DatesWatch, LaptopMonitoring
+from tools.dashboard_monitoring import MONITORING_TOOLS, ROLE, DatesWatch, LaptopMonitoring, TargetsReader
 
 TENANT = UUID("00000000-0000-4000-8000-0000000000d1")
 EVA = UUID("00000000-0000-4000-8000-0000000000d2")
@@ -126,6 +128,7 @@ class Rounds:
         heartbeats: Heartbeats | None = None,
         checks: Mapping[str, tuple[str, ...]] | None = None,
         dates: Sequence[DatesWatch] = (),
+        targets: TargetsReader | None = None,
     ) -> None:
         self.latest: dict[str, UptimeReport] = {}
         self.broken: set[UUID] = set()
@@ -150,6 +153,7 @@ class Rounds:
             heartbeats=heartbeats,
             checks=checks,
             dates=dates,
+            targets=targets,
             every_s=0.01,
         )
 
@@ -381,3 +385,60 @@ def test_a_certificate_ending_soon_is_written_once_per_band_with_its_own_bookmar
     ]
     assert set(mark) == {BOOKMARK, CERTS_BOOKMARK}
     assert refreshed == 4
+
+
+class Targets:
+    """A pretend uptime-target reader: only Eva has a target; each refresh takes the test's next standing."""
+
+    listed = frozenset({"eva"})
+
+    def __init__(self) -> None:
+        self.next: TargetStanding | None = None
+        self.now: TargetStanding | None = None
+        self.refreshed = 0
+
+    async def refresh(self) -> None:
+        self.refreshed += 1
+        self.now = self.next
+
+    def standing(self, project: str) -> TargetStanding | None:
+        assert project == "eva"  # only a listed project is asked
+        return self.now
+
+
+def standing(up_bp: int, left_bp: int) -> TargetStanding:
+    return TargetStanding(
+        objective="eva-availability",
+        target_bp=9950,
+        up_bp=up_bp,
+        budget_left_bp=left_bp,
+        checks=4000,
+        read_at=NOW,
+    )
+
+
+def test_an_uptime_target_missed_is_written_once_then_back_once_with_its_own_bookmark(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    async def body() -> tuple[list[asyncpg.Record], Mapping[str, str], int]:
+        async with open_db(test_db.app_url) as db:
+            agent = await _give(db, library, EVA)
+            await _give(db, library, ZAAHEEN)
+            targets = Targets()
+            rounds = Rounds(db, library, listed=frozenset({"eva", "zaaheen"}), targets=targets)
+            rounds.latest = {"eva": checked(up=True), "zaaheen": checked(up=True)}
+            for each in (standing(9700, -400), standing(9690, -420), standing(9990, 8000)):
+                targets.next = each
+                await rounds.job.round()
+            return await rounds.findings(), await rounds.mark(agent), targets.refreshed
+
+    findings, mark, refreshed = run(body())
+    assert sorted((f["title"], f["severity"]) for f in findings) == [
+        ("Eva: back within its uptime target", "P3"),
+        (
+            "Eva: uptime target missed, error budget spent",
+            "P2",
+        ),  # the second spent round is not written again
+    ]
+    assert mark[TARGETS_BOOKMARK] == "up"
+    assert refreshed == 3  # once per round, for every project

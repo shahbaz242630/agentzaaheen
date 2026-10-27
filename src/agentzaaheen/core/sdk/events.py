@@ -392,7 +392,7 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
     # ---- local settings files read at start
     "settings_loaded": LogEvent(
         "info",
-        what="The {setting} list was loaded ({entries} projects).",
+        what="The {setting} list was loaded ({entries} entries).",
         why="The dashboard was started with it.",
     ),
     "settings_refused": LogEvent(

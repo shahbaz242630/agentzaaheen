@@ -1,4 +1,4 @@
-"""Availability history: how many external checks found each project up, hour by hour (SDK 1.15.0).
+"""Availability: each project's external checks by the hour, and its uptime-target standing (SDK 1.15-1.16).
 
 The external checker (``apps/checker``) checks every address about once a
 minute and adds each answer to an hourly count per address in its own
@@ -62,3 +62,21 @@ class JsonQuerier(Protocol):
         :class:`SourceError` (or a subclass) only.
         """
         ...
+
+
+class TargetStanding(BaseModel):
+    """How one project stands against its uptime target, worked out by code (``core.metrics``).
+
+    Basis points (99.5% is 9950). ``up_bp`` and ``budget_left_bp`` are ``None``
+    when no checks were counted; ``budget_left_bp`` below 0 means overspent.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    objective: str = Field(pattern=PROJECT_ID, max_length=64)
+    target_bp: int = Field(ge=1, le=9_999)
+    up_bp: int | None = Field(default=None, ge=0, le=10_000)
+    budget_left_bp: int | None = Field(default=None, le=10_000)
+    burning: bool = False
+    checks: int = Field(ge=0)
+    read_at: AwareDatetime
