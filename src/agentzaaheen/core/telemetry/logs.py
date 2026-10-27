@@ -104,6 +104,8 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "retagged",
         # F11 slice 4: how many bookmarks a run moved; the Monitoring agent's counts (never addresses)
         "bookmarks",
+        # F11 slice 5a: how many Healthchecks checks were read (never their names)
+        "checks",
     }
 )
 

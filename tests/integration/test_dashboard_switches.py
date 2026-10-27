@@ -124,6 +124,7 @@ def test_a_switch_turned_off_stays_off_after_a_restart(ui: Path, laptop_url: Sec
         assert page["switches"] is True
         assert states(client) == {
             "github": "on",
+            "healthchecks": "on",
             "paddle": "on",
             "supabase": "on",
             "uptime": "on",

@@ -118,6 +118,7 @@ from agentzaaheen.core.vault import NamePrinter, VaultError, load_master_key
 from tools import laptop_db, name_prints, vault_key
 from tools.chat_tools import LOCAL_MODEL_ID, Switched, model_chat, tools_for
 from tools.dashboard_adding import LaptopAdding
+from tools.dashboard_healthchecks import HealthchecksReader, healthchecks_list, healthchecks_reader
 from tools.dashboard_monitoring import MONITORING_TOOLS, LaptopMonitoring
 from tools.dashboard_profile import LaptopProfiles, Repos
 from tools.dashboard_reread import HourlyReads, Reread
@@ -384,6 +385,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--ntfy-topic-env", help="env var holding the secret ntfy topic for uptime alerts")
     parser.add_argument("--supabase", type=Path, help="read the Supabase projects in this local list")
+    parser.add_argument(
+        "--healthchecks", type=Path, help="each project's Healthchecks checks, for Monitoring (local list)"
+    )
+    parser.add_argument("--healthchecks-key-env", help="env var holding the read-only Healthchecks key")
     parser.add_argument("--fixes", type=Path, help="give the chat the fix guides in this local file")
     parser.add_argument(
         "--roles",
@@ -436,7 +441,7 @@ def _preflight(ns: argparse.Namespace, static_dir: Path) -> int | None:
     return None
 
 
-def _start(  # noqa: PLR0913  # the parsed options and the injectable outside world
+def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside world; one line per start-up part
     ns: argparse.Namespace,
     env: Mapping[str, str],
     *,
@@ -455,6 +460,7 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         projects = {p.id for p in SamplePortfolio(clock()).projects()}
         uptime = uptime_list(ns.uptime, projects)
         backends = supabase_list(ns.supabase, projects)
+        checks = healthchecks_list(ns.healthchecks, projects)
         fixes = fixes_list(ns.fixes, projects)
         key_dates = key_dates_list(ns.keys)
         off = off_connectors(connected.standing, registry) if connected else frozenset[str]()
@@ -540,17 +546,18 @@ def _start(  # noqa: PLR0913  # the parsed options and the injectable outside wo
         clock=clock,
         transport=transport,
     )
-    monitoring = (
-        LaptopMonitoring(
-            runner=lambda: switches.runner(None),  # code only: no model
-            agents=switches.agents_doing,
-            directory=directory,
-            latest=lambda: watchers[0].latest,
-            listed=frozenset(uptime),
-            clock=clock,
-        )
-        if switches is not None and watchers
-        else None
+    monitoring = _monitoring(
+        switches,
+        directory=directory,
+        watchers=watchers,
+        uptime=uptime,
+        checks=checks,
+        reader=lambda: (
+            healthchecks_reader(env, ns.healthchecks_key_env, clock=clock, transport=transport)
+            if "healthchecks" not in off
+            else None
+        ),
+        clock=clock,
     )
     page = registry_for(chosen, registry=registry, uptime=uptime, backends=backends)
     app = create_app(
@@ -661,6 +668,31 @@ def _closer(
         await switches.close()
 
     return close
+
+
+def _monitoring(  # noqa: PLR0913  # the database, the workspaces, both reads and their lists, the clock
+    switches: LaptopSwitches | None,
+    *,
+    directory: WorkspaceDirectory,
+    watchers: Sequence[UptimeLive],
+    uptime: UptimeRules,
+    checks: Mapping[str, tuple[str, ...]],
+    reader: Callable[[], HealthchecksReader | None],
+    clock: Clock,
+) -> LaptopMonitoring | None:
+    """The Monitoring agents' 5-minute rounds, if there is a database and an uptime watch."""
+    if switches is None or not watchers:
+        return None
+    return LaptopMonitoring(
+        runner=lambda: switches.runner(None),  # code only: no model
+        agents=switches.agents_doing,
+        directory=directory,
+        latest=lambda: watchers[0].latest,
+        listed=frozenset(uptime),
+        clock=clock,
+        heartbeats=reader() if checks else None,
+        checks=checks,
+    )
 
 
 def _summaries(  # noqa: PLR0913  # the options, the database, the facts' sources, the outside world

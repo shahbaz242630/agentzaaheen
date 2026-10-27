@@ -983,6 +983,26 @@
         "state": "on"
       },
       {
+        "id": "healthchecks",
+        "name": "Healthchecks",
+        "category": "Monitoring",
+        "description": "Each check's short name, status and last ping: never its name, notes or ping address.",
+        "version": "0.1.0",
+        "level": "read",
+        "hosts": [
+          "healthchecks.io"
+        ],
+        "endpoints": [
+          "GET /api/v3/checks/"
+        ],
+        "key_slots": [
+          "key"
+        ],
+        "fingerprint": "071b62f67ac52e975d44a08d5afa6fba52e85eec5e7a868f551e58892bd57639",
+        "uses": [],
+        "state": "on"
+      },
+      {
         "id": "paddle",
         "name": "Paddle",
         "category": "Revenue",
