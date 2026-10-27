@@ -99,6 +99,9 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "cost_minor",
         "count",
         "run_ids",
+        # F11 slice 3: the leak check (counts only, never what was found)
+        "held_back",
+        "retagged",
     }
 )
 

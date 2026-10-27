@@ -67,8 +67,8 @@ _SENSITIVE_KEY_PARTS = (
     "dek",
 )
 
-# (pattern, replacement). Order matters: whole blocks before their fragments.
-_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+# Secrets: (pattern, replacement). Order matters: whole blocks before their fragments.
+_SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)"),
         REDACTED,
@@ -89,6 +89,9 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         ),
         r"\1" + REDACTED,
     ),
+)
+_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    *_SECRET_PATTERNS,
     (
         re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}"),
         "[EMAIL]",
@@ -130,6 +133,14 @@ def redact_text(text: str) -> str:
 def contains_sensitive(text: str) -> bool:
     """Return True if :func:`redact_text` would change ``text``."""
     return redact_text(text) != text
+
+
+def contains_secret(text: str) -> bool:
+    """Return True if ``text`` holds a key, token, password or private key (the leak check, F11 slice 3).
+
+    Emails and card numbers are customer details, not secrets: the leak check finds those separately.
+    """
+    return any(pattern.search(text) for pattern, _ in _SECRET_PATTERNS)
 
 
 def is_sensitive_key(key: str) -> bool:

@@ -58,11 +58,13 @@ from agentzaaheen.core.llm_gateway.chat import (
     build_messages,
 )
 from agentzaaheen.core.llm_gateway.cloud_check import (
+    Found,
     KnownNames,
     NamePrint,
     Printer,
     PrintKind,
     PromptPart,
+    customer_details_in,
     part_from,
     prints_of,
 )
@@ -102,6 +104,7 @@ __all__ = [
     "CloudAsk",
     "FactChat",
     "FixedNames",
+    "Found",
     "Inspect",
     "KeyedPrinter",
     "KnownNames",
@@ -127,6 +130,7 @@ __all__ = [
     "build_messages",
     "catalogue",
     "claude_lines",
+    "customer_details_in",
     "month_bounds",
     "part_from",
     "prints_of",

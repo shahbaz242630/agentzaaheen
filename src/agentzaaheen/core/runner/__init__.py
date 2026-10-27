@@ -29,6 +29,13 @@ from agentzaaheen.core.runner.agent import (
     RunTicket,
     SystemWork,
 )
+from agentzaaheen.core.runner.leak import (
+    CheckedFindings,
+    LeakCheck,
+    check_findings,
+    checked_action,
+    leak_check,
+)
 from agentzaaheen.core.runner.run import CLOSE_GRACE, RunCode, Runner, RunReport, system_agent_id
 from agentzaaheen.core.runner.shape import (
     MAX_RETRIES,
@@ -48,8 +55,10 @@ __all__ = [
     "AgentFailedError",
     "AgentResult",
     "AgentWork",
+    "CheckedFindings",
     "CheckedModel",
     "FindingDraft",
+    "LeakCheck",
     "NeedsALookError",
     "RunCode",
     "RunReport",
@@ -59,5 +68,8 @@ __all__ = [
     "Shape",
     "ShapeRefusal",
     "SystemWork",
+    "check_findings",
+    "checked_action",
+    "leak_check",
     "system_agent_id",
 ]

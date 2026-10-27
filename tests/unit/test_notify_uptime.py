@@ -360,3 +360,20 @@ def test_a_round_is_one_trace_holding_every_probe() -> None:
     assert probes
     assert round_span.context is not None
     assert all(p.context is not None and p.context.trace_id == round_span.context.trace_id for p in probes)
+
+
+@pytest.mark.parametrize(
+    ("title", "lines"),
+    [
+        ("Agent Zaaheen briefing", ["Eva: 1 alert.", "token ghp_" + "Q" * 36]),  # built here, never real
+        ("Agent Zaaheen: key sk_live_" + "Q" * 24, ["Eva is down."]),
+    ],
+)
+def test_a_phone_message_holding_a_secret_is_never_sent(title: str, lines: list[str]) -> None:
+    def serve(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("nothing may be sent")
+
+    with pytest.raises(NetError) as caught:
+        asyncio.run(push(serve).send_lines(title, lines))
+    assert caught.value.reason_code == NetErrorCode.BLOCKED.value
+    assert "Q" * 24 not in str(caught.value)

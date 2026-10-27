@@ -347,3 +347,23 @@ def test_the_stored_list_is_read_fresh_for_each_call_with_this_keys_prints_only(
         is Refusal.CUSTOMER_DATA
     )
     assert rows.asked == ["names-7"] * 3  # only prints made with this key
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The build log printed ghp_" + "Q" * 36 + ".",  # built here: a token's shape, never a real one
+        "Connect with postgres://admin:hunter2@db.internal/app",
+        "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjE",
+    ],
+)
+def test_a_secret_refuses_a_cloud_call_before_anything_else_and_the_log_never_holds_it(
+    text: str, lines: list[dict[str, object]]
+) -> None:
+    g, ledger = gate()
+    assert clear(g, parts=(*OPS, PromptPart(text, DataClass.INTERNAL))).refusal is Refusal.SECRET
+    assert events(lines) == ["model_secret_refused"]
+    written = json.dumps(lines)
+    for leaked in ("Q" * 36, "hunter2", "b3BlbnNzaC1rZXktdjE"):
+        assert leaked not in written
+    assert asyncio.run(ledger.notices()) == []
