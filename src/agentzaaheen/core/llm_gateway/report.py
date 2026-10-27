@@ -36,6 +36,7 @@ WHY: dict[str, str] = {
     Refusal.USE_CAP.value: "its monthly cap is reached",
     Refusal.TOTAL_STOP.value: "the USD 180 monthly stop is reached",
     Refusal.CUSTOMER_DATA.value: "its prompt held customer data, so it was not sent",
+    Refusal.SECRET.value: "its prompt held a key or password, so it was not sent",
     Refusal.ABOVE_ROLE.value: "it asked for a model above its role",
     Refusal.NO_USE.value: "it did not say what the call was for",
     Refusal.NO_MODEL.value: "its role uses no model",

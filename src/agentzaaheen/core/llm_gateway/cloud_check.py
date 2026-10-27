@@ -164,10 +164,15 @@ def customer_data_in(parts: Sequence[PromptPart], names: KnownNames | None) -> F
         if named is not None:
             return named
     for part in parts:
-        found = _second_net(part.text)
+        found = customer_details_in(part.text)
         if found is not None:
             return found
     return None
+
+
+def customer_details_in(text: str) -> Found | None:
+    """The second net alone: an email, customer ID, card or phone number in ``text`` (the leak check too)."""
+    return _second_net(text)
 
 
 # Bounded patterns, so a hostile 2 MB part cannot make the check slow.

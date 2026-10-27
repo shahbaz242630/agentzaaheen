@@ -29,8 +29,14 @@ cent), so its caps count it; one plain-English line and one audit entry.
 A run that never reaches its end is closed later as interrupted (step 1, and
 the daily summary), with the cost of the calls it made.
 
-Checkpoints 2 (every tool call: ``policy.gate``), 3 (answer shape) and 4
-(before anything leaves) are in other slices.
+Before the end is saved (checkpoint 4, :mod:`~agentzaaheen.core.runner.leak`):
+a finding holding a secret is held back (named in the log, the audit chain and
+the run row as ``run.leak_held_back``); one holding customer details it did not
+declare is moved up to customer data. A run whose every finding was held back
+did not deliver: ``could_not_run``.
+
+Checkpoint 2 (every tool call) is ``policy.gate``; checkpoint 3 (answer shape) is
+:mod:`~agentzaaheen.core.runner.shape`.
 """
 
 from __future__ import annotations
@@ -45,7 +51,7 @@ from uuid import UUID, uuid4, uuid5
 
 from pydantic import ValidationError
 
-from agentzaaheen.core.llm_gateway import ChatModel
+from agentzaaheen.core.llm_gateway import ChatModel, KnownNames, NameSource
 from agentzaaheen.core.policy import (
     SKIPPED_REASONS,
     AgentControl,
@@ -58,6 +64,7 @@ from agentzaaheen.core.policy import (
     load_kill_switches,
 )
 from agentzaaheen.core.runner.agent import AgentResult, AgentWork, RunTicket, SystemWork, _mint
+from agentzaaheen.core.runner.leak import check_findings
 from agentzaaheen.core.runner.shape import AgentFailedError, CheckedModel, NeedsALookError
 from agentzaaheen.core.sdk import (
     DataClass,
@@ -106,6 +113,7 @@ class RunCode(StrEnum):
     CRASHED = "run.crashed"
     BAD_RESULT = "run.bad_result"
     END_NOT_WRITTEN = "run.end_not_written"
+    LEAK_HELD_BACK = "run.leak_held_back"  # a finding held a secret: not saved (checkpoint 4)
 
 
 # Not meant to run: said and audited (the daily summary counts them in one line), never a run row.
@@ -121,6 +129,7 @@ class RunReport:
     run_id: UUID | None = None
     findings: int = 0
     detail: str | None = None  # needs a look: the last refused answer's code
+    held_back: int = 0  # findings not saved because they held a secret (checkpoint 4)
 
     @property
     def started(self) -> bool:
@@ -131,7 +140,7 @@ class RunReport:
 class Runner:
     """Starts every agent run of one tenant, through the checkpoints, and closes it."""
 
-    def __init__(  # noqa: PLR0913  # the database, whose, the job's door, the tools, the clock, the model
+    def __init__(  # noqa: PLR0913  # the database, whose, the job's door, the tools, the clock, the model, names
         self,
         db: Database,
         tenant_id: UUID,
@@ -140,9 +149,11 @@ class Runner:
         clock: Callable[[], datetime],
         *,
         model: ChatModel | None = None,
+        names: NameSource | None = None,
     ) -> None:
         self._db = db
         self._model = model  # agents never get it: only a CheckedModel that answers in their shape
+        self._names = names  # our customers' names, for the leak check (none: names are not checked)
         self._tenant = tenant_id
         self._agents = agents
         self._tools = dict(tools)
@@ -289,12 +300,18 @@ class Runner:
 
     async def _end(self, scope: Scoped, start: RunStart, worked: _Worked, steps: int) -> RunReport:
         outcome, code, result = worked.outcome, worked.code, worked.result
-        now = self._clock()
         workspace = scope.require_workspace()
-        drafts = result.findings if result is not None else ()
+        checked = check_findings(result.findings if result is not None else (), await self._known_names())
+        if checked.held_back or checked.retagged:
+            await self._said_leaks(start, workspace, checked.held_back, checked.retagged)
+        if checked.held_back:
+            code = code or RunCode.LEAK_HELD_BACK
+            if not checked.kept and not (result is not None and result.delivered):
+                outcome = RunOutcome.COULD_NOT_RUN  # nothing it found could be kept: it did not deliver
+        now = self._clock()
         findings = [
             Finding(tenant_id=self._tenant, project_id=workspace, run_id=start.run_id, **d.model_dump())
-            for d in drafts
+            for d in checked.kept
         ]
         trust, data_class = Trust.TRUSTED, DataClass.PUBLIC
         for finding in findings:
@@ -340,7 +357,11 @@ class Runner:
                 run_id=start.run_id,
             )
             return RunReport(
-                RunOutcome.COULD_NOT_RUN, RunCode.END_NOT_WRITTEN, start.run_id, detail=worked.detail
+                RunOutcome.COULD_NOT_RUN,
+                RunCode.END_NOT_WRITTEN,
+                start.run_id,
+                detail=worked.detail,
+                held_back=checked.held_back,
             )
         say(
             self._log,
@@ -363,7 +384,38 @@ class Runner:
             run_id=start.run_id,
             extra={"outcome": outcome.value},
         )
-        return RunReport(outcome, code, start.run_id, len(findings), worked.detail)
+        return RunReport(outcome, code, start.run_id, len(findings), worked.detail, checked.held_back)
+
+    async def _known_names(self) -> KnownNames | None:
+        """Our customers' names for the leak check, or ``None`` (no list, or it could not be read)."""
+        if self._names is None:
+            return None
+        try:
+            return await self._names.known_names()
+        except Exception:  # noqa: BLE001  # whatever failed, the other nets still run
+            say(self._log, "leak_names_unreadable")
+            return None
+
+    async def _said_leaks(self, start: RunStart, workspace: UUID, held_back: int, retagged: int) -> None:
+        """One line and one audit entry for what the leak check changed (kinds and counts, never the text)."""
+        say(
+            self._log,
+            "agent_findings_leak_checked",
+            role=start.role_id,
+            run_id=str(start.run_id),
+            held_back=held_back,
+            retagged=retagged,
+        )
+        await self._audit(
+            "run.leak_check",
+            AuditOutcome.DENY if held_back else AuditOutcome.ALLOW,
+            RunCode.LEAK_HELD_BACK if held_back else None,
+            workspace_id=workspace,
+            agent_id=start.agent_id,
+            now=self._clock(),
+            run_id=start.run_id,
+            extra={"held_back": str(held_back), "retagged": str(retagged)},
+        )
 
     async def _not_started(  # where, who, why, when, and the role when already known
         self, workspace_id: UUID, agent_id: UUID, code: str, now: datetime, *, role: str | None = None

@@ -129,6 +129,20 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         "cost {cost_minor} cent(s).",
         why="The run's end, its findings and its cost were saved together.",
     ),
+    "agent_findings_leak_checked": LogEvent(
+        "warning",
+        what="Before saving the {role} agent's run {run_id}: {held_back} finding(s) held back for holding a "
+        "secret, {retagged} moved up to customer data.",
+        why="Nothing leaves a run unchecked (F11, before anything leaves): a secret is never kept, and "
+        "customer details never reach a cloud model.",
+        next="A held-back finding means the agent copied a key or password: tell Claude which agent.",
+    ),
+    "leak_names_unreadable": LogEvent(
+        "warning",
+        what="The leak check could not read our customers' names, so names were not checked this run.",
+        why="The name list could not be read; secrets and customer details were still checked.",
+        next=f"Nothing to do unless it keeps happening. {_SEE_DASHBOARD}",
+    ),
     "agent_run_crashed": LogEvent(
         "error",
         what="The {role} agent's code failed during its run ({kind}).",
@@ -235,6 +249,12 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         "info",
         what="The local model answered in {duration_ms} ms.",
         why="The dashboard chat asked it a question.",
+    ),
+    "push_secret_refused": LogEvent(
+        "warning",
+        what="A phone message was not sent: it holds a key, token or password.",
+        why="A secret never leaves Agent Zaaheen (F11, before anything leaves); it is refused, not trimmed.",
+        next="Tell Claude: a phone message is built from our own words and numbers, so a secret means a bug.",
     ),
     "push_failed": LogEvent(
         "warning",
@@ -406,6 +426,12 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="A call to {model} from the {role} role was refused: the prompt holds customer data ({reason}).",
         why="Customer data never goes to a cloud model (ADR-023); the call is refused, not trimmed.",
         next="Run that job on our local model, or build its prompt from cleaned totals and findings only.",
+    ),
+    "model_secret_refused": LogEvent(
+        "warning",
+        what="A call to {model} from the {role} role was refused: the prompt holds a key, token or password.",
+        why="A secret never leaves Agent Zaaheen (F11, before anything leaves); it is refused, not trimmed.",
+        next="Find where the secret entered the prompt and keep it out; tell Claude if it keeps happening.",
     ),
     "model_cloud_check_passed": LogEvent(
         "info",

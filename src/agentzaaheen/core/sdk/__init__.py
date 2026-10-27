@@ -43,6 +43,7 @@ from agentzaaheen.core.sdk.levels import ModelLevel
 from agentzaaheen.core.sdk.log import (
     REDACTED,
     LogSink,
+    contains_secret,
     contains_sensitive,
     get_logger,
     is_sensitive_key,
@@ -221,6 +222,7 @@ __all__ = [
     "check_site",
     "clean_log",
     "combine_trust",
+    "contains_secret",
     "contains_sensitive",
     "detect",
     "elapsed_ms",

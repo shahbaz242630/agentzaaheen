@@ -22,7 +22,7 @@ from pydantic import SecretStr
 
 from agentzaaheen.core.net.client import NetPolicy, check_host
 from agentzaaheen.core.net.errors import NetError, NetErrorCode
-from agentzaaheen.core.sdk import get_logger, say, span
+from agentzaaheen.core.sdk import contains_secret, get_logger, say, span
 
 NTFY_HOST = "ntfy.sh"
 MAX_MESSAGE_BYTES = 1024
@@ -86,6 +86,9 @@ class PushClient:
     async def _post(self, title: str, message: str, priority: str) -> None:
         if priority not in _PRIORITY:
             raise NetError(NetErrorCode.BLOCKED, "unknown push priority")
+        if contains_secret(title) or contains_secret(message):  # before anything leaves (F11 slice 3)
+            say(self._log, "push_secret_refused")
+            raise NetError(NetErrorCode.BLOCKED, "a push message must never hold a key, token or password")
         headers = {"Title": _plain_line(title, MAX_TITLE), "Priority": priority, "Content-Type": "text/plain"}
         body = message.encode()
         url = f"https://{self._host}/{self._topic.get_secret_value()}"

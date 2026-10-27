@@ -21,6 +21,7 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 
+from agentzaaheen.core.llm_gateway import FixedNames, KnownNames
 from agentzaaheen.core.policy import AgentControl, AgentVerdict, Budget
 from agentzaaheen.core.registry.roles import RoleLibrary, load_roles
 from agentzaaheen.core.runner import (
@@ -744,3 +745,106 @@ def test_a_run_id_is_never_run_twice(test_db: ScratchDb, library: RoleLibrary) -
     assert first.outcome is RunOutcome.OK
     assert (second.started, second.code) == (False, RunCode.START_NOT_WRITTEN)
     assert len(job.tickets) == 1
+
+
+# ---- before anything leaves (checkpoint 4, F11 slice 3)
+
+LEAKED = "ghp_" + "Q" * 36  # built here: a token's shape, never a real one
+NAMES = FixedNames(KnownNames.of(["Fatima Al Mansoori"], lambda text: text.encode()))
+
+
+class BrokenNames:
+    async def known_names(self) -> KnownNames:
+        raise RuntimeError("the name list is unreadable")
+
+
+def checked_runner(db: Database, library: RoleLibrary, names: object = NAMES) -> Runner:
+    tick = Clock()
+    return Runner(db, TENANT, AgentControl(db, TENANT, library, tick), TOOLS, tick, names=names)  # type: ignore[arg-type]
+
+
+def leaky(
+    body: str, *, data_class: DataClass = DataClass.PUBLIC, trust: Trust = Trust.TRUSTED
+) -> FindingDraft:
+    return found().model_copy(update={"body": body, "data_class": data_class, "trust": trust})
+
+
+async def _findings(db: Database, run_id: UUID) -> list[asyncpg.Record]:
+    async with db.scoped(TENANT, EVA).connection() as conn:
+        return await conn.fetch(
+            "SELECT title, body, data_class, trust FROM agentzaaheen.findings WHERE run_id = $1", run_id
+        )
+
+
+def test_a_finding_holding_a_secret_is_never_saved_and_the_run_says_so(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    agent_code = FakeAgent(findings=(found(), leaky(f"the log printed {LEAKED}")))
+
+    async def body() -> tuple[RunReport, list[asyncpg.Record], list[asyncpg.Record], list[tuple[str, str]]]:
+        async with open_db(test_db.app_url) as db:
+            report = await checked_runner(db, library).run(EVA, await _ready(db, library), agent_code)
+            assert report.run_id is not None
+            return report, await _runs(db), await _findings(db, report.run_id), await _audit(db)
+
+    report, runs, saved, audit = run(body())
+    assert (report.outcome, report.code, report.findings, report.held_back) == (
+        RunOutcome.OK,
+        RunCode.LEAK_HELD_BACK,
+        1,
+        1,
+    )
+    ((_, _, outcome, code, _, _),) = runs
+    assert (outcome, code) == ("ok", "run.leak_held_back")  # the run row names it
+    assert [row["body"] for row in saved] == ["The address answered 503 three times."]
+    assert LEAKED not in str(saved)
+    assert ("run.leak_check", "run.leak_held_back") in audit
+
+
+def test_a_run_whose_every_finding_was_held_back_did_not_deliver(
+    test_db: ScratchDb, library: RoleLibrary
+) -> None:
+    async def body() -> RunReport:
+        async with open_db(test_db.app_url) as db:
+            agent = FakeAgent(findings=(leaky(f"token={LEAKED}"),))
+            return await checked_runner(db, library).run(EVA, await _ready(db, library), agent)
+
+    report = run(body())
+    assert (report.outcome, report.code, report.findings, report.held_back) == (
+        RunOutcome.COULD_NOT_RUN,
+        RunCode.LEAK_HELD_BACK,
+        0,
+        1,
+    )
+
+
+@pytest.mark.parametrize("text", ["Reply to fatima@example.com today.", "Fatima Al Mansoori asked again."])
+def test_customer_details_are_saved_as_customer_data_and_untrusted_stays_untrusted(
+    test_db: ScratchDb, library: RoleLibrary, text: str
+) -> None:
+    async def body() -> tuple[RunReport, list[asyncpg.Record], list[tuple[str, str]]]:
+        async with open_db(test_db.app_url) as db:
+            agent = FakeAgent(findings=(leaky(text, data_class=DataClass.INTERNAL, trust=Trust.UNTRUSTED),))
+            report = await checked_runner(db, library).run(EVA, await _ready(db, library), agent)
+            assert report.run_id is not None
+            return report, await _findings(db, report.run_id), await _audit(db)
+
+    report, saved, audit = run(body())
+    assert (report.outcome, report.code) == (RunOutcome.OK, None)
+    ((_, _, data_class, trust),) = saved
+    assert (data_class, trust) == ("customer-pii", "untrusted")
+    assert ("run.leak_check", "run.ok") in audit
+
+
+def test_an_unreadable_name_list_still_runs_the_other_nets(test_db: ScratchDb, library: RoleLibrary) -> None:
+    async def body() -> list[asyncpg.Record]:
+        async with open_db(test_db.app_url) as db:
+            agent = FakeAgent(findings=(leaky("Fatima Al Mansoori"), leaky("mail fatima@example.com")))
+            report = await checked_runner(db, library, BrokenNames()).run(
+                EVA, await _ready(db, library), agent
+            )
+            assert report.run_id is not None
+            return await _findings(db, report.run_id)
+
+    classes = sorted(row["data_class"] for row in run(body()))
+    assert classes == ["customer-pii", "public"]

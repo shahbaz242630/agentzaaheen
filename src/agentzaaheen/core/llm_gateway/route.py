@@ -32,7 +32,7 @@ from agentzaaheen.core.llm_gateway.cloud_check import (
 )
 from agentzaaheen.core.llm_gateway.model_map import MODELS, ModelEntry, Usage, cost_micro_usd, usd
 from agentzaaheen.core.llm_gateway.spend import SpendLedger, Use
-from agentzaaheen.core.sdk import ModelLevel, get_logger, say
+from agentzaaheen.core.sdk import ModelLevel, contains_secret, get_logger, say
 from agentzaaheen.core.store import CallTokens
 
 
@@ -43,6 +43,7 @@ class Refusal(StrEnum):
     ABOVE_ROLE = "model.above_role_level"
     NO_USE = "model.no_use"  # a cloud call must say what it is for, so it has a cap
     CUSTOMER_DATA = "model.customer_data"
+    SECRET = "model.secret"  # noqa: S105  # nosec B105  # a reason code, not a password (F11 slice 3)
     USE_CAP = "model.use_cap_reached"
     TOTAL_STOP = "model.total_stop_reached"
 
@@ -160,6 +161,9 @@ class ModelGate:
                 reason=Refusal.NO_USE.value,
             )
             return Clearance(Refusal.NO_USE)
+        if any(contains_secret(part.text) for part in parts):  # before anything leaves (F11 slice 3)
+            say(self._log, "model_secret_refused", role=role, model=entry.model_id)
+            return Clearance(Refusal.SECRET)
         found = customer_data_in(parts, await self._known_names())
         if found is not None:
             say(self._log, "model_customer_data_refused", role=role, model=entry.model_id, reason=found.value)
