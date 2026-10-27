@@ -8,7 +8,9 @@ before anything runs. The agent reads the uptime watch's newest check
 slice 5a): it never reaches the network itself. It compares each with its
 bookmark and writes a finding only when something changed; the runner saves
 the findings and moves the bookmarks together. Slice 5b adds the certificate
-dates (``certs.read``) and domain dates (``domains.read``).
+dates (``certs.read``) and domain dates (``domains.read``); F07 step 5b adds
+each project's standing against its uptime target (``targets.read``), worked
+out by code from the external checker's counts (``tools.slo_tool``).
 
 Healthchecks is read by code, once per round (one GET for every project), and
 only when the round has an agent to wake. Without a Healthchecks list on this
@@ -39,6 +41,7 @@ from agentzaaheen.core.sdk import (
     ExpiryKind,
     ExpiryReport,
     HeartbeatReport,
+    TargetStanding,
     ToolLevel,
     ToolSpec,
     Trust,
@@ -54,10 +57,12 @@ from agentzaaheen.plugins.agents.monitoring import (
     DOMAINS_BOOKMARK,
     DOMAINS_FRESH,
     HEARTBEATS_BOOKMARK,
+    TARGETS_BOOKMARK,
     Note,
     watch,
     watch_expiry,
     watch_heartbeats,
+    watch_targets,
 )
 
 ROLE = "monitoring"
@@ -66,6 +71,7 @@ UPTIME_READ = "uptime.read"
 HEALTHCHECKS_READ = "healthchecks.read"
 CERTS_READ = "certs.read"
 DOMAINS_READ = "domains.read"
+TARGETS_READ = "targets.read"
 MONITORING_TOOLS: Mapping[str, ToolSpec] = {
     UPTIME_READ: ToolSpec(
         name=UPTIME_READ,
@@ -91,6 +97,12 @@ MONITORING_TOOLS: Mapping[str, ToolSpec] = {
         output_data_class=DataClass.INTERNAL,
         description="The newest domain read: each of our domains' end date, from the public registry.",
     ),
+    TARGETS_READ: ToolSpec(
+        name=TARGETS_READ,
+        level=ToolLevel.READ,
+        output_data_class=DataClass.INTERNAL,
+        description="One project's standing against its uptime target: shares and counts worked out by code.",
+    ),
 }
 # Each kind of end date: its bookmark and how old a read may be before it is "not read".
 _DATES = {
@@ -112,11 +124,19 @@ class Dated:
     names: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class Targeted:
+    """One project's uptime target: whether it has one, and how it stands (``None``: not read)."""
+
+    listed: bool
+    standing: TargetStanding | None
+
+
 class MonitoringWork:
     """One Monitoring run for one project: its newest reads, each against its bookmark."""
 
     role_id = ROLE
-    tools = frozenset({UPTIME_READ, HEALTHCHECKS_READ, CERTS_READ, DOMAINS_READ})
+    tools = frozenset({UPTIME_READ, HEALTHCHECKS_READ, CERTS_READ, DOMAINS_READ, TARGETS_READ})
     budget = MONITORING_BUDGET
 
     def __init__(  # noqa: PLR0913  # the project, both reads, what is listed for it, and the clock
@@ -130,8 +150,12 @@ class MonitoringWork:
         heartbeats: HeartbeatReport | None = None,
         slugs: tuple[str, ...] | None = None,
         dates: Sequence[Dated] = (),
+        target: Targeted | None = None,
     ) -> None:
-        """``slugs``: the project's Healthchecks checks (``None``: no Healthchecks list here)."""
+        """``slugs``: the project's Healthchecks checks (``None``: no Healthchecks list here).
+
+        ``target``: its uptime-target standing (``None``: no SLO numbers on this machine).
+        """
         self._project = project
         self._name = name
         self._report = report
@@ -140,6 +164,7 @@ class MonitoringWork:
         self._heartbeats = heartbeats
         self._slugs = slugs
         self._dates = tuple(dates)
+        self._target = target
 
     async def run(self, ticket: RunTicket) -> AgentResult:
         """Write a finding only where the project's state changed since its bookmark."""
@@ -173,6 +198,15 @@ class MonitoringWork:
                 now=now,
                 seen=ticket.bookmarks.get(bookmark),
                 fresh=fresh,
+            )
+        if self._target is not None:
+            watched[TARGETS_BOOKMARK] = watch_targets(
+                self._project,
+                self._name,
+                self._target.standing,
+                listed=self._target.listed,
+                now=now,
+                seen=ticket.bookmarks.get(TARGETS_BOOKMARK),
             )
         notes = [each.note for each in watched.values() if each.note is not None]
         return AgentResult(
@@ -214,6 +248,20 @@ class DatesReader(Protocol):
         ...
 
 
+class TargetsReader(Protocol):
+    """Each project's uptime-target standing (``tools.slo_tool.TargetStandings``)."""
+
+    listed: frozenset[str]
+
+    async def refresh(self) -> None:
+        """Read the checker's counts if due; a failure keeps the last read."""
+        ...
+
+    def standing(self, project: str) -> TargetStanding | None:
+        """How ``project`` stands now (``None``: not read yet)."""
+        ...
+
+
 @dataclass(frozen=True)
 class DatesWatch:
     """One kind of end date to watch: its reader and each project's names."""
@@ -237,6 +285,7 @@ class LaptopMonitoring:
         heartbeats: HeartbeatReader | None = None,
         checks: Mapping[str, tuple[str, ...]] | None = None,
         dates: Sequence[DatesWatch] = (),
+        targets: TargetsReader | None = None,
         every_s: float = EVERY.total_seconds(),
     ) -> None:
         self._runner = runner
@@ -248,6 +297,7 @@ class LaptopMonitoring:
         self._heartbeats = heartbeats
         self._checks = dict(checks or {})
         self._dates = tuple(dates)
+        self._targets = targets
         self._every_s = every_s
         self._task: asyncio.Task[None] | None = None
         self._log = get_logger("agentzaaheen.monitoring")
@@ -271,6 +321,8 @@ class LaptopMonitoring:
             heartbeats = self._heartbeats.latest
         for watched in self._dates:
             await watched.reader.refresh()  # only when due: 6 hours for certificates, a day for domains
+        if self._targets is not None:
+            await self._targets.refresh()  # only when due: once an hour
         reports = dict(self._latest())  # swapped whole by the uptime watch: one consistent view
         started = 0
         for workspace, agent in woken:
@@ -286,10 +338,17 @@ class LaptopMonitoring:
                     Dated(d.reader.kind, d.reader.latest, d.names.get(workspace.slug, ()))
                     for d in self._dates
                 ],
+                target=self._target_of(workspace.slug),
             )
             report = await runner.run(workspace.workspace_id, agent.agent_id, work)
             started += int(report.started)
         return started
+
+    def _target_of(self, project: str) -> Targeted | None:
+        if self._targets is None:
+            return None
+        listed = project in self._targets.listed
+        return Targeted(listed, self._targets.standing(project) if listed else None)
 
     async def start(self) -> None:
         """Start the rounds (inside the web server's event loop)."""

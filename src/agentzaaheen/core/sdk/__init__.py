@@ -11,7 +11,7 @@ What it does:
     backend health shapes (codes and numbers only), the heartbeat shapes
     (each Healthchecks check's slug, status and last ping), the expiry
     shapes (when each certificate and domain ends), the availability history
-    (each project's external checks, counted by the hour), the repository bundle
+    (each project's external checks by the hour, and its uptime-target standing), the repository bundle
     the scout reads (paths and untrusted file text, secret files never), what a
     project is built with (languages, and providers code found), the model
     levels of the model map (ADR-033), and spans: :func:`span`
@@ -34,6 +34,7 @@ Must never:
 from agentzaaheen.core.sdk.availability import (
     PROJECT_ID,
     JsonQuerier,
+    TargetStanding,
     UptimeHistory,
     UptimeHour,
 )
@@ -250,6 +251,7 @@ __all__ = [
     "StatusGetter",
     "Subscription",
     "SubscriptionStatus",
+    "TargetStanding",
     "ToolLevel",
     "ToolSpec",
     "Trust",

@@ -148,7 +148,7 @@ from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options,
 from tools.dashboard_uptime import UptimeLive, ntfy_topic, start_watch, uptime_list, uptime_portfolio
 from tools.fix_guides import Project, fixes_list
 from tools.key_dates import KeyDate, key_dates_list
-from tools.slo_tool import SloBook, slo_book
+from tools.slo_tool import AVAILABILITY_CONNECTOR, SloBook, TargetStandings, slo_book, slo_portfolio
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
@@ -240,6 +240,7 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
     backends: SupabaseList | None = None,
     alerts: AlertLog | None = None,
     watchers: list[UptimeLive] | None = None,
+    slo: SloBook | None = None,
 ) -> tuple[Portfolio | None, list[str]]:
     """The portfolio with every requested real source laid over the sample, and what is real.
 
@@ -294,6 +295,10 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
         base = portfolio or SamplePortfolio(clock())
         portfolio = supabase_portfolio(base, backends, env, clock=clock, transport=transport, reads=reads)
         live.append("Supabase")
+    if slo is not None and slo.reader is not None and AVAILABILITY_CONNECTOR not in off:
+        base = portfolio or SamplePortfolio(clock())
+        portfolio = slo_portfolio(base, slo, slo.reader, clock=clock, reads=reads)
+        live.append("uptime targets")
     if reads:
         HourlyReads(reads).start()
         print(f"dashboard: {', '.join(r.source for r in reads)} will be read again every hour.")
@@ -493,6 +498,7 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
                 backends=backends,
                 alerts=alerts,
                 watchers=watchers,
+                slo=slo,
             )
     except (_NotStartedError, ListNotUsableError):
         return 1
@@ -576,6 +582,11 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
         ),
         dates=lambda: _dates_watches(uptime, domains, off=off, clock=clock, transport=transport),
         clock=clock,
+        targets=(
+            TargetStandings(slo, slo.reader, clock=clock)
+            if slo is not None and slo.reader is not None and AVAILABILITY_CONNECTOR not in off
+            else None
+        ),
     )
     page = registry_for(chosen, registry=registry, uptime=uptime, backends=backends)
     app = create_app(
@@ -698,6 +709,7 @@ def _monitoring(  # noqa: PLR0913  # the database, the workspaces, the reads and
     reader: Callable[[], HealthchecksReader | None],
     dates: Callable[[], Sequence[DatesWatch]],
     clock: Clock,
+    targets: TargetStandings | None = None,
 ) -> LaptopMonitoring | None:
     """The Monitoring agents' 5-minute rounds, if there is a database and an uptime watch."""
     if switches is None or not watchers:
@@ -712,6 +724,7 @@ def _monitoring(  # noqa: PLR0913  # the database, the workspaces, the reads and
         heartbeats=reader() if checks else None,
         checks=checks,
         dates=dates(),
+        targets=targets,
     )
 
 

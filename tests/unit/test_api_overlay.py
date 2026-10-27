@@ -49,6 +49,7 @@ def test_a_project_with_only_real_cards_is_not_sample() -> None:
         ("eva", "github"): lambda: _real("github"),
         ("eva", "uptime"): lambda: _real("uptime"),
         ("eva", "supabase"): lambda: _real("supabase"),
+        ("eva", "slo"): lambda: _real("slo"),
     }
     portfolio = OverlayPortfolio(SamplePortfolio(NOW), makers)
     eva = next(p for p in portfolio.projects() if p.id == "eva")

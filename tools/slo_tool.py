@@ -11,10 +11,17 @@ request timings or errors yet (08-OBSERVABILITY build order step 4).
 Every number in the text is computed in ``core.metrics.slo``; the text only
 words it. The tool is offered while the ``check-slo`` skill and the
 ``availability`` connector are both on (the registry switches, ADR-030).
+
+With the connector on, :func:`slo_portfolio` also reads the counts at start
+and every hour, and lays each project's "Uptime target" card
+(``core.api.slo``) over its sample placeholder, so the page and the chat's
+facts show the same numbers.
 """
 
 from __future__ import annotations
 
+import asyncio
+import math
 import re
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
@@ -25,12 +32,17 @@ from pathlib import Path
 import httpx
 from pydantic import SecretStr
 
+from agentzaaheen.core.api import Portfolio
+from agentzaaheen.core.api.overlay import CardMaker, OverlayPortfolio
+from agentzaaheen.core.api.slo import CARD_ID, slo_card
+from agentzaaheen.core.api.views import Card
 from agentzaaheen.core.llm_gateway import Tool
 from agentzaaheen.core.metrics import Counts, Objective, SliKind, SloStatus, hourly_status
 from agentzaaheen.core.metrics.revenue import Unknown
 from agentzaaheen.core.net import JsonClient, NetPolicy
-from agentzaaheen.core.sdk import Severity, SourceError, UptimeHistory, get_logger, say
+from agentzaaheen.core.sdk import Severity, SourceError, TargetStanding, UptimeHistory, get_logger, say
 from agentzaaheen.plugins.connectors import availability
+from tools.dashboard_reread import Reread
 from tools.dashboard_sources import ListNotUsableError
 from tools.slo_list import SloListError, load_slos
 
@@ -67,10 +79,10 @@ class AvailabilityReader:
         self._log = get_logger("agentzaaheen.availability")
         self.latest: UptimeHistory | None = None
 
-    async def refresh(self) -> None:
-        """Read once if the last try was at least :data:`EVERY` ago; a failure keeps the last read."""
+    async def refresh(self, *, force: bool = False) -> None:
+        """Read once if due (an hour since the last try) or ``force``d; a failure keeps the last read."""
         now = self._clock()
-        if self._tried_at is not None and now - self._tried_at < EVERY:
+        if not force and self._tried_at is not None and now - self._tried_at < EVERY:
             return
         self._tried_at = now
         try:
@@ -271,3 +283,75 @@ def slo_status_tool(
         label="SLOs",
         workspace_of=lambda project: project,
     )
+
+
+def slo_portfolio(
+    base: Portfolio, book: SloBook, reader: AvailabilityReader, *, clock: Clock, reads: list[Reread]
+) -> Portfolio:
+    """``base`` with each project's real "Uptime target" card, read now and again every hour."""
+    asyncio.run(reader.refresh(force=True))
+
+    async def again() -> int:
+        await reader.refresh(force=True)
+        return 0  # one read for every project: a failure is logged by the reader and keeps the last read
+
+    reads.append(Reread(source=AVAILABILITY_CONNECTOR, read=again))
+    makers: dict[tuple[str, str], CardMaker] = {}
+    for objective in book.objectives:
+        detail = base.project(objective.project)
+        has_place = detail is not None and any(card.id == CARD_ID for card in detail.cards)
+        if objective.kind is SliKind.AVAILABILITY and has_place:
+            makers[(objective.project, CARD_ID)] = _card_maker(objective, reader, clock)
+    print(f"dashboard: {len(makers)} projects show their uptime target from the checker's counts.")
+    return OverlayPortfolio(base, makers)
+
+
+def _card_maker(objective: Objective, reader: AvailabilityReader, clock: Clock) -> CardMaker:
+    def make() -> Card:
+        history = reader.latest
+        now = clock()
+        if history is None:
+            return slo_card(objective, None, read_at=None, schedule=EVERY, now=now)
+        hours = [(h.hour, Counts(h.good, h.total)) for h in history.hours if h.project == objective.project]
+        status = hourly_status(objective, hours, now)
+        return slo_card(objective, status, read_at=history.fetched_at, schedule=EVERY, now=now)
+
+    return make
+
+
+class TargetStandings:
+    """Each project's standing against its uptime target, for the Monitoring agents (``targets.read``)."""
+
+    def __init__(self, book: SloBook, reader: AvailabilityReader, *, clock: Clock) -> None:
+        self._objectives = {o.project: o for o in book.objectives if o.kind is SliKind.AVAILABILITY}
+        self._reader = reader
+        self._clock = clock
+        self.listed = frozenset(self._objectives)
+
+    async def refresh(self) -> None:
+        """Read the checker's counts if due (once an hour); a failure keeps the last read."""
+        await self._reader.refresh()
+
+    def standing(self, project: str) -> TargetStanding | None:
+        """How ``project`` stands now, every number worked out in ``core.metrics`` (``None``: not read)."""
+        objective = self._objectives.get(project)
+        history = self._reader.latest
+        if objective is None or history is None:
+            return None
+        hours = [(h.hour, Counts(h.good, h.total)) for h in history.hours if h.project == project]
+        status = hourly_status(objective, hours, self._clock())
+        up, left = status.compliance, status.budget_left
+        return TargetStanding(
+            objective=objective.name,
+            target_bp=_bp(objective.target),
+            up_bp=None if isinstance(up, Unknown) else _bp(up),
+            budget_left_bp=None if isinstance(left, Unknown) else max(-1_000_000, _bp(left)),
+            burning=status.burn is not None,
+            checks=status.counts.total,
+            read_at=history.fetched_at,
+        )
+
+
+def _bp(share: Fraction) -> int:
+    """A share in basis points, rounded down: never better than it was."""
+    return math.floor(share * 10_000)
