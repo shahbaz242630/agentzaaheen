@@ -9,6 +9,12 @@ the chat (F12): nothing is ever used to teach a model before that.
 
 ``chat_turns`` holds each question and its answer, numbered within the
 conversation, with the model that answered and whether it saw sample data.
+The words are **sealed by the vault** before they reach the database
+(Chairman, 27 Oct 2026): each question and each answer has its own data key,
+bound to its workspace, conversation and turn, so the database, its backups
+and anyone reading them past the app see only sealed bytes. Sealed values are
+the vault's own JSON (``SealedSecret``), so a later master-key rotation can
+re-wrap them.
 
 The Board's chat (no project open) is kept in Agent Zaaheen's own workspace,
 so every chat sits behind a workspace wall; ``for_board`` keeps its
@@ -47,8 +53,8 @@ CREATE TABLE agentzaaheen.chat_turns (
     conversation_id uuid NOT NULL,
     turn            integer NOT NULL CHECK (turn >= 1),
     at              timestamptz NOT NULL,
-    question        text NOT NULL CHECK (char_length(question) BETWEEN 1 AND 2000),
-    answer          text NOT NULL CHECK (char_length(answer) BETWEEN 1 AND 4000),
+    question_sealed bytea NOT NULL CHECK (octet_length(question_sealed) BETWEEN 1 AND 32768),
+    answer_sealed   bytea NOT NULL CHECK (octet_length(answer_sealed) BETWEEN 1 AND 32768),
     model_id        text NOT NULL CHECK (model_id ~ '^[a-z0-9][a-z0-9.-]{0,63}$'),
     from_sample     boolean NOT NULL,
     PRIMARY KEY (tenant_id, project_id, conversation_id, turn),

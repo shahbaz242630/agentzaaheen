@@ -149,8 +149,7 @@ async def _fill_every_table(url: str) -> None:
         moved = run_record(agent=str(uuid4()))  # an agent run moves a bookmark (F11 slice 4)
         await records.end_run(moved, [], {"uptime.state": "up"}, moved_at=NOW)
         await ChatRows(here).add(  # a chat turn and its conversation (F19)
-            "How is it going?",
-            "All well.",
+            lambda _conversation, _turn: (b"sealed question", b"sealed answer"),
             model_id="gemma-local",
             from_sample=False,
             at=NOW,

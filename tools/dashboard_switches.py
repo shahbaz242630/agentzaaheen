@@ -28,6 +28,7 @@ from agentzaaheen.core.api.registry import DashboardSwitches, PasskeyStatus, Reg
 from agentzaaheen.core.api.removal import DashboardRemoval
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.auth import Site
+from agentzaaheen.core.broker import ChatSeal
 from agentzaaheen.core.llm_gateway import (
     ChatModel,
     Inspect,
@@ -196,7 +197,9 @@ class LaptopSwitches:
                 self._scout = ScoutControl(db, LAPTOP_TENANT, self._clock)
                 self._summaries = SummaryControl(db, LAPTOP_TENANT, self._clock)
                 # The Board's chat is kept in Agent Zaaheen's own workspace, apart from its project chat.
-                self._chats = ChatControl(db, LAPTOP_TENANT, CLAUDE_WORKSPACE, self._clock)
+                self._chats = ChatControl(
+                    db, LAPTOP_TENANT, CLAUDE_WORKSPACE, ChatSeal(LAPTOP_TENANT, self._keyring), self._clock
+                )
                 self._claude_key = ClaudeKeyControl(
                     db,
                     LAPTOP_TENANT,
@@ -328,8 +331,8 @@ class LaptopSwitches:
 
     async def keep(
         self, workspace: WorkspaceRow | None, question: str, answer: str, *, model_id: str, from_sample: bool
-    ) -> KeptTurn:
-        """Keep one chat question and its answer (``workspace`` ``None``: the Board's chat)."""
+    ) -> KeptTurn | None:
+        """Keep one chat question and its answer, sealed (``workspace`` ``None``: the Board's chat)."""
         return await (await self._chats_now()).keep(
             workspace, question, answer, model_id=model_id, from_sample=from_sample
         )

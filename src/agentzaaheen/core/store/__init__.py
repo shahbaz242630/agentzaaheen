@@ -45,7 +45,7 @@ from agentzaaheen.core.store.agents import (
 )
 from agentzaaheen.core.store.audit import AuditRow, AuditRows
 from agentzaaheen.core.store.bookmarks import MAX_BOOKMARKS, Bookmarks
-from agentzaaheen.core.store.chats import MAX_TURNS, ChatRows, ChatThread, ChatTurn, KeptTurn
+from agentzaaheen.core.store.chats import MAX_TURNS, ChatRows, ChatThread, KeptTurn, SealedTurn, Sealer
 from agentzaaheen.core.store.db import Database, DatabaseSettings, Scoped
 from agentzaaheen.core.store.errors import StoreError, StoreErrorCode
 from agentzaaheen.core.store.migrations import LATEST_VERSION, MIGRATIONS, Migration, check_schema, migrate
@@ -115,7 +115,6 @@ __all__ = [
     "CallTokens",
     "ChatRows",
     "ChatThread",
-    "ChatTurn",
     "CredentialDates",
     "DailySummaries",
     "Database",
@@ -149,6 +148,8 @@ __all__ = [
     "ScoutRuns",
     "SealedRow",
     "SealedSecrets",
+    "SealedTurn",
+    "Sealer",
     "SlotKey",
     "StateChange",
     "StoreError",

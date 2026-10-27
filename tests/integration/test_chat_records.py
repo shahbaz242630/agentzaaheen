@@ -4,7 +4,9 @@ The rules: every question and answer is kept behind its workspace's wall; a
 conversation goes on until it has not been used for 3 hours; the Board's chat
 is kept in Agent Zaaheen's own workspace apart from that project's chat; the
 app can never change or delete a turn; chats not used for 12 months are
-removed, and only those.
+removed, and only those. The words are sealed by the vault: the database
+never holds them, a sealed turn copied elsewhere will not open, and without
+the vault's key nothing is kept.
 """
 
 from __future__ import annotations
@@ -15,11 +17,15 @@ from uuid import UUID
 import asyncpg
 import pytest
 
+from agentzaaheen.core.broker import ChatSeal
 from agentzaaheen.core.policy import ChatControl
 from agentzaaheen.core.policy.chats import IDLE_AFTER, KEEP_FOR
+from agentzaaheen.core.sdk import SourceError
 from agentzaaheen.core.store import ChatRows, Database, StoreError, StoreErrorCode, WorkspaceRow
+from agentzaaheen.core.vault import Keyring, MasterKey, VaultErrorCode
 from tests.integration.conftest import ScratchDb, add_workspaces, connect_as, open_db, run
 from tests.integration.test_runner import EVA, NOW, TENANT, ZAAHEEN
+from tests.unit.test_log_door_lines import lines
 
 BOARD = UUID("00000000-0000-4000-8000-0000000000b0")  # Agent Zaaheen's own workspace in these tests
 EVA_ROW = WorkspaceRow(workspace_id=EVA, slug="eva", name="Eva")
@@ -41,14 +47,18 @@ class Clock:
         return self.at
 
 
+KEYRING = Keyring([MasterKey.generate("chat-test")], current_id="chat-test")
+
+
 def control(db: Database, clock: Clock) -> ChatControl:
-    return ChatControl(db, TENANT, BOARD, clock)
+    return ChatControl(db, TENANT, BOARD, ChatSeal(TENANT, KEYRING), clock)
 
 
 async def _ask(chats: ChatControl, workspace: WorkspaceRow | None, n: int) -> tuple[UUID, int, bool]:
     kept = await chats.keep(
         workspace, f"question {n}", f"answer {n}", model_id="gemma-local", from_sample=False
     )
+    assert kept is not None
     return kept.conversation_id, kept.turn, kept.started
 
 
@@ -162,7 +172,7 @@ def test_a_turn_cannot_be_written_into_another_workspace(test_db: ScratchDb) -> 
 @pytest.mark.parametrize(
     "statement",
     [
-        "UPDATE agentzaaheen.chat_turns SET answer = 'changed'",
+        "UPDATE agentzaaheen.chat_turns SET model_id = 'changed'",
         "DELETE FROM agentzaaheen.chat_turns",
         "DELETE FROM agentzaaheen.chat_conversations",
         "UPDATE agentzaaheen.chat_conversations SET cleared_for_learning = true",
@@ -182,35 +192,132 @@ def test_the_app_can_never_change_or_delete_a_chat(test_db: ScratchDb, statement
         run(body())
 
 
-def test_text_too_long_for_a_record_is_refused(test_db: ScratchDb) -> None:
+def _sealed_bytes(admin_url: str) -> list[bytes]:
+    """Every sealed value in the chat tables, read past the walls (the test's admin)."""
+
+    async def body() -> list[bytes]:
+        conn = await asyncpg.connect(admin_url)
+        try:
+            rows = await conn.fetch("SELECT question_sealed, answer_sealed FROM agentzaaheen.chat_turns")
+        finally:
+            await conn.close()
+        return [bytes(v) for row in rows for v in (row["question_sealed"], row["answer_sealed"])]
+
+    return run(body())
+
+
+def test_the_database_never_holds_the_words(test_db: ScratchDb) -> None:
     async def body() -> None:
         async with open_db(test_db.app_url) as db:
-            rows = ChatRows(db.scoped(TENANT, EVA))
-            await rows.add(
-                "q", "a" * 4001, model_id="gemma-local", from_sample=False, at=NOW, idle_after=IDLE_AFTER
+            await control(db, Clock(NOW)).keep(
+                EVA_ROW,
+                "Who is Grace Hopper?",
+                "A customer since May.",
+                model_id="gemma-local",
+                from_sample=False,
             )
 
-    with pytest.raises(StoreError) as caught:
-        run(body())
-    assert caught.value.code is StoreErrorCode.REJECTED
+    run(body())
+    stored = _sealed_bytes(test_db.admin_url)
+    assert len(stored) == 2
+    for value in stored:
+        assert b"Grace" not in value
+        assert b"customer" not in value
+        assert b"ciphertext" in value  # the vault's own sealed shape
 
 
-def test_a_failed_turn_leaves_no_empty_conversation(test_db: ScratchDb) -> None:
+def test_a_sealed_turn_moved_to_another_turn_will_not_open(test_db: ScratchDb) -> None:
+    async def body() -> None:
+        async with open_db(test_db.app_url) as db:
+            chats = control(db, Clock(NOW))
+            await _ask(chats, EVA_ROW, 1)
+            await _ask(chats, EVA_ROW, 2)
+            conn = await asyncpg.connect(test_db.admin_url)
+            try:  # someone with the database copies turn 1's question over turn 2's
+                await conn.execute(
+                    "UPDATE agentzaaheen.chat_turns SET question_sealed ="
+                    " (SELECT question_sealed FROM agentzaaheen.chat_turns WHERE turn = 1) WHERE turn = 2"
+                )
+            finally:
+                await conn.close()
+            with pytest.raises(SourceError) as caught:
+                await chats.going_on(EVA_ROW)
+            assert caught.value.detail_code == VaultErrorCode.TAMPERED
+
+    run(body())
+
+
+def test_a_turns_question_and_answer_swapped_will_not_open(test_db: ScratchDb) -> None:
+    async def body() -> None:
+        async with open_db(test_db.app_url) as db:
+            chats = control(db, Clock(NOW))
+            await _ask(chats, EVA_ROW, 1)
+            conn = await asyncpg.connect(test_db.admin_url)
+            try:  # someone with the database swaps the two sides of one turn
+                await conn.execute(
+                    "UPDATE agentzaaheen.chat_turns"
+                    " SET question_sealed = answer_sealed, answer_sealed = question_sealed"
+                )
+            finally:
+                await conn.close()
+            with pytest.raises(SourceError) as caught:
+                await chats.going_on(EVA_ROW)
+            assert caught.value.detail_code == VaultErrorCode.TAMPERED
+
+    run(body())
+
+
+def test_without_the_vault_key_nothing_is_kept(
+    test_db: ScratchDb, capsys: pytest.CaptureFixture[str]
+) -> None:
+    async def body() -> None:
+        async with open_db(test_db.app_url) as db:
+            chats = ChatControl(db, TENANT, BOARD, ChatSeal(TENANT, None), Clock(NOW))
+            assert await chats.keep(EVA_ROW, "q", "a", model_id="gemma-local", from_sample=False) is None
+
+    run(body())
+    assert _sealed_bytes(test_db.admin_url) == []
+    (line,) = lines(capsys, "chat_record_failed")
+    assert line["code"] == "vault.bad_key_file"
+    assert line["workspace"] == "eva"
+
+
+def test_a_seal_that_fails_leaves_nothing_written(
+    test_db: ScratchDb, capsys: pytest.CaptureFixture[str]
+) -> None:
     async def body() -> int:
         async with open_db(test_db.app_url) as db:
-            rows = ChatRows(db.scoped(TENANT, EVA))
-            with pytest.raises(StoreError):
-                await rows.add(
-                    "q", "a" * 4001, model_id="gemma-local", from_sample=False, at=NOW, idle_after=IDLE_AFTER
-                )
-        conn = await connect_as(test_db.app_url, TENANT, EVA)
+            # An empty answer: the vault refuses to seal it, inside the transaction.
+            kept = await control(db, Clock(NOW)).keep(
+                EVA_ROW, "q", "", model_id="gemma-local", from_sample=False
+            )
+            assert kept is None
+        conn = await asyncpg.connect(test_db.admin_url)
         try:
             count: int = await conn.fetchval("SELECT count(*) FROM agentzaaheen.chat_conversations")
             return count
         finally:
             await conn.close()
 
-    assert run(body()) == 0
+    assert run(body()) == 0  # no empty conversation left behind
+    (line,) = lines(capsys, "chat_record_failed")
+    assert line["code"] == "vault.secret_empty"
+
+
+def test_a_value_too_big_for_the_record_is_refused(test_db: ScratchDb) -> None:
+    async def body() -> None:
+        async with open_db(test_db.app_url) as db:
+            await ChatRows(db.scoped(TENANT, EVA)).add(
+                lambda _c, _t: (b"q", b"a" * 32769),
+                model_id="gemma-local",
+                from_sample=False,
+                at=NOW,
+                idle_after=IDLE_AFTER,
+            )
+
+    with pytest.raises(StoreError) as caught:
+        run(body())
+    assert caught.value.code is StoreErrorCode.REJECTED
 
 
 def test_chats_unused_for_twelve_months_are_removed_and_only_those(test_db: ScratchDb) -> None:

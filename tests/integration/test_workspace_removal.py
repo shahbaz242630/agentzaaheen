@@ -118,8 +118,7 @@ async def _busy(db: Database, library: RoleLibrary, workspace: UUID) -> UUID:
         RunStart(uuid4(), agent, "monitoring", "f" * 64, NOW, NOW + timedelta(minutes=1))
     )
     await ChatRows(db.scoped(TENANT, workspace)).add(
-        "How is it going?",
-        "All well.",
+        lambda _conversation, _turn: (b"sealed question", b"sealed answer"),
         model_id="gemma-local",
         from_sample=False,
         at=NOW,
