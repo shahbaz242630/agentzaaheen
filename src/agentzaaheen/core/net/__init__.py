@@ -25,7 +25,7 @@ What it does:
 
 Public interface:
     ``JsonClient``, ``NetPolicy``, ``DownloadPolicy``, ``NetError``, ``NetErrorCode``,
-    ``check_base_url``, ``check_path``, ``ModelClient``, ``check_model_url``,
+    ``check_base_url``, ``check_path``, ``check_read_query``, ``ModelClient``, ``check_model_url``,
     ``StatusProbe``, ``check_probe_url``, ``PushClient``, ``NTFY_HOST``,
     ``OtlpSender``, ``check_otlp_endpoint``, ``HeartbeatClient``,
     ``HEALTHCHECKS_PING_HOST``, ``check_ping_url``, ``ClaudeClient``, ``ClaudeReply``,
@@ -48,7 +48,14 @@ Must never:
 
 from agentzaaheen.core.net.cert import CertProbe
 from agentzaaheen.core.net.claude import CLAUDE_HOST, ClaudeClient, ClaudeReply
-from agentzaaheen.core.net.client import DownloadPolicy, JsonClient, NetPolicy, check_base_url, check_path
+from agentzaaheen.core.net.client import (
+    DownloadPolicy,
+    JsonClient,
+    NetPolicy,
+    check_base_url,
+    check_path,
+    check_read_query,
+)
 from agentzaaheen.core.net.errors import NetError, NetErrorCode
 from agentzaaheen.core.net.heartbeat import HEALTHCHECKS_PING_HOST, HeartbeatClient, check_ping_url
 from agentzaaheen.core.net.model import (
@@ -90,4 +97,5 @@ __all__ = [
     "check_path",
     "check_ping_url",
     "check_probe_url",
+    "check_read_query",
 ]

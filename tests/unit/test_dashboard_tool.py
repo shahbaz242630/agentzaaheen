@@ -279,6 +279,7 @@ def test_the_customize_page_lists_what_is_on_disk(ui: Path) -> None:
     assert dashboard.main([], static_dir=ui, serve=lambda app, *_: apps.append(app)) == 0
     page = TestClient(apps[0], base_url="http://127.0.0.1").get("/api/registry").json()
     assert [c["id"] for c in page["connectors"]] == [
+        "availability",
         "expiry",
         "github",
         "healthchecks",
@@ -314,3 +315,36 @@ def test_bundles_are_shown_and_bad_ones_explained(
     assert [p["id"] for p in page["plugins"]] == ["kit"]
     assert [p["path"] for p in page["problems"]] == ["bundles/broken"]
     assert "the plugin at bundles/broken was not loaded" in capsys.readouterr().out
+
+
+SLO_LIST = """\
+apiVersion: openslo/v1
+kind: SLO
+metadata: {name: eva-availability}
+spec:
+  service: eva
+  indicator: {metadata: {name: availability}}
+  timeWindow: [{duration: 28d, isRolling: true}]
+  budgetingMethod: Occurrences
+  objectives: [{target: 0.995}]
+"""
+
+
+def test_the_slo_list_and_the_checker_database_are_read_at_start(
+    ui: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    slo = tmp_path / "slo.yaml"
+    slo.write_text(SLO_LIST, encoding="utf-8")
+    checker_db = "a" * 32 + "/12345678-90ab-cdef-1234-567890abcdef"
+    argv = ["--slo", str(slo), "--checker-db", checker_db, "--checker-db-key-env", "D1_KEY"]
+    assert dashboard.main(argv, static_dir=ui, serve=lambda *_: None, environ={"D1_KEY": "k" * 40}) == 0
+    assert "the SLO numbers read the checker's uptime counts (read-only key)" in capsys.readouterr().out
+
+
+def test_a_broken_slo_list_stops_the_start(
+    ui: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    slo = tmp_path / "slo.yaml"
+    slo.write_text("not: [an, slo", encoding="utf-8")
+    assert dashboard.main(["--slo", str(slo)], static_dir=ui, serve=lambda *_: None) == 1
+    assert "dashboard: slo: the SLO list is not valid YAML." in capsys.readouterr().out

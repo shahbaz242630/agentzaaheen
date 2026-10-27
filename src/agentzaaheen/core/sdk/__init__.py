@@ -10,7 +10,8 @@ What it does:
     (an address's rule, its status and timing, never its page) and the
     backend health shapes (codes and numbers only), the heartbeat shapes
     (each Healthchecks check's slug, status and last ping), the expiry
-    shapes (when each certificate and domain ends), the repository bundle
+    shapes (when each certificate and domain ends), the availability history
+    (each project's external checks, counted by the hour), the repository bundle
     the scout reads (paths and untrusted file text, secret files never), what a
     project is built with (languages, and providers code found), the model
     levels of the model map (ADR-033), and spans: :func:`span`
@@ -30,6 +31,12 @@ Must never:
     Log through anything other than :func:`get_logger`.
 """
 
+from agentzaaheen.core.sdk.availability import (
+    PROJECT_ID,
+    JsonQuerier,
+    UptimeHistory,
+    UptimeHour,
+)
 from agentzaaheen.core.sdk.backend import (
     PROJECT_REF,
     BackendHealth,
@@ -175,6 +182,7 @@ __all__ = [
     "MAX_MANIFEST_BYTES",
     "MAX_PATHS",
     "MAX_TOTAL_CHARS",
+    "PROJECT_ID",
     "PROJECT_REF",
     "PROVIDERS",
     "REDACTED",
@@ -208,6 +216,7 @@ __all__ = [
     "HeartbeatReport",
     "Interval",
     "JsonGetter",
+    "JsonQuerier",
     "JsonReader",
     "Language",
     "LogEvent",
@@ -244,6 +253,8 @@ __all__ = [
     "ToolLevel",
     "ToolSpec",
     "Trust",
+    "UptimeHistory",
+    "UptimeHour",
     "UptimeReport",
     "check_site",
     "clean_log",

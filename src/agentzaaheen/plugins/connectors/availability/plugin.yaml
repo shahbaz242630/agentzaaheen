@@ -1,0 +1,19 @@
+id: availability
+type: connector
+version: 0.1.0
+sdk: ">=1.15,<2"
+permissions: [read]
+egress: [api.cloudflare.com]
+# QUERY: D1 reads only by POST. The core sends nothing but the one SELECT fixed in adapter.py,
+# and the key is "D1 Read" (a write is refused by Cloudflare, proven 27 Oct 2026).
+endpoints:
+  - QUERY /client/v4/accounts/{account}/d1/database/{database}/query
+credentials:
+  - name: key
+    scope_hint: "Cloudflare account token with only \"D1 Read\"; it can run SELECTs and nothing else, and sees no Workers"
+    verify: true
+data_class: internal
+interface:
+  display_name: Uptime history
+  category: Health
+  description: "How many external checks found each project up, hour by hour: project, hour and two counts, never an address."

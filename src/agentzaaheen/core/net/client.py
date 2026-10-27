@@ -1,4 +1,4 @@
-"""The one outbound HTTP client: read-only JSON GETs to an allowlisted host.
+"""The one outbound HTTP client: read-only JSON GETs (and named read queries) to an allowlisted host.
 
 Every rule is checked in code before a byte leaves (SECURITY NET-1):
 https only, the host must be on this client's allowlist and must be a name,
@@ -11,6 +11,13 @@ allowance is used up is reported as rate-limited, not as a refused key.
 Errors carry a code and status only, never a body or header. Each call is
 one client span named after the host (never the path, which can hold names),
 with the final status, the attempts made and one event per retry (ADR-032).
+
+One API reads only by ``POST`` (Cloudflare D1's SQL query). For it a client is
+made with ``read_queries``: the exact SQL texts it may send, each a single
+``SELECT`` written in code (no ``;``, no comment). :meth:`JsonClient.query_json`
+sends only one of those, with a few plain number or text parameters; any other
+text is refused before a byte leaves. The key itself must also be read-only,
+so even a query that slipped through could not write (ADR-032, 27 Oct addendum).
 """
 
 from __future__ import annotations
@@ -21,7 +28,7 @@ import json
 import random
 import re
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Self
@@ -39,6 +46,9 @@ _AUTH_STATUSES = frozenset({401, 403})
 _FORBIDDEN = 403
 _MAX_PATH = 512
 _REDIRECTS = frozenset({301, 302, 303, 307, 308})
+_MAX_QUERY = 1024
+_MAX_PARAMS = 8
+_MAX_PARAM_CHARS = 64
 
 Sleep = Callable[[float], Awaitable[None]]
 
@@ -133,8 +143,12 @@ class JsonClient:
         sleep: Sleep = asyncio.sleep,
         jitter: Callable[[], float] = random.random,
         download: DownloadPolicy | None = None,
+        read_queries: frozenset[str] = frozenset(),
     ) -> None:
         self._base = check_base_url(base_url, policy)
+        for sql in read_queries:
+            check_read_query(sql)
+        self._read_queries = read_queries
         self._policy = policy
         self._download = download
         self._transport = transport
@@ -170,20 +184,37 @@ class JsonClient:
 
         A failure carries ``GET <path>`` and the attempt it gave up on (``NetError.at``).
         """
-        body = await self._get(path, params)
+        body = await self._send("GET", path, params)
+        return _decode(body)
+
+    async def query_json(self, path: str, sql: str, params: Sequence[int | str]) -> dict[str, object]:
+        """POST one of this client's ``read_queries`` with ``params`` to ``path``; return the JSON object.
+
+        Any other text is refused (``BLOCKED``) before a byte leaves. Retried like a GET: it only reads.
+        """
+        if sql not in self._read_queries:
+            raise NetError(NetErrorCode.BLOCKED, "not one of this client's read queries").at("POST (refused)")
+        if len(params) > _MAX_PARAMS or not all(_plain_param(value) for value in params):
+            raise NetError(NetErrorCode.BLOCKED, "query parameters must be a few plain values").at(
+                "POST (refused)"
+            )
+        body = await self._send("POST", path, {}, {"sql": sql, "params": list(params)})
         return _decode(body)
 
     async def get_json_list(self, path: str, params: Mapping[str, str]) -> list[object]:
         """Like :meth:`get_json`, for an endpoint that answers with a JSON array."""
-        body = await self._get(path, params)
+        body = await self._send("GET", path, params)
         return _decode_list(body)
 
-    async def _get(self, path: str, params: Mapping[str, str]) -> bytes:
-        """The body of a 200 answer to GET ``path``, retrying where it is safe."""
+    async def _send(
+        self, method: str, path: str, params: Mapping[str, str], body: dict[str, object] | None = None
+    ) -> bytes:
+        """The body of a 200 answer to ``method`` ``path``, retrying where it is safe (reads only)."""
         started = time.monotonic()
-        with span(f"GET {self._host}", kind="client", attributes=self._span_attributes()) as current:
+        attributes = {**self._span_attributes(), "http.request.method": method}
+        with span(f"{method} {self._host}", kind="client", attributes=attributes) as current:
             try:
-                body, attempts = await self._get_retrying(path, params)
+                answer, attempts = await self._send_retrying(method, path, params, body)
             except NetError as exc:
                 current.set_attribute("agentzaaheen.attempts", exc.attempt or 0)
                 if exc.status is not None:
@@ -207,17 +238,19 @@ class JsonClient:
                 duration_ms=elapsed_ms(started),
                 http_status=200,
             )
-            return body
+            return answer
 
     def _span_attributes(self) -> dict[str, str | int]:
         return {"server.address": self._host, "http.request.method": "GET"}
 
-    async def _get_retrying(self, path: str, params: Mapping[str, str]) -> tuple[bytes, int]:
+    async def _send_retrying(
+        self, method: str, path: str, params: Mapping[str, str], body: dict[str, object] | None
+    ) -> tuple[bytes, int]:
         """The body of a 200 answer and the attempt that got it."""
         try:
             url = self._base + check_path(path)
         except NetError as exc:
-            raise exc.at("GET (refused path)") from None  # never echo a path we refused
+            raise exc.at(f"{method} (refused path)") from None  # never echo a path we refused
         attempt = 0
         try:
             check_host(urlsplit(url).hostname, self._policy)
@@ -225,7 +258,7 @@ class JsonClient:
                 last = attempt == self._policy.max_attempts
                 try:
                     async with asyncio.timeout(self._policy.total_timeout_s):
-                        outcome = await self._attempt(url, params)
+                        outcome = await self._attempt(method, url, params, body)
                 except TimeoutError:  # our own whole-response deadline, not httpx's per-read one
                     if last:
                         raise NetError(NetErrorCode.TIMEOUT, "the response took too long in total") from None
@@ -249,14 +282,16 @@ class JsonClient:
                     raise NetError(code, "gave up after retries", status=status)
                 await self._back_off(attempt, retry_after, path, f"http_{status}")
         except NetError as exc:
-            exc.at(f"GET {path}", attempt or None, self._policy.max_attempts)
+            exc.at(f"{method} {path}", attempt or None, self._policy.max_attempts)
             raise
         raise AssertionError("unreachable: the last attempt always returns or raises")  # pragma: no cover
 
-    async def _attempt(self, url: str, params: Mapping[str, str]) -> bytes | tuple[int, str | None]:
+    async def _attempt(
+        self, method: str, url: str, params: Mapping[str, str], body: dict[str, object] | None
+    ) -> bytes | tuple[int, str | None]:
         """One request: the body of a 200 answer, or ``(status, Retry-After)`` when a retry may help."""
         try:
-            async with self._http.stream("GET", url, params=dict(params)) as response:
+            async with self._http.stream(method, url, params=dict(params), json=body) as response:
                 status = response.status_code
                 if status in _RETRY_STATUSES:
                     return status, response.headers.get("Retry-After")
@@ -267,12 +302,12 @@ class JsonClient:
                         NetErrorCode.RATE_LIMITED, "the hourly request allowance is used up", status=status
                     )
                 self._refuse_status(status)
-                body = await self._read_capped(response)
+                answer = await self._read_capped(response)
         except httpx.TimeoutException:
             raise NetError(NetErrorCode.TIMEOUT, "the request timed out") from None
         except httpx.TransportError:
             raise NetError(NetErrorCode.UNAVAILABLE, "could not reach the host") from None
-        return body
+        return answer
 
     async def get_redirected_bytes(self, path: str, params: Mapping[str, str]) -> bytes:
         """GET ``path`` (with our headers), expect a redirect to a signed link, and read that link.
@@ -352,6 +387,26 @@ class JsonClient:
         say(self._log, "net_retry", path=path, attempt=attempt, reason=reason, delay_s=round(delay, 2))
         event("retry", {"agentzaaheen.attempt": attempt, "agentzaaheen.reason": reason})
         await self._sleep(delay)
+
+
+def check_read_query(sql: str) -> str:
+    """Return ``sql`` if it is one plain ``SELECT`` (no ``;``, no comment, not too long), else raise."""
+    if (
+        not sql.startswith("SELECT ")
+        or len(sql) > _MAX_QUERY
+        or any(mark in sql for mark in (";", "--", "/*"))
+        or not sql.isprintable()
+    ):
+        raise ValueError("a read query is one plain SELECT, written in code")
+    return sql
+
+
+def _plain_param(value: object) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    return isinstance(value, str) and len(value) <= _MAX_PARAM_CHARS and value.isprintable()
 
 
 def check_download_link(link: str, download: DownloadPolicy) -> None:

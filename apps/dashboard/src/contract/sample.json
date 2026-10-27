@@ -933,6 +933,26 @@
   "registry": {
     "connectors": [
       {
+        "id": "availability",
+        "name": "Uptime history",
+        "category": "Health",
+        "description": "How many external checks found each project up, hour by hour: project, hour and two counts, never an address.",
+        "version": "0.1.0",
+        "level": "read",
+        "hosts": [
+          "api.cloudflare.com"
+        ],
+        "endpoints": [
+          "QUERY /client/v4/accounts/{account}/d1/database/{database}/query"
+        ],
+        "key_slots": [
+          "key"
+        ],
+        "fingerprint": "59136719632dcd0735064f81e2fd3e9e24bf4e3ae688ec9c8ba5465e87f31c20",
+        "uses": [],
+        "state": "on"
+      },
+      {
         "id": "expiry",
         "name": "Certificate and domain dates",
         "category": "Health",

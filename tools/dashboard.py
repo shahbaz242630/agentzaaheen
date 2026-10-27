@@ -148,6 +148,7 @@ from tools.dashboard_tracing import TracingNotStartedError, add_tracing_options,
 from tools.dashboard_uptime import UptimeLive, ntfy_topic, start_watch, uptime_list, uptime_portfolio
 from tools.fix_guides import Project, fixes_list
 from tools.key_dates import KeyDate, key_dates_list
+from tools.slo_tool import SloBook, slo_book
 
 UI_ROOT = Path(__file__).resolve().parent.parent / "apps" / "dashboard"
 UI_BUILD = UI_ROOT / "dist"
@@ -395,6 +396,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--fixes", type=Path, help="give the chat the fix guides in this local file")
     parser.add_argument(
+        "--slo", type=Path, help="give the chat each project's SLOs from this local list (projects/slo.yaml)"
+    )
+    parser.add_argument(
+        "--checker-db", help="ACCOUNT_ID/DATABASE_ID of the external checker's D1, for the SLO numbers"
+    )
+    parser.add_argument("--checker-db-key-env", help='env var holding the Cloudflare "D1 Read" key')
+    parser.add_argument(
         "--roles",
         type=Path,
         default=ROLES_ROOT,
@@ -467,6 +475,9 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
         checks = healthchecks_list(ns.healthchecks, projects)
         domains = domains_list(ns.domains, projects)
         fixes = fixes_list(ns.fixes, projects)
+        slo = slo_book(
+            ns.slo, projects, env, ns.checker_db_key_env, ns.checker_db, clock=clock, transport=transport
+        )
         key_dates = key_dates_list(ns.keys)
         off = off_connectors(connected.standing, registry) if connected else frozenset[str]()
         alerts = AlertLog(clock)  # the phone alerts, counted for the daily summaries
@@ -536,6 +547,7 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
             transport=transport,
             fixes=fixes,
             logs=LogFolder(ns.log_dir.expanduser()) if ns.log_dir is not None else None,
+            slo=slo,
         )
         if chat is None:
             return 1
@@ -814,13 +826,22 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
     transport: httpx.AsyncBaseTransport | None,
     fixes: Mapping[str, Project],
     logs: LogFolder | None,
+    slo: SloBook | None = None,
 ) -> ChatBackend | None:
     """The chat, with tools for what is on (with switches, it asks them before every question)."""
     raw = raw_token.strip()
     token = SecretStr(raw) if raw and usable_secret(raw) else None
     if switches is None:
         tools, skills = tools_for(
-            registry, PLUGINS_ROOT, token, GITHUB_REPOS, clock, transport=transport, fixes=fixes, logs=logs
+            registry,
+            PLUGINS_ROOT,
+            token,
+            GITHUB_REPOS,
+            clock,
+            transport=transport,
+            fixes=fixes,
+            logs=logs,
+            slo=slo,
         )
         hosts, _, _ = model_reach(model_url, None)
         return model_chat(model_url, transport, tools, skills, allowed_hosts=hosts)
@@ -836,6 +857,7 @@ def _chat(  # noqa: PLR0913  # the model, the token, what exists, what is on, an
             standing=standing,
             fixes=fixes,
             logs=logs,
+            slo=slo,
         )
 
     # Board inspection needs the audit log (the laptop database), so it exists only with switches.
