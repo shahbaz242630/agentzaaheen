@@ -34,6 +34,7 @@ def _ticket(seal: object) -> RunTicket:
         budget=Budget(steps=1, tokens=1, seconds=1),
         started_at=datetime(2026, 10, 26, tzinfo=UTC),
         model=None,
+        bookmarks={},
         seal=seal,
     )
 

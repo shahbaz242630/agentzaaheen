@@ -54,7 +54,7 @@ NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 PROJECT_TABLES = (
     "events", "runs", "findings", "actions", "sealed_secrets", "revenue_subscriptions",
     "revenue_payments", "revenue_refunds", "source_syncs", "workspace_settings", "agents",
-    "workspace_sources", "scout_runs", "daily_summaries", "run_starts",
+    "workspace_sources", "scout_runs", "daily_summaries", "run_starts", "bookmarks",
 )  # fmt: skip
 
 
@@ -110,7 +110,7 @@ async def _busy(db: Database, library: RoleLibrary, workspace: UUID) -> UUID:
     )
     # A finding that names its run (F11): deleting for good must remove findings before their runs.
     await Records(db.scoped(TENANT, workspace)).end_run(
-        ran, [finding(ran.id, tenant_id=TENANT, project_id=workspace)]
+        ran, [finding(ran.id, tenant_id=TENANT, project_id=workspace)], {"uptime.state": "up"}, moved_at=NOW
     )
     await RunStarts(db.scoped(TENANT, workspace)).open(
         RunStart(uuid4(), agent, "monitoring", "f" * 64, NOW, NOW + timedelta(minutes=1))

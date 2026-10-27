@@ -28,7 +28,15 @@ from agentzaaheen.core.api.registry import DashboardSwitches, PasskeyStatus, Reg
 from agentzaaheen.core.api.removal import DashboardRemoval
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.auth import Site
-from agentzaaheen.core.llm_gateway import ChatModel, Inspect, SpendLedger, StoreBook, claude_lines
+from agentzaaheen.core.llm_gateway import (
+    ChatModel,
+    Inspect,
+    KeyedPrinter,
+    SpendLedger,
+    StoreBook,
+    StoreNames,
+    claude_lines,
+)
 from agentzaaheen.core.policy import (
     Added,
     AgentControl,
@@ -62,7 +70,10 @@ from agentzaaheen.core.policy import (
 from agentzaaheen.core.registry import Kind, Registry
 from agentzaaheen.core.registry.roles import RoleLibrary
 from agentzaaheen.core.runner import Runner
+from agentzaaheen.core.sdk import ToolSpec
 from agentzaaheen.core.store import (
+    AgentRow,
+    AllNamePrints,
     Database,
     DatabaseSettings,
     EngagedSwitch,
@@ -136,7 +147,11 @@ class LaptopSwitches:
         enrol_code: str | None = None,
         library: RoleLibrary | None = None,
         keyring: Keyring | None = None,
+        tools: Mapping[str, ToolSpec] | None = None,
+        names: KeyedPrinter | None = None,
     ) -> None:
+        self._tools = dict(tools or {})  # every tool an agent run may name (F11)
+        self._names = names  # our customers' names as fingerprints, for the leak check (none: not checked)
         self._settings = DatabaseSettings(dsn=url, min_size=1, max_size=4)
         self._library = library or RoleLibrary((), ())
         self._agents: DashboardAgents | None = None
@@ -228,7 +243,18 @@ class LaptopSwitches:
         await self._open()
         if self._db is None or self._agent_control is None:  # pragma: no cover  # _open always sets them
             raise RuntimeError("the laptop database is not open")
-        return Runner(self._db, LAPTOP_TENANT, self._agent_control, {}, self._clock, model=model)
+        prints = AllNamePrints(self._db.scoped(LAPTOP_TENANT))
+        names = StoreNames(prints, self._names) if self._names is not None else None
+        return Runner(
+            self._db, LAPTOP_TENANT, self._agent_control, self._tools, self._clock, model=model, names=names
+        )
+
+    async def agents_doing(self, workspace: WorkspaceRow, role_id: str) -> list[AgentRow]:
+        """A workspace's agents of ``role_id`` that are switched on (the ones a schedule wakes)."""
+        await self._open()
+        if self._agent_control is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return await self._agent_control.doing(workspace.workspace_id, role_id)
 
     async def stop_switches(self) -> list[EngagedSwitch]:
         """Every stop switch that is on (the briefing names each one, F11)."""

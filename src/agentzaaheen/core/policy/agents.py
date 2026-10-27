@@ -174,6 +174,10 @@ class AgentControl:
         # The workspace was chosen at a door (an API route's address, a job's saved record).
         return AgentRows(self._db.scoped(self._tenant, workspace_id))
 
+    async def doing(self, workspace_id: UUID, role_id: str) -> list[AgentRow]:
+        """The workspace's agents of ``role_id`` that are switched on (the ones a schedule wakes)."""
+        return [a for a in await self._rows(workspace_id).agents() if a.role_id == role_id and a.enabled]
+
     async def view(self, workspace_id: UUID) -> WorkspaceAgents:
         """The workspace's switch, cap and spend this month, and each agent with its own spend."""
         rows, since = self._rows(workspace_id), month_start(self._clock())

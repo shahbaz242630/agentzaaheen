@@ -25,15 +25,20 @@ from agentzaaheen.core.api.agents import SwitchIn
 from agentzaaheen.core.api.app import REQUEST_HEADER
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.auth import PasskeyError, Site
-from agentzaaheen.core.policy import AgentVerdict, LifecycleVerdict
+from agentzaaheen.core.llm_gateway import prints_of
+from agentzaaheen.core.policy import AgentVerdict, Budget, LifecycleVerdict
+from agentzaaheen.core.runner import AgentResult, FindingDraft, RunTicket
+from agentzaaheen.core.sdk import DataClass, Evidence, FindingKind, Severity, Trust
 from agentzaaheen.core.store import (
     AuditRow,
     AuditRows,
     Database,
     DatabaseSettings,
+    NamePrints,
     StoreError,
     StoreErrorCode,
 )
+from tests.fixtures.name_prints import PRINTER
 from tests.fixtures.soft_authenticator import SoftAuthenticator
 from tests.integration.conftest import Server, run
 from tools import chat_tools, dashboard, dashboard_switches, laptop_db, vault_key
@@ -472,3 +477,57 @@ def test_a_broken_key_list_stops_the_start(
     keys.write_text("- {name: A, where: b, expires: soon, renew: c}\n", encoding="utf-8")
     assert dashboard.main(["--keys", str(keys)], static_dir=ui, serve=lambda *_: None) == 1
     assert "key 1: expires is not usable" in capsys.readouterr().out
+
+
+class _NamingJob:
+    """A built-in job whose one finding names a customer, as if copied from a page."""
+
+    role_id = "scout"
+    tools: frozenset[str] = frozenset()
+    budget = Budget(steps=1, tokens=1, seconds=30)
+    version = "a" * 64
+
+    async def run(self, ticket: RunTicket) -> AgentResult:
+        del ticket
+        draft = FindingDraft(
+            kind=FindingKind.INFO,
+            severity=Severity.P3,
+            title="A note",
+            body="Grace wrote in about her invoice.",
+            evidence=(Evidence(metric_id="uptime.eva"),),
+            trust=Trust.TRUSTED,
+            data_class=DataClass.PUBLIC,
+        )
+        return AgentResult(findings=(draft,))
+
+
+def test_the_dashboards_runner_checks_findings_for_our_customers_names(laptop_url: SecretStr) -> None:
+    eva = next(w for w in laptop_db.LAPTOP_WORKSPACES if w.slug == "eva")
+
+    async def body() -> str:
+        switches = dashboard_switches.LaptopSwitches(
+            laptop_url,
+            dashboard.load_plugins([]),
+            {},
+            lambda: NOW,
+            site=Site(origin="http://localhost:8765"),
+            names=PRINTER,
+        )
+        db = await Database.open(DatabaseSettings(dsn=laptop_url))
+        try:
+            pairs = {(p.kind.value, p.print) for p in prints_of(["Grace"], PRINTER)}
+            await NamePrints(db.scoped(laptop_db.LAPTOP_TENANT, eva.workspace_id)).add(
+                pairs, key_id=PRINTER.key_id, at=NOW
+            )
+            report = await (await switches.runner(None)).run_system(eva.workspace_id, _NamingJob())
+            async with db.scoped(laptop_db.LAPTOP_TENANT, eva.workspace_id).connection() as conn:
+                return str(
+                    await conn.fetchval(
+                        "SELECT data_class FROM agentzaaheen.findings WHERE run_id = $1", report.run_id
+                    )
+                )
+        finally:
+            await switches.close()
+            await db.close()
+
+    assert run(body()) == "customer-pii"  # a stored customer's name: moved up to customer data

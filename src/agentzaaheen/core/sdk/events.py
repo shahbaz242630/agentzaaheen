@@ -126,8 +126,8 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
     "agent_run_ended": LogEvent(
         "info",
         what="The {role} agent's run {run_id} ended: {outcome} ({reason}), {findings} finding(s), "
-        "cost {cost_minor} cent(s).",
-        why="The run's end, its findings and its cost were saved together.",
+        "cost {cost_minor} cent(s), {bookmarks} bookmark(s) moved.",
+        why="The run's end, its findings, its cost and where it got to were saved together.",
     ),
     "agent_findings_leak_checked": LogEvent(
         "warning",
@@ -596,6 +596,19 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="Could not read {source} again, so its cards keep the last read.",
         why="It stopped with an unexpected {kind} error.",
         next="The next try is in an hour; the cards turn grey if the read gets too old.",
+    ),
+    "monitoring_agents_unreadable": LogEvent(
+        "warning",
+        what="Could not read {project}'s agents, so its Monitoring agent was not woken this round.",
+        why="The database refused the read ({code}).",
+        next=f"The next round is in 5 minutes. {_SEE_DASHBOARD}",
+    ),
+    "monitoring_round_failed": LogEvent(
+        "warning",
+        what="One round of the Monitoring agents could not run.",
+        why="It stopped with an unexpected {kind} error.",
+        next="The next round runs in 5 minutes; phone alerts for downtime do not depend on it. "
+        + _SEE_DASHBOARD,
     ),
 }
 
