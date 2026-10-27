@@ -10,13 +10,21 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from agentzaaheen.core.api import SamplePortfolio
 from agentzaaheen.core.api.backend import backend_card, failed_backend_card
 from agentzaaheen.core.metrics import Freshness
 from agentzaaheen.core.sdk import BackendHealth, ProjectState, ServiceHealth, SourceError, SourceErrorCode
 from agentzaaheen.plugins.connectors.supabase import FakeSupabaseApi, SupabaseSource, mapping
 from tools import dashboard
+from tools.dashboard_reread import HourlyReads, Reread
 from tools.dashboard_sources import ListNotUsableError
-from tools.dashboard_supabase import SupabaseListError, load_supabase, supabase_list
+from tools.dashboard_supabase import (
+    SupabaseListError,
+    SupabaseProject,
+    load_supabase,
+    supabase_list,
+    supabase_portfolio,
+)
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 REF = "abcdefghijklmnopqrst"
@@ -337,6 +345,42 @@ def test_the_dashboard_shows_real_backend_cards(
     assert sk["freshness"] == "never"
     connector = next(c for c in client.get("/api/registry").json()["connectors"] if c["id"] == "supabase")
     assert {u["project_id"] for u in connector["uses"]} == {"eva", "sandoq-kin"}
+
+
+def test_the_backend_card_is_read_again_every_hour(capsys: pytest.CaptureFixture[str]) -> None:
+    clock = {"now": NOW}
+    answers = healthy_api()
+    healthy = {"ok": True}
+
+    def serve(request: httpx.Request) -> httpx.Response:
+        body = answers.get(request.url.path)
+        if not healthy["ok"] or body is None:
+            return httpx.Response(404, json={})
+        return httpx.Response(200, json=body)
+
+    reads: list[Reread] = []
+    portfolio = supabase_portfolio(
+        SamplePortfolio(NOW),
+        {"eva": SupabaseProject(ref=REF, token_env="SUPA_EVA")},
+        {"SUPA_EVA": TOKEN},
+        clock=lambda: clock["now"],
+        transport=httpx.MockTransport(serve),
+        reads=reads,
+    )
+
+    def backend() -> str:
+        detail = portfolio.project("eva")
+        assert detail is not None
+        return next(c for c in detail.cards if c.id == "supabase").freshness.value
+
+    clock["now"] = NOW + 7 * HOUR
+    assert backend() == "alert"  # what the server's 05:00 summary saw on 27 Oct
+    asyncio.run(HourlyReads(reads).round())
+    assert backend() == "fresh"
+    healthy["ok"] = False  # the project now answers with a failure: the card says so, not the old numbers
+    asyncio.run(HourlyReads(reads).round())
+    assert backend() == "never"
+    assert '"failing": 1' in capsys.readouterr().err
 
 
 def test_a_broken_supabase_list_stops_the_start(

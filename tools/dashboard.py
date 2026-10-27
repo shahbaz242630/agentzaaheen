@@ -5,14 +5,15 @@ It refuses any other address: the dashboard has no login yet, so it must
 never be reachable from the network.
 
 With ``--paddle-key-env NAME`` it first reads Zaaheen's live Paddle account
-once (GET only, through the core's one HTTP client) and shows those numbers on
+(GET only, through the core's one HTTP client) and shows those numbers on
 the Revenue card; every other card stays sample. The key comes from the named
 environment variable and is never printed. The numbers are held in memory
-only, and turn to "unknown" once they are older than the freshness rule allows
-(restart to read again).
+only, read again every hour (``tools.dashboard_reread``, as GitHub and
+Supabase are), and turn to "unknown" once they are older than the freshness
+rule allows.
 
 With ``--github-token-env NAME`` it also reads each project's GitHub
-repository once (GET only: open issues, open pull requests and the newest
+repository (GET only: open issues, open pull requests and the newest
 build on the main branch, counts only) and shows them on its Code card. The
 token comes from the named environment variable and is never printed. A
 repository that cannot be read shows why on its card; the others still show.
@@ -117,6 +118,7 @@ from tools import laptop_db, vault_key
 from tools.chat_tools import LOCAL_MODEL_ID, Switched, model_chat, tools_for
 from tools.dashboard_adding import LaptopAdding
 from tools.dashboard_profile import LaptopProfiles, Repos
+from tools.dashboard_reread import HourlyReads, Reread
 from tools.dashboard_scout import LaptopScout
 from tools.dashboard_sources import (
     GITHUB_REPOS,
@@ -236,9 +238,11 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
     """The portfolio with every requested real source laid over the sample, and what is real.
 
     A connector in ``off`` (switched off on the Customize page) is not read at all.
+    Paddle, GitHub and Supabase are read again every hour (uptime has its own 5-minute watch).
     """
     portfolio: Portfolio | None = None
     live: list[str] = []
+    reads: list[Reread] = []
     asked_for = (
         ("paddle", ns.paddle_key_env),
         ("github", ns.github_token_env),
@@ -249,13 +253,15 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
         if asked and connector in off:
             print(f"dashboard: {connector} is switched off on the Customize page, so it was not read.")
     if ns.paddle_key_env and "paddle" not in off:
-        portfolio = live_portfolio(ns.paddle_key_env, env, clock=clock, transport=transport)
+        portfolio = live_portfolio(ns.paddle_key_env, env, clock=clock, transport=transport, reads=reads)
         if portfolio is None:
             raise _NotStartedError
         live.append("Paddle for Zaaheen")
     if ns.github_token_env and "github" not in off:
         base = portfolio or SamplePortfolio(clock())
-        portfolio = github_portfolio(base, ns.github_token_env, env, clock=clock, transport=transport)
+        portfolio = github_portfolio(
+            base, ns.github_token_env, env, clock=clock, transport=transport, reads=reads
+        )
         if portfolio is None:
             raise _NotStartedError
         live.append("GitHub for every project")
@@ -278,8 +284,11 @@ def _real_data(  # noqa: PLR0913  # the options, the outside world, and what is 
         live.append("uptime checks")
     if backends and "supabase" not in off:
         base = portfolio or SamplePortfolio(clock())
-        portfolio = supabase_portfolio(base, backends, env, clock=clock, transport=transport)
+        portfolio = supabase_portfolio(base, backends, env, clock=clock, transport=transport, reads=reads)
         live.append("Supabase")
+    if reads:
+        HourlyReads(reads).start()
+        print(f"dashboard: {', '.join(r.source for r in reads)} will be read again every hour.")
     return portfolio, live
 
 
