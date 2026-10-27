@@ -35,7 +35,7 @@ from agentzaaheen.core.llm_gateway.cloud_check import MAX_CHECKED_CHARS
 from agentzaaheen.core.runner.agent import FindingDraft
 from agentzaaheen.core.sdk import Action, ActionLevel, DataClass, contains_secret, max_data_class
 
-SECRET = "secret"  # noqa: S105  # the kind of thing found, not a password
+SECRET = "secret"  # noqa: S105  # nosec B105  # the kind of thing found, not a password
 TOO_LONG = Found.TOO_LONG.value
 NO_NAME_LIST = Found.NO_NAME_LIST.value
 

@@ -43,7 +43,7 @@ class Refusal(StrEnum):
     ABOVE_ROLE = "model.above_role_level"
     NO_USE = "model.no_use"  # a cloud call must say what it is for, so it has a cap
     CUSTOMER_DATA = "model.customer_data"
-    SECRET = "model.secret"  # noqa: S105  # a reason code: a key or password was in the prompt (F11 slice 3)
+    SECRET = "model.secret"  # noqa: S105  # nosec B105  # a reason code, not a password (F11 slice 3)
     USE_CAP = "model.use_cap_reached"
     TOTAL_STOP = "model.total_stop_reached"
 
