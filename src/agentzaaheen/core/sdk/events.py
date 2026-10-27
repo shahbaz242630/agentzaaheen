@@ -554,6 +554,23 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         why="It stopped with an unexpected {kind} error.",
         next=f"The next round runs in 5 minutes. {_SEE_DASHBOARD}",
     ),
+    "reread_done": LogEvent(
+        "info",
+        what="Read {source} again: {failing} projects could not be read.",
+        why="Paddle, GitHub and Supabase are read again every hour, so their cards never go out of date.",
+    ),
+    "reread_failed": LogEvent(
+        "warning",
+        what="Could not read {source} again, so its cards keep the last read: {said}",
+        explains="code",
+        vendor="source",
+    ),
+    "reread_crashed": LogEvent(
+        "warning",
+        what="Could not read {source} again, so its cards keep the last read.",
+        why="It stopped with an unexpected {kind} error.",
+        next="The next try is in an hour; the cards turn grey if the read gets too old.",
+    ),
 }
 
 

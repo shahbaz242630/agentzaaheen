@@ -1,4 +1,4 @@
-"""Where the dashboard's real numbers come from on this laptop: Paddle and GitHub, read once at start.
+"""Where the dashboard's real numbers come from on this laptop: Paddle and GitHub, read at start and hourly.
 
 Split from ``tools.dashboard`` (which re-exports these names). Every read is
 GET only, through the core's one HTTP client; keys come from environment
@@ -30,11 +30,12 @@ from agentzaaheen.plugins.connectors.paddle import (
     LIVE_BASE_URL,
     PaddleSource,
 )
+from tools.dashboard_reread import Latest, Reread
 from tools.laptop_db import LAPTOP_REPOS
 
-# Read once at start: treated as an hourly source, so it shows "unknown" after two hours.
+# Read at start, then again every hour (``tools.dashboard_reread``): "unknown" after two hours without a read.
 PADDLE_SCHEDULE = timedelta(hours=1)
-# Read once at start, like Paddle: "unknown" after two hours.
+# Read like Paddle: "unknown" after two hours without a read.
 GITHUB_SCHEDULE = timedelta(hours=1)
 # Which repository each project's Code card reads (the laptop's five projects).
 GITHUB_REPOS: dict[str, str] = dict(LAPTOP_REPOS)
@@ -104,8 +105,12 @@ def live_portfolio(
     *,
     clock: Clock = utc_now,
     transport: httpx.AsyncBaseTransport | None = None,
+    reads: list[Reread] | None = None,
 ) -> Portfolio | None:
-    """Sample data with the real Zaaheen Paddle card, or ``None`` (after saying why) if the read failed."""
+    """Sample data with the real Zaaheen Paddle card, or ``None`` (after saying why) if the read failed.
+
+    Given ``reads``, its hourly re-read is added there.
+    """
     raw = environ.get(key_env, "").strip()
     if not raw:
         print(f"dashboard: {key_env} is not set, so Paddle was not read.")
@@ -130,8 +135,21 @@ def live_portfolio(
         f"dashboard: read {len(batch.subscriptions)} subscriptions, {len(batch.payments)} payment attempts "
         f"and {len(batch.refunds)} refunds."
     )
-    makers = {("zaaheen", "paddle"): paddle_card(batch, read_at, clock)}
-    return OverlayPortfolio(SamplePortfolio(read_at), makers)
+    latest = Latest((batch, read_at))
+    if reads is not None:
+        key = SecretStr(raw)
+
+        async def reread() -> int:
+            now = clock()
+            latest.value = (await read_paddle(key, now, transport), now)  # a failure keeps the last read
+            return 0
+
+        reads.append(Reread("Paddle", reread))
+
+    def newest() -> Card:  # built from ``latest`` on every request, never from the read at start
+        return paddle_card(*latest.value, clock)()
+
+    return OverlayPortfolio(SamplePortfolio(read_at), {("zaaheen", "paddle"): newest})
 
 
 def usable_secret(raw: str) -> bool:
@@ -181,8 +199,12 @@ def github_portfolio(  # noqa: PLR0913  # the base, the token's name, and the in
     clock: Clock = utc_now,
     transport: httpx.AsyncBaseTransport | None = None,
     repos: Mapping[str, str] | None = None,
+    reads: list[Reread] | None = None,
 ) -> Portfolio | None:
-    """``base`` with each project's real Code card, or ``None`` (after saying why) if there is no token."""
+    """``base`` with each project's real Code card, or ``None`` (after saying why) if there is no token.
+
+    Given ``reads``, its hourly re-read is added there.
+    """
     repos = GITHUB_REPOS if repos is None else repos
     raw = environ.get(token_env, "").strip()
     if not raw:
@@ -205,5 +227,23 @@ def github_portfolio(  # noqa: PLR0913  # the base, the token's name, and the in
                 f"dashboard: {repos[project]}: {result.open_issues} open issues, "
                 f"{result.open_pull_requests} open pull requests, build {result.build.value}."
             )
-    makers = {(project, CODE_CARD): github_card(result, clock) for project, result in results.items()}
+    latest = Latest(results)
+    if reads is not None:
+        token = SecretStr(raw)
+
+        async def reread() -> int:
+            latest.value = await read_github(token, repos, clock(), transport)
+            return sum(1 for result in latest.value.values() if isinstance(result, SourceError))
+
+        reads.append(Reread("GitHub", reread))
+    makers = {(project, CODE_CARD): _latest_code(latest, project, clock) for project in results}
     return OverlayPortfolio(base, makers)
+
+
+def _latest_code(
+    latest: Latest[dict[str, RepoHealth | SourceError]], project: str, clock: Clock
+) -> CardMaker:
+    def newest() -> Card:  # built from ``latest`` on every request, never from the read at start
+        return github_card(latest.value[project], clock)()
+
+    return newest

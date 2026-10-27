@@ -88,6 +88,12 @@ DOORS: list[tuple[str, Path, str, set[str]]] = [
         {"uptime_round_failed"},
     ),
     (
+        "scheduled: hourly re-read",
+        ROOT / "tools/dashboard_reread.py",
+        "HourlyReads.round",
+        {"reread_done", "reread_failed", "reread_crashed"},
+    ),
+    (
         "scheduled: revenue sync",
         SRC / "core/scheduler/collect.py",
         "_sync",

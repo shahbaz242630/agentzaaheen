@@ -1,4 +1,4 @@
-"""Supabase on this laptop: read the local list, read each project once, show Backend cards (F03 slice 6).
+"""Supabase on this laptop: read the local list, read each project hourly, show Backend cards (F03 slice 6).
 
 The list lives in ``projects/supabase.yaml`` (git-ignored and path-guarded,
 Rulebook §7b). Each project names its Supabase project ref and the
@@ -40,9 +40,10 @@ from agentzaaheen.core.sdk import (
     say,
 )
 from agentzaaheen.plugins.connectors import supabase
+from tools.dashboard_reread import Latest, Reread
 from tools.dashboard_sources import ListNotUsableError
 
-# Read once at start: treated as an hourly source, so it shows "unknown" after two hours.
+# Read at start, then again every hour (``tools.dashboard_reread``): "unknown" after two hours without a read.
 SUPABASE_SCHEDULE = timedelta(hours=1)
 MAX_LIST_BYTES = 16 * 1024
 SOURCE_LABEL = "Supabase (live)"
@@ -136,15 +137,19 @@ def supabase_maker(result: BackendHealth | SourceError | _Missing, clock: Clock)
     return make
 
 
-def supabase_portfolio(
+def supabase_portfolio(  # noqa: PLR0913  # the base, the list, and the injectable outside world
     base: Portfolio,
     listed: Mapping[str, SupabaseProject],
     env: Mapping[str, str],
     *,
     clock: Clock,
     transport: httpx.AsyncBaseTransport | None = None,
+    reads: list[Reread] | None = None,
 ) -> Portfolio:
-    """``base`` with each listed project's real Backend card, after saying how each one stood."""
+    """``base`` with each listed project's real Backend card, after saying how each one stood.
+
+    Given ``reads``, its hourly re-read is added there.
+    """
     print(f"dashboard: reading {len(listed)} Supabase projects (read-only)...")
     results = asyncio.run(read_supabase(listed, env, clock(), transport))
     for project, result in results.items():
@@ -158,8 +163,25 @@ def supabase_portfolio(
         else:
             down = len(result.services) - result.healthy_services
             print(f"dashboard: {project}: Supabase {result.state.value}, {down} unhealthy services.")
-    makers = {(project, CARD_ID): supabase_maker(result, clock) for project, result in results.items()}
+    latest = Latest(results)
+    if reads is not None:
+
+        async def reread() -> int:
+            latest.value = await read_supabase(listed, env, clock(), transport)
+            return sum(1 for result in latest.value.values() if not isinstance(result, BackendHealth))
+
+        reads.append(Reread("Supabase", reread))
+    makers = {(project, CARD_ID): _latest_backend(latest, project, clock) for project in results}
     return OverlayPortfolio(base, makers)
+
+
+def _latest_backend(
+    latest: Latest[dict[str, BackendHealth | SourceError | _Missing]], project: str, clock: Clock
+) -> CardMaker:
+    def newest() -> Card:  # built from ``latest`` on every request, never from the read at start
+        return supabase_maker(latest.value[project], clock)()
+
+    return newest
 
 
 def supabase_list(path: Path | None, projects: Collection[str]) -> dict[str, SupabaseProject]:
