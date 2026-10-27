@@ -4,8 +4,11 @@ Agent Zaaheen decides what a connector may do from *our* manifest, never from wh
 an outside server says about itself (the MCP spec calls those hints
 untrusted, research/07 §3.3). A manifest that declares no permissions counts
 as ``act``, so it could only ever propose. A connector that declares itself
-read-only may list only ``GET`` endpoints. The ``interface`` block is the
-only place its display name and category live (white-label, ADR-027).
+read-only may list only ``GET`` endpoints, and ``QUERY`` endpoints: an API
+that reads only by ``POST`` (Cloudflare D1's SQL query), where the core sends
+nothing but the fixed ``SELECT`` texts the connector names in code, with a
+read-only key (``core.net.JsonClient.query_json``). The ``interface`` block is
+the only place its display name and category live (white-label, ADR-027).
 """
 
 from __future__ import annotations
@@ -20,7 +23,8 @@ from agentzaaheen.core.registry.models import ITEM_ID, Connector
 from agentzaaheen.core.sdk import DataClass, ToolLevel
 
 MANIFEST = "plugin.yaml"
-_METHODS = ("GET /", "POST /", "PUT /", "PATCH /", "DELETE /")
+_METHODS = ("GET /", "QUERY /", "POST /", "PUT /", "PATCH /", "DELETE /")
+_READS = ("GET /", "QUERY /")
 
 
 class _Strict(BaseModel):
@@ -57,8 +61,8 @@ class _Manifest(_Strict):
             raise ValueError("permissions may not be empty (leave the field out to mean 'act')")
         if not all(endpoint.startswith(_METHODS) for endpoint in self.endpoints):
             raise ValueError("each endpoint must be a method and a path, e.g. 'GET /items'")
-        if self.level is ToolLevel.READ and not all(e.startswith("GET /") for e in self.endpoints):
-            raise ValueError("it declares itself read-only but lists an endpoint that is not GET")
+        if self.level is ToolLevel.READ and not all(e.startswith(_READS) for e in self.endpoints):
+            raise ValueError("it declares itself read-only but lists an endpoint that is not GET or QUERY")
         return self
 
     @property

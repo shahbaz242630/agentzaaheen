@@ -625,6 +625,18 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         next="The next round tries again in 5 minutes; after 15 minutes without a read, "
         "Monitoring writes that Healthchecks could not be read. Healthchecks still alerts the phone itself.",
     ),
+    "availability_read_done": LogEvent(
+        "info",
+        what="Read {count} hourly uptime counts from the external checker for the SLO numbers.",
+        why="The SLO numbers are worked out from the checker's counts, read at most once an hour.",
+    ),
+    "availability_read_failed": LogEvent(
+        "warning",
+        what="Could not read the external checker's uptime counts, so the SLO numbers keep the last read.",
+        why="The read was refused or did not answer ({code}).",
+        next="It is tried again the next time the SLO numbers are asked for; after 2 hours without a read "
+        "they are shown as unknown, never as fine.",
+    ),
     "expiry_read_done": LogEvent(
         "info",
         what="Read the end dates of {checks} {kind} names for Monitoring ({unread} could not be read).",

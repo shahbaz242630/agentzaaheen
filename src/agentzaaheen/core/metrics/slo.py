@@ -8,13 +8,20 @@ Google SRE workbook (chapter 5): a long window shows the burn is real, a short
 one shows it is still happening, so an outage that has ended stops alerting.
 
 No events means "unknown", never 100% (PRD F1.7). Exact fractions throughout.
+
+:func:`hourly_status` works an objective out from counts kept by the hour
+(the checker's availability counts). Windows are then whole hours: an hour
+counts if it started inside the window. So only burn rules whose two
+windows are both at least an hour can be judged (the 3-day + 6-hour slow
+burn); the fast ones (5 and 30 minutes) never fire from hourly counts. A
+fast outage is already on the phone within 60 seconds from the checker.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 from fractions import Fraction
 
@@ -24,6 +31,7 @@ from agentzaaheen.core.sdk import Severity
 MIN_WINDOW = timedelta(days=1)
 MAX_WINDOW = timedelta(days=90)
 NO_EVENTS = Unknown("slo.no_events")
+HOUR = timedelta(hours=1)
 
 
 class SliKind(StrEnum):
@@ -128,3 +136,49 @@ def burn_alert(target: Fraction, windows: Mapping[timedelta, Counts]) -> Severit
         if all(not isinstance(r, Unknown) and r >= rule.rate for r in rates):
             fired.append(rule.severity)
     return min(fired) if fired else None  # "P1" sorts before "P2"
+
+
+@dataclass(frozen=True)
+class SloStatus:
+    """How one objective stands now: its window's counts and what code works out from them."""
+
+    objective: Objective
+    counts: Counts
+    measured: timedelta  # how much of the window has counts so far (at most the window)
+    compliance: Fraction | Unknown
+    budget_left: Fraction | Unknown
+    burn: Severity | None
+
+    @property
+    def time_left(self) -> timedelta | None:
+        """For availability: the budget still unspent as time over the whole window (``None``: unknown)."""
+        if self.objective.kind is not SliKind.AVAILABILITY or isinstance(self.budget_left, Unknown):
+            return None
+        left = max(self.budget_left, Fraction(0))
+        return self.objective.allowed_downtime * left.numerator / left.denominator
+
+
+def hourly_status(objective: Objective, hours: Iterable[tuple[datetime, Counts]], now: datetime) -> SloStatus:
+    """``objective`` from counts kept per hour (each hour's start and its counts), as of ``now``."""
+    kept = [(start, counts) for start, counts in hours if start <= now]
+    in_window = [(start, counts) for start, counts in kept if start >= now - objective.window]
+    counts = _sum(c for _, c in in_window)
+    first = min((start for start, c in in_window if c.total), default=None)
+    measured = timedelta(0) if first is None else min(objective.window, now - first)
+    windows = {w: _sum(c for start, c in kept if start >= now - w) for w in BURN_WINDOWS if w >= HOUR}
+    return SloStatus(
+        objective=objective,
+        counts=counts,
+        measured=measured,
+        compliance=compliance(counts),
+        budget_left=budget_left(counts, objective.target),
+        burn=burn_alert(objective.target, windows),
+    )
+
+
+def _sum(counts: Iterable[Counts]) -> Counts:
+    good = total = 0
+    for each in counts:
+        good += each.good
+        total += each.total
+    return Counts(good, total)

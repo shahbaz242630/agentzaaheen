@@ -164,6 +164,20 @@ def test_a_connector_keeps_slot_names_only(tmp_path: Path) -> None:
     )
 
 
+def test_a_read_only_connector_may_name_a_read_query(tmp_path: Path) -> None:
+    # QUERY: an API that reads only by POST (D1); the core sends only SELECTs fixed in code.
+    fields = manifest(endpoints=["GET /items", "QUERY /db/query"])
+    assert read_connector(connector(tmp_path, fields)).level is ToolLevel.READ
+
+
+def test_our_availability_connector_only_reads_by_a_named_query() -> None:
+    found = read_connector(PLUGINS / "connectors" / "availability")
+    assert found.level is ToolLevel.READ
+    assert all(endpoint.startswith("QUERY /") for endpoint in found.endpoints)
+    assert found.hosts == ("api.cloudflare.com",)
+    assert found.key_slots == ("key",)
+
+
 def test_undeclared_permissions_count_as_act(tmp_path: Path) -> None:
     found = read_connector(connector(tmp_path, manifest(permissions=None, endpoints=["POST /send"])))
     assert found.level is ToolLevel.ACT
@@ -178,6 +192,8 @@ def test_the_highest_declared_permission_wins(tmp_path: Path) -> None:
     ("fields", "code"),
     [
         (manifest(endpoints=["GET /items", "DELETE /items/{id}"]), "registry.bad_manifest"),
+        (manifest(endpoints=["POST /db/query"]), "registry.bad_manifest"),  # a write, unless named QUERY
+        (manifest(endpoints=["QUERY db/query"]), "registry.bad_manifest"),
         (manifest(endpoints=["items"]), "registry.bad_manifest"),
         (manifest(permissions=[]), "registry.bad_manifest"),
         (manifest(interface=None), "registry.bad_manifest"),

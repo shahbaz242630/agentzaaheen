@@ -29,7 +29,7 @@ DOORS: list[tuple[str, Path, str, set[str]]] = [
     (
         "outside calls: connectors",
         SRC / "core/net/client.py",
-        "JsonClient._get",
+        "JsonClient._send",
         {"net_answered", "net_failed"},
     ),
     ("outside calls: retries", SRC / "core/net/client.py", "JsonClient._back_off", {"net_retry"}),
@@ -151,6 +151,18 @@ DOORS: list[tuple[str, Path, str, set[str]]] = [
         ROOT / "tools/dashboard_expiry.py",
         "ExpiryReader.refresh",
         {"expiry_read_done", "expiry_read_failed"},
+    ),
+    (
+        "settings: SLO list",
+        ROOT / "tools/slo_tool.py",
+        "slo_book",
+        {"settings_loaded", "settings_refused"},
+    ),
+    (
+        "outside calls: the checker's uptime counts",
+        ROOT / "tools/slo_tool.py",
+        "AvailabilityReader.refresh",
+        {"availability_read_done", "availability_read_failed"},
     ),
     (
         "settings: fix guides",

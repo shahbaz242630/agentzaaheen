@@ -6,7 +6,8 @@ What it does:
     subscribers, trials, failed payments, refunds, cash revenue, the
     failed-payment spike rule, the freshness rule (stale = unknown), the
     key-expiry rule (warn 14 days ahead, P1 once expired or refused) and the
-    SLO rules (compliance, error budget left, multi-window burn alerts).
+    SLO rules (compliance, error budget left, multi-window burn alerts, and
+    an objective's status from hourly counts).
 
 Public interface:
     Everything in ``__all__`` below. A number that cannot be given truthfully
@@ -44,10 +45,12 @@ from agentzaaheen.core.metrics.slo import (
     Counts,
     Objective,
     SliKind,
+    SloStatus,
     budget_left,
     burn_alert,
     burn_rate,
     compliance,
+    hourly_status,
 )
 
 __all__ = [
@@ -66,6 +69,7 @@ __all__ = [
     "KeyHealth",
     "Objective",
     "SliKind",
+    "SloStatus",
     "Unknown",
     "active_subscribers",
     "budget_left",
@@ -77,6 +81,7 @@ __all__ = [
     "failed_payment_spike",
     "failed_payments",
     "freshness",
+    "hourly_status",
     "key_health",
     "monthly_share",
     "mrr",

@@ -123,6 +123,7 @@ def test_a_switch_turned_off_stays_off_after_a_restart(ui: Path, laptop_url: Sec
         page = client.get("/api/registry").json()
         assert page["switches"] is True
         assert states(client) == {
+            "availability": "on",
             "expiry": "on",
             "github": "on",
             "healthchecks": "on",

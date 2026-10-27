@@ -12,6 +12,9 @@ each with a closed list of arguments:
   to check or fix when it is down (``tools.fix_guides``, our own local file).
 - ``read_logs`` (with ``--log-dir``, while the ``read-logs`` skill is on): one
   project's recent warnings and errors from the kept logs (``tools.log_tool``).
+- ``slo_status`` (with ``--slo``, while the ``check-slo`` skill is on): how one
+  project stands against its SLOs, computed by code (``tools.slo_tool``); the
+  checker's counts are read only while the ``availability`` connector is on.
 
 The skill catalogue in the prompt lists the same skills, one line each.
 
@@ -58,6 +61,7 @@ from agentzaaheen.core.telemetry import LogFolder
 from agentzaaheen.plugins.connectors import github
 from tools.fix_guides import Project, fix_guide_tool
 from tools.log_tool import READ_LOGS_SKILL, read_logs_tool
+from tools.slo_tool import AVAILABILITY_CONNECTOR, CHECK_SLO_SKILL, SloBook, slo_status_tool
 
 Clock = Callable[[], datetime]
 # The model menu entry the local model trial connects (see SamplePortfolio.models).
@@ -236,6 +240,7 @@ def tools_for(  # noqa: PLR0913  # the registry, where it lives, the outside wor
     standing: Standing | None = None,
     fixes: Mapping[str, Project] | None = None,
     logs: LogFolder | None = None,
+    slo: SloBook | None = None,
 ) -> ToolSet:
     """The chat's tools and skill catalogue for what is on (``standing``; ``None``: no switches, so all)."""
     skill, skills = skill_tool(registry, plugins_root, None if standing is None else standing.on(Kind.SKILL))
@@ -250,4 +255,9 @@ def tools_for(  # noqa: PLR0913  # the registry, where it lives, the outside wor
         reader = read_logs_tool(logs, repos)  # the same projects: each one's id
         if reader is not None:
             tools.append(reader)
+    if slo is not None and (standing is None or CHECK_SLO_SKILL in standing.on(Kind.SKILL)):
+        counts_on = standing is None or AVAILABILITY_CONNECTOR in standing.on(Kind.CONNECTOR)
+        status = slo_status_tool(slo.objectives, slo.reader if counts_on else None, clock)
+        if status is not None:
+            tools.append(status)
     return tools, skills
