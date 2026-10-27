@@ -23,7 +23,7 @@ export function ClaudeKeyPanel({ status, canSign, busy, onSave }: Props) {
   const cleaned = key.trim();
   const looksRight = cleaned.startsWith(PREFIX) && cleaned.length > PREFIX.length && !/\s/.test(cleaned);
   return (
-    <section aria-labelledby="claude-key-title" className="rounded-2xl border border-line bg-panel px-5 py-4">
+    <section aria-labelledby="claude-key-title" className="rounded-2xl border border-line bg-panel p-5 shadow-[0_1px_2px_oklch(0_0_0/0.04)]">
       <h2 id="claude-key-title" className="flex items-center gap-2 font-semibold text-ink">
         <KeyRound className="size-4 text-faint" aria-hidden="true" />
         Claude API key

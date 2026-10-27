@@ -85,6 +85,7 @@ describe("the registry switches", () => {
   it("no longer shows the one-way heads-up: off can be undone by approval", async () => {
     serve({});
     view(page);
+    await userEvent.click(await screen.findByRole("tab", { name: /Passkeys/ }));
     expect(await screen.findByText(/Your passkey is set up/)).toBeInTheDocument();
     expect(screen.queryByText(/Heads up/)).not.toBeInTheDocument();
   });

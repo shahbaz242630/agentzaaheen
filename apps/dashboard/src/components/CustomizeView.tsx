@@ -33,11 +33,14 @@ function explain(failure: unknown): string {
 }
 
 type Shelf = "yours" | "discover";
+// The fourth tab holds the passkey and the keys it guards (only with switches: they live in the laptop database).
+type Tab = Kind | "keys";
 
-const TABS: { kind: Kind; label: string }[] = [
+const TABS: { kind: Tab; label: string }[] = [
   { kind: "connector", label: "Connectors" },
   { kind: "skill", label: "Skills" },
   { kind: "plugin", label: "Plugins" },
+  { kind: "keys", label: "Passkeys" },
 ];
 
 const EMPTY: Record<Shelf, Record<Kind, string>> = {
@@ -76,12 +79,13 @@ const SEGMENT = [
 ].join(" ");
 
 export function CustomizeView({ page, projectName, onChange }: Props) {
-  const [tab, setTab] = useState<Kind>("connector");
+  const [tab, setTab] = useState<Tab>("connector");
   const [shelf, setShelf] = useState<Shelf>("yours");
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passkey, setPasskey] = useState<PasskeyStatus | null>(null);
+  const [justSetUp, setJustSetUp] = useState(false); // keeps the confirmation where it was asked for
   const [claudeKey, setClaudeKey] = useState<ClaudeKeyStatus | null>(null);
   const [serverToken, setServerToken] = useState<ServerTokenStatus | null>(null);
   const [modelKey, setModelKey] = useState<ModelKeyStatus | null>(null);
@@ -135,13 +139,20 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
   );
   const skills = page.skills.filter((s) => keep(s.state) && matches(query, s.id, skillTitle(s.id), s.description));
   const plugins = page.plugins.filter((p) => keep(p.state) && matches(query, p.id, p.description));
-  const counts: Record<Kind, number> = {
+  const counts: Record<Tab, number> = {
     connector: page.connectors.filter((c) => keep(c.state)).length,
     skill: page.skills.filter((s) => keep(s.state)).length,
     plugin: page.plugins.filter((p) => keep(p.state)).length,
+    // What is set up: the passkey, and each key saved with it.
+    keys: [passkey?.enrolled, claudeKey?.saved, serverToken?.saved, modelKey?.saved].filter(Boolean).length,
   };
-  const shown = { connector: connectors.length, skill: skills.length, plugin: plugins.length }[tab];
+  const tabs = TABS.filter(({ kind }) => kind !== "keys" || page.switches);
+  const shown = { connector: connectors.length, skill: skills.length, plugin: plugins.length, keys: 0 }[tab];
   const problems = page.problems.filter((p) => p.kind === tab);
+  const canSign = passkey?.enrolled === true && onPasskeyAddress();
+  // Above the tabs while it needs you (wrong address, none yet, set-up open, or just set up); else on its tab.
+  const passkeyNeedsYou =
+    passkey !== null && (justSetUp || !onPasskeyAddress() || !passkey.enrolled || passkey.enrolment_open);
 
   function act(change: Promise<RegistryPage>) {
     setBusy(true);
@@ -164,6 +175,7 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
     setUpPasskey(code).then(
       (status) => {
         setPasskey(status);
+        setJustSetUp(true);
         setBusy(false);
       },
       (failure: unknown) => {
@@ -261,35 +273,8 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
         </p>
       </header>
 
-      {page.switches && passkey !== null && (
+      {page.switches && passkey !== null && passkeyNeedsYou && (
         <PasskeyPanel status={passkey} onAddress={onPasskeyAddress()} busy={busy} onSetUp={setUp} />
-      )}
-
-      {page.switches && claudeKey?.switches === true && (
-        <ClaudeKeyPanel
-          status={claudeKey}
-          canSign={passkey?.enrolled === true && onPasskeyAddress()}
-          busy={busy}
-          onSave={saveClaudeKey}
-        />
-      )}
-
-      {page.switches && serverToken?.switches === true && (
-        <ServerTokenPanel
-          status={serverToken}
-          canSign={passkey?.enrolled === true && onPasskeyAddress()}
-          busy={busy}
-          onSave={saveServerToken}
-        />
-      )}
-
-      {page.switches && modelKey?.switches === true && (
-        <ModelKeyPanel
-          status={modelKey}
-          canSign={passkey?.enrolled === true && onPasskeyAddress()}
-          busy={busy}
-          onSave={saveModelKey}
-        />
       )}
 
       {error !== null && (
@@ -302,7 +287,7 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
         requests={page.requests}
         title={title}
         busy={busy}
-        canApprove={passkey?.enrolled === true && onPasskeyAddress()}
+        canApprove={canSign}
         onWithdraw={(requestId) => {
           act(api.withdraw(requestId));
         }}
@@ -316,7 +301,7 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" aria-label="Kind" className="flex gap-1 rounded-xl bg-raised p-1">
-          {TABS.map(({ kind, label }) => (
+          {tabs.map(({ kind, label }) => (
             <button
               key={kind}
               type="button"
@@ -331,83 +316,104 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <div role="group" aria-label="Show" className="flex gap-1 rounded-xl bg-raised p-1">
-            {(["yours", "discover"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={shelf === value}
-                onClick={() => {
-                  setShelf(value);
+        {tab !== "keys" && (
+          <div className="flex items-center gap-2">
+            <div role="group" aria-label="Show" className="flex gap-1 rounded-xl bg-raised p-1">
+              {(["yours", "discover"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={shelf === value}
+                  onClick={() => {
+                    setShelf(value);
+                  }}
+                  className={`${SEGMENT} ${shelf === value ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink"}`}
+                >
+                  {value === "yours" ? "Yours" : "Discover"}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 rounded-xl border border-line bg-panel px-3 py-1.5 focus-within:outline-2 focus-within:outline-brand">
+              <Search className="size-4 text-faint" aria-hidden="true" />
+              <span className="sr-only">Search</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
                 }}
-                className={`${SEGMENT} ${shelf === value ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink"}`}
-              >
-                {value === "yours" ? "Yours" : "Discover"}
-              </button>
-            ))}
+                placeholder="Search"
+                className="w-36 bg-transparent text-sm text-ink outline-none placeholder:text-faint"
+              />
+            </label>
           </div>
-          <label className="flex items-center gap-2 rounded-xl border border-line bg-panel px-3 py-1.5 focus-within:outline-2 focus-within:outline-brand">
-            <Search className="size-4 text-faint" aria-hidden="true" />
-            <span className="sr-only">Search</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-              }}
-              placeholder="Search"
-              className="w-36 bg-transparent text-sm text-ink outline-none placeholder:text-faint"
-            />
-          </label>
-        </div>
+        )}
       </div>
 
-      {shelf === "discover" && (
-        <p className="flex items-center gap-2 text-sm text-muted">
-          <Compass className="size-4 text-faint" aria-hidden="true" />
-          Everything Agent Zaaheen has found that is not on. Asking to switch one on comes to you for approval.
-        </p>
-      )}
-      {shelf === "yours" && problems.length > 0 && (
-        <div className="rounded-xl border border-alert bg-alert-soft px-4 py-3 text-sm text-ink">
-          <p className="flex items-center gap-2 font-medium">
-            <TriangleAlert className="size-4 text-alert" aria-hidden="true" />
-            {problems.length === 1 ? "1 item could not be loaded" : `${problems.length} items could not be loaded`}
-          </p>
-          <ul className="mt-1.5 flex flex-col gap-1 text-muted">
-            {problems.map((problem) => (
-              <li key={problem.path}>
-                <span className="font-mono text-xs text-ink">{problem.path}</span>: {problem.message}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {shown === 0 ? (
-        <p className="text-muted">{query.trim() ? `Nothing matches "${query.trim()}".` : EMPTY[shelf][tab]}</p>
-      ) : (
+      {tab === "keys" ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] items-start gap-4">
-          {tab === "connector" &&
-            connectors.map((item) => (
-              <ConnectorCard
-                key={item.id}
-                item={item}
-                projectName={projectName}
-                control={control("connector", item.id, item.state)}
-              />
-            ))}
-          {tab === "skill" &&
-            skills.map((item) => (
-              <SkillCard
-                key={item.id}
-                item={item}
-                connectorName={connectorName}
-                control={control("skill", item.id, item.state)}
-              />
-            ))}
-          {tab === "plugin" && plugins.map((item) => <PluginCard key={item.id} item={item} />)}
+          {passkey !== null && !passkeyNeedsYou && (
+            <PasskeyPanel status={passkey} onAddress busy={busy} onSetUp={setUp} />
+          )}
+          {claudeKey?.switches === true && (
+            <ClaudeKeyPanel status={claudeKey} canSign={canSign} busy={busy} onSave={saveClaudeKey} />
+          )}
+          {serverToken?.switches === true && (
+            <ServerTokenPanel status={serverToken} canSign={canSign} busy={busy} onSave={saveServerToken} />
+          )}
+          {modelKey?.switches === true && (
+            <ModelKeyPanel status={modelKey} canSign={canSign} busy={busy} onSave={saveModelKey} />
+          )}
         </div>
+      ) : (
+        <>
+          {shelf === "discover" && (
+            <p className="flex items-center gap-2 text-sm text-muted">
+              <Compass className="size-4 text-faint" aria-hidden="true" />
+              Everything Agent Zaaheen has found that is not on. Asking to switch one on comes to you for approval.
+            </p>
+          )}
+          {shelf === "yours" && problems.length > 0 && (
+            <div className="rounded-xl border border-alert bg-alert-soft px-4 py-3 text-sm text-ink">
+              <p className="flex items-center gap-2 font-medium">
+                <TriangleAlert className="size-4 text-alert" aria-hidden="true" />
+                {problems.length === 1 ? "1 item could not be loaded" : `${problems.length} items could not be loaded`}
+              </p>
+              <ul className="mt-1.5 flex flex-col gap-1 text-muted">
+                {problems.map((problem) => (
+                  <li key={problem.path}>
+                    <span className="font-mono text-xs text-ink">{problem.path}</span>: {problem.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {shown === 0 ? (
+            <p className="text-muted">{query.trim() ? `Nothing matches "${query.trim()}".` : EMPTY[shelf][tab]}</p>
+          ) : (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] items-start gap-4">
+              {tab === "connector" &&
+                connectors.map((item) => (
+                  <ConnectorCard
+                    key={item.id}
+                    item={item}
+                    projectName={projectName}
+                    control={control("connector", item.id, item.state)}
+                  />
+                ))}
+              {tab === "skill" &&
+                skills.map((item) => (
+                  <SkillCard
+                    key={item.id}
+                    item={item}
+                    connectorName={connectorName}
+                    control={control("skill", item.id, item.state)}
+                  />
+                ))}
+              {tab === "plugin" && plugins.map((item) => <PluginCard key={item.id} item={item} />)}
+            </div>
+          )}
+        </>
       )}
     </section>
   );

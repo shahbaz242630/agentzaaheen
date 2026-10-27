@@ -164,5 +164,6 @@ describe("the Customize page", () => {
     expect(screen.getByText(/start the dashboard with --switches/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Switch off/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Heads up/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Passkeys/ })).not.toBeInTheDocument(); // keys need the database
   });
 });
