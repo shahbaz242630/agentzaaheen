@@ -361,7 +361,10 @@ def test_the_backend_card_is_read_again_every_hour(capsys: pytest.CaptureFixture
     reads: list[Reread] = []
     portfolio = supabase_portfolio(
         SamplePortfolio(NOW),
-        {"eva": SupabaseProject(ref=REF, token_env="SUPA_EVA")},
+        {
+            "eva": SupabaseProject(ref=REF, token_env="SUPA_EVA"),
+            "sandoq-kin": SupabaseProject(ref="zyxwvutsrqponmlkjihg", token_env="SUPA_SK"),  # no token
+        },
         {"SUPA_EVA": TOKEN},
         clock=lambda: clock["now"],
         transport=httpx.MockTransport(serve),
@@ -375,12 +378,14 @@ def test_the_backend_card_is_read_again_every_hour(capsys: pytest.CaptureFixture
 
     clock["now"] = NOW + 7 * HOUR
     assert backend() == "alert"  # what the server's 05:00 summary saw on 27 Oct
+    capsys.readouterr()
     asyncio.run(HourlyReads(reads).round())
     assert backend() == "fresh"
+    assert '"failing": 1' in capsys.readouterr().err  # sandoq-kin has no token: counted, never hidden
     healthy["ok"] = False  # the project now answers with a failure: the card says so, not the old numbers
     asyncio.run(HourlyReads(reads).round())
     assert backend() == "never"
-    assert '"failing": 1' in capsys.readouterr().err
+    assert '"failing": 2' in capsys.readouterr().err
 
 
 def test_a_broken_supabase_list_stops_the_start(
