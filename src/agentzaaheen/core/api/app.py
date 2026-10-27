@@ -119,6 +119,16 @@ class Portfolio(Protocol):
         ...
 
 
+class ChatRecords(Protocol):
+    """Where every chat is kept (``policy.ChatControl`` in real use, F19)."""
+
+    async def keep(
+        self, workspace: WorkspaceRow | None, question: str, answer: str, *, model_id: str, from_sample: bool
+    ) -> object:
+        """Keep one question and its answer; ``workspace`` is ``None`` for the Board's chat."""
+        ...
+
+
 class ChatBackend(Protocol):
     """The one model the chat is connected to (``llm_gateway.FactChat`` in real use)."""
 
@@ -375,6 +385,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     claude_key: ClaudeKeys | None = None,
     server_token: ServerTokens | None = None,
     model_key: ModelKeys | None = None,
+    chats: ChatRecords | None = None,
     on_start: Callable[[], Awaitable[None]] | None = None,
     on_close: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
@@ -395,6 +406,8 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     without it the Customize page says it cannot be saved here. ``server_token`` does the same for the
     Cloudflare service token that lets the laptop reach our server's model through the tunnel, and
     ``model_key`` for that model's own key (the server answers only calls that carry it).
+    ``chats`` keeps every question and answer as a record (with a database, F19); without it nothing
+    is kept.
     ``on_start`` runs once the server is up, inside its event loop (the morning job starts there);
     ``on_close`` runs when the server stops (the laptop database's pool is closed there).
 
@@ -461,20 +474,38 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     server_token_routes(app, server_token, _refuse_foreign)
     model_key_routes(app, model_key, _refuse_foreign)
 
-    async def answer(question: ChatQuestion, facts: str, sample: bool, workspace: str | None) -> ChatAnswer:
+    async def answer(
+        question: ChatQuestion, facts: str, sample: bool, workspace: WorkspaceRow | None
+    ) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:
             raise HTTPException(status_code=503, detail="chat.not_connected")
         if busy.locked():  # one question at a time: a laptop CPU runs one model answer at once
             raise HTTPException(status_code=429, detail="chat.busy")
         async with busy:
             try:
-                reply = await chat.ask(question.question, facts, workspace)
+                reply = await chat.ask(
+                    question.question, facts, None if workspace is None else workspace.slug
+                )
             except SourceError as exc:
                 say(log, "chat_failed", code=exc.reason_code, status=exc.status)
                 raise HTTPException(status_code=502, detail=exc.reason_code) from None
-        return ChatAnswer(
+        answered = ChatAnswer(
             model_id=chat.model_id, answer=reply.answer, from_sample=sample, used=reply.used[:8]
         )
+        if chats is not None:
+            # The answer is shown even if keeping it fails: the line says it was not kept.
+            try:
+                await chats.keep(
+                    workspace,
+                    question.question,
+                    answered.answer,
+                    model_id=answered.model_id,
+                    from_sample=sample,
+                )
+            except StoreError as exc:
+                where = "board" if workspace is None else workspace.slug
+                say(log, "chat_record_failed", workspace=where, code=exc.code.value)
+        return answered
 
     @app.post("/api/chat", dependencies=[Depends(_refuse_foreign)])
     async def ask_the_board(question: ChatQuestion) -> ChatAnswer:
@@ -484,7 +515,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     @app.post("/api/workspaces/{slug}/chat", dependencies=[Depends(_refuse_foreign)])
     async def ask_a_workspace(question: ChatQuestion, workspace: InWorkspace) -> ChatAnswer:
         detail = detail_of(workspace)
-        return await answer(question, project_facts(detail), uses_sample(detail), workspace.slug)
+        return await answer(question, project_facts(detail), uses_sample(detail), workspace)
 
     if static_dir is not None:
         if not (static_dir / "index.html").is_file():

@@ -528,6 +528,34 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="The scout could not finish the {workspace} workspace (stage {stage}): {said}",
         explains="code",
     ),
+    # ---- chat records (F19 slice 1): every chat kept; the words never go in a log line
+    "chat_turn_kept": LogEvent(
+        "info",
+        what="Kept turn {entries} of the {workspace} chat ({stage}).",
+        why="A question in the dashboard chat was answered, and every chat is kept as a record.",
+    ),
+    "chat_record_failed": LogEvent(
+        "warning",
+        what="A chat answer was shown but could not be kept as a record (the {workspace} chat): {said}",
+        explains="code",
+    ),
+    "chats_forgotten": LogEvent(
+        "info",
+        what="Removed {entries} chat conversations not used for 12 months.",
+        why="Chats are kept 12 months (Chairman, 27 Oct 2026); the daily clean-up ran.",
+    ),
+    "chats_forget_failed": LogEvent(
+        "warning",
+        what="Could not remove old chats from one workspace this time: {said}",
+        explains="code",
+        next="It is tried again tomorrow. If this repeats, check the laptop database is running.",
+    ),
+    "chats_sweep_failed": LogEvent(
+        "warning",
+        what="The daily clean-up of old chats could not run this time.",
+        why="It stopped with an unexpected {kind} error.",
+        next="It is tried again tomorrow. If this repeats, check the laptop database is running.",
+    ),
     # ---- daily summaries and the morning briefing (F17 slice 6): written by code, read-only
     "summary_saved": LogEvent(
         "info",

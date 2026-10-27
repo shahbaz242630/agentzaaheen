@@ -26,6 +26,7 @@ from agentzaaheen.core.store import (
     AgentRows,
     AllSealedSecrets,
     Briefings,
+    ChatRows,
     DailySummaries,
     KillSwitchRows,
     MissRow,
@@ -147,6 +148,13 @@ async def _fill_every_table(url: str) -> None:
         )
         moved = run_record(agent=str(uuid4()))  # an agent run moves a bookmark (F11 slice 4)
         await records.end_run(moved, [], {"uptime.state": "up"}, moved_at=NOW)
+        await ChatRows(here).add(  # a chat turn and its conversation (F19)
+            lambda _conversation, _turn: (b"sealed question", b"sealed answer"),
+            model_id="gemma-local",
+            from_sample=False,
+            at=NOW,
+            idle_after=timedelta(hours=3),
+        )
 
 
 async def _count(url: str, table: str, tenant: UUID, workspace: UUID | None) -> int:

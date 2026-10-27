@@ -41,6 +41,9 @@ DOORS = {
     "src/agentzaaheen/core/runner/run.py",
     # The Claude key's slot: always the fixed Agent Zaaheen workspace (Chairman, 25 Oct 2026), never chosen.
     "tools/vault_key.py",
+    # Chat records: the workspace comes from the API door's address, or is Agent Zaaheen's for the Board's
+    # chat; the daily clean-up goes through the server's own list, one workspace at a time.
+    "src/agentzaaheen/core/policy/chats.py",
 }
 
 

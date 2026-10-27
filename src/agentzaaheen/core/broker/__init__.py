@@ -8,7 +8,7 @@ What it does:
 
 Public interface:
     ``save_credential``, ``open_credential``, ``SealedSlot`` (one slot, for callers
-    that may not see the vault), ``BrokerError``, ``BrokerErrorCode``.
+    that may not see the vault), ``ChatSeal`` (chat words, F19), ``BrokerError``, ``BrokerErrorCode``.
 
 How to test:
     ``uv run pytest tests/integration/test_broker.py`` (needs the dev database).
@@ -18,6 +18,7 @@ Must never:
     be imported by a plugin, the SDK, the store, metrics or the network module.
 """
 
+from agentzaaheen.core.broker.chats import ChatSeal
 from agentzaaheen.core.broker.keys import (
     BrokerError,
     BrokerErrorCode,
@@ -26,4 +27,4 @@ from agentzaaheen.core.broker.keys import (
     save_credential,
 )
 
-__all__ = ["BrokerError", "BrokerErrorCode", "SealedSlot", "open_credential", "save_credential"]
+__all__ = ["BrokerError", "BrokerErrorCode", "ChatSeal", "SealedSlot", "open_credential", "save_credential"]

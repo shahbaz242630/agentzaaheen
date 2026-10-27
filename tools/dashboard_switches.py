@@ -15,7 +15,7 @@ There is one tenant on the laptop: :data:`LAPTOP_TENANT`.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -28,6 +28,7 @@ from agentzaaheen.core.api.registry import DashboardSwitches, PasskeyStatus, Reg
 from agentzaaheen.core.api.removal import DashboardRemoval
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.auth import Site
+from agentzaaheen.core.broker import ChatSeal
 from agentzaaheen.core.llm_gateway import (
     ChatModel,
     Inspect,
@@ -44,6 +45,7 @@ from agentzaaheen.core.policy import (
     AuditDraft,
     AuditOutcome,
     Channel,
+    ChatControl,
     ClaudeKeyControl,
     ClaudeKeyStatus,
     ClaudeKeyVerdict,
@@ -77,6 +79,7 @@ from agentzaaheen.core.store import (
     Database,
     DatabaseSettings,
     EngagedSwitch,
+    KeptTurn,
     KillSwitchRows,
     ModelCallMisses,
     ModelCalls,
@@ -160,6 +163,7 @@ class LaptopSwitches:
         self._workspaces: WorkspaceControl | None = None
         self._scout: ScoutControl | None = None
         self._summaries: SummaryControl | None = None
+        self._chats: ChatControl | None = None
         self._claude_key: ClaudeKeyControl | None = None
         self._server_token: ServerTokenControl | None = None
         self._model_key: ModelKeyControl | None = None
@@ -192,6 +196,10 @@ class LaptopSwitches:
                 self._removal = DashboardRemoval(self._workspaces, passkeys)
                 self._scout = ScoutControl(db, LAPTOP_TENANT, self._clock)
                 self._summaries = SummaryControl(db, LAPTOP_TENANT, self._clock)
+                # The Board's chat is kept in Agent Zaaheen's own workspace, apart from its project chat.
+                self._chats = ChatControl(
+                    db, LAPTOP_TENANT, CLAUDE_WORKSPACE, ChatSeal(LAPTOP_TENANT, self._keyring), self._clock
+                )
                 self._claude_key = ClaudeKeyControl(
                     db,
                     LAPTOP_TENANT,
@@ -312,6 +320,26 @@ class LaptopSwitches:
         if self._summaries is None:  # pragma: no cover  # _open always sets it
             raise RuntimeError("the laptop database is not open")
         return self._summaries
+
+    # ---- chat records (F19 slice 1): every question and answer kept, 12 months
+
+    async def _chats_now(self) -> ChatControl:
+        await self._open()
+        if self._chats is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._chats
+
+    async def keep(
+        self, workspace: WorkspaceRow | None, question: str, answer: str, *, model_id: str, from_sample: bool
+    ) -> KeptTurn | None:
+        """Keep one chat question and its answer, sealed (``workspace`` ``None``: the Board's chat)."""
+        return await (await self._chats_now()).keep(
+            workspace, question, answer, model_id=model_id, from_sample=from_sample
+        )
+
+    async def forget_old_chats(self, workspaces: Sequence[WorkspaceRow]) -> int:
+        """Remove chats not used for 12 months, in every workspace and the Board's."""
+        return await (await self._chats_now()).forget_old(workspaces)
 
     # ---- the Claude key (ADR-033, F10 slice 2c): sealed after the same passkey
 
