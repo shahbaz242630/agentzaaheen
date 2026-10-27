@@ -17,7 +17,13 @@ from agentzaaheen.core.sdk import (
     ExpiryReport,
     SourceErrorCode,
 )
-from agentzaaheen.plugins.connectors.expiry import CertSource, DomainSource, FakeCertGetter, FakeRdap
+from agentzaaheen.plugins.connectors.expiry import (
+    ALLOWED_HOSTS,
+    CertSource,
+    DomainSource,
+    FakeCertGetter,
+    FakeRdap,
+)
 
 NOW = datetime(2026, 10, 27, 9, 0, tzinfo=UTC)
 ENDS = datetime(2027, 1, 20, 12, 0, tzinfo=UTC)
@@ -126,4 +132,4 @@ def test_the_manifest_reads_only_and_needs_no_key() -> None:
     )
     assert manifest["permissions"] == ["read"]
     assert manifest["credentials"] == []
-    assert "rdap.verisign.com" in manifest["egress"]
+    assert set(manifest["egress"]) >= ALLOWED_HOSTS  # the registry is one of the listed hosts
