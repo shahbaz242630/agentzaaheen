@@ -55,6 +55,8 @@ READERS = {
     "PADDLE_LIVE_API_KEY_ZAAHEEN": "--paddle-key-env",
     "GITHUB_READ_TOKEN_AGENTZAAHEEN": "--github-token-env",
 }
+# Uptime targets need the checker's D1 key, slo.yaml and which D1 (checker-db.txt: ACCOUNT_ID/DATABASE_ID).
+CHECKER_KEY = "CLOUDFLARE_D1_READ_TOKEN_AGENTZAAHEEN"
 SENDERS = {
     "AGENTZAAHEEN_NTFY_TOPIC": "--ntfy-topic-env",
     "AGENTZAAHEEN_BRIEFING_PING_URL": "--briefing-ping-env",
@@ -109,6 +111,10 @@ def plan(
     ):
         if (config / file).is_file():
             argv += [option, str(config / file)]
+    checker_db = config / "checker-db.txt"
+    if CHECKER_KEY in env and (config / "slo.yaml").is_file() and checker_db.is_file():
+        argv += ["--slo", str(config / "slo.yaml"), "--checker-db-key-env", CHECKER_KEY]
+        argv += ["--checker-db", checker_db.read_text(encoding="utf-8").strip()]
     if send:
         for name, option in SENDERS.items():
             if name in env:
@@ -126,7 +132,10 @@ def main(
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--send", action="store_true", help="send alerts and the briefing to the phone")
     parser.add_argument(
-        "--config", type=Path, default=CONFIG, help="the folder with uptime.yaml, supabase.yaml and keys.yaml"
+        "--config",
+        type=Path,
+        default=CONFIG,
+        help="the folder with uptime.yaml, supabase.yaml, keys.yaml, slo.yaml and checker-db.txt",
     )
     ns = parser.parse_args(argv)
     outer = os.environ if environ is None else environ
