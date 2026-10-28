@@ -27,6 +27,7 @@ from agentzaaheen.core.store import (
     AllSealedSecrets,
     Briefings,
     ChatRows,
+    CustomMcpRows,
     DailySummaries,
     KillSwitchRows,
     MissRow,
@@ -154,6 +155,9 @@ async def _fill_every_table(url: str) -> None:
             from_sample=False,
             at=NOW,
             idle_after=timedelta(hours=3),
+        )
+        await CustomMcpRows(db.scoped(TENANT)).add(  # a custom MCP server (ADR-041)
+            uuid4(), "walled", "https://mcp.example.com/", added_by=CHAIRMAN, added_at=NOW
         )
 
 

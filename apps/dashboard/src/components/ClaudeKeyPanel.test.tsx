@@ -75,7 +75,7 @@ describe("the Claude key on the Customize page", () => {
     serve(NONE, {});
     render(<CustomizeView page={page} projectName={(id) => id} onChange={vi.fn()} />);
     const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent.replace(/\s*\d+$/, ""));
-    expect(tabs).toEqual(["Connectors", "Skills", "Plugins", "Passkeys"]);
+    expect(tabs).toEqual(["Connectors", "Skills", "Plugins", "MCP", "Passkeys"]);
     expect(screen.queryByPlaceholderText("sk-ant-…")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: /Passkeys/ }));
     expect(await screen.findByPlaceholderText("sk-ant-…")).toBeInTheDocument();

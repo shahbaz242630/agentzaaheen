@@ -50,3 +50,4 @@ class NetError(SourceError):
         suffix = f" (http {status})" if status is not None else ""
         self.args = (f"{net_code.value}: {message}{suffix}",)
         self.net_code = net_code
+        self.plain = message  # our own words (never the vendor's), safe to show the Chairman

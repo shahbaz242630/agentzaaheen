@@ -21,7 +21,9 @@ What it does:
     POST to ``api.anthropic.com`` only, pinned model ids, the key asked for
     once per call, never retried, size-capped. :class:`CertProbe` reads a
     certificate with one TLS handshake to an allowlisted name (whether it is
-    valid, and when it ends), and sends nothing after it.
+    valid, and when it ends), and sends nothing after it. :func:`list_tools`
+    tests a custom MCP server the Chairman added (ADR-041): handshake and tool
+    list only, public https addresses only, 8 s at most, never a tool call.
 
 Public interface:
     ``JsonClient``, ``NetPolicy``, ``DownloadPolicy``, ``NetError``, ``NetErrorCode``,
@@ -29,7 +31,7 @@ Public interface:
     ``StatusProbe``, ``check_probe_url``, ``PushClient``, ``NTFY_HOST``,
     ``OtlpSender``, ``check_otlp_endpoint``, ``HeartbeatClient``,
     ``HEALTHCHECKS_PING_HOST``, ``check_ping_url``, ``ClaudeClient``, ``ClaudeReply``,
-    ``CLAUDE_HOST``, ``CertProbe``.
+    ``CLAUDE_HOST``, ``CertProbe``, ``list_tools``, ``check_mcp_url``, ``McpTool``, ``McpListing``.
     A ``JsonClient`` satisfies the SDK's ``JsonGetter`` protocol, which is all
     a connector ever sees.
 
@@ -39,9 +41,10 @@ How to test:
 
 Must never:
     Send anything but GET (the certificate handshake, which sends nothing
-    after it; the model chat POST, the Claude POST, the ntfy
-    alert and the telemetry POST aside); follow a redirect (the one signed download aside,
-    with no credentials); talk to a host not on the
+    after it; the model chat POST, the Claude POST, the ntfy alert, the
+    telemetry POST and the MCP test's handshake and tool list aside); follow
+    a redirect (the one signed download aside, with no credentials); talk to
+    a host not on the
     allowlist; put a key in a url, an error or a log line. No other module
     may import an HTTP library (import-linter).
 """
@@ -58,6 +61,7 @@ from agentzaaheen.core.net.client import (
 )
 from agentzaaheen.core.net.errors import NetError, NetErrorCode
 from agentzaaheen.core.net.heartbeat import HEALTHCHECKS_PING_HOST, HeartbeatClient, check_ping_url
+from agentzaaheen.core.net.mcp_probe import McpListing, McpTool, check_mcp_url, list_tools
 from agentzaaheen.core.net.model import (
     SERVER_MODEL_HOST,
     AccessSource,
@@ -84,6 +88,8 @@ __all__ = [
     "HeartbeatClient",
     "JsonClient",
     "KeySource",
+    "McpListing",
+    "McpTool",
     "ModelClient",
     "NetError",
     "NetErrorCode",
@@ -92,10 +98,12 @@ __all__ = [
     "PushClient",
     "StatusProbe",
     "check_base_url",
+    "check_mcp_url",
     "check_model_url",
     "check_otlp_endpoint",
     "check_path",
     "check_ping_url",
     "check_probe_url",
     "check_read_query",
+    "list_tools",
 ]

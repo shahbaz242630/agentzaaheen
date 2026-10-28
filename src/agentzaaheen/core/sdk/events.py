@@ -69,6 +69,11 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="A Customize page request could not be completed (the page answered 503).",
         explains="code",
     ),
+    "custom_mcp_store_failed": LogEvent(
+        "warning",
+        what="A request on the Customize page's MCP tab could not be completed (the page answered 503).",
+        explains="code",
+    ),
     "chat_tool_used": LogEvent(
         "info",
         what="The chat read {tool} to answer a question ({chars} characters).",
@@ -352,6 +357,25 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         "info",
         what="A Customize page change ({action}) by {actor} ended as {verdict}.",
         why="Someone used the Customize page; the same decision is kept in the audit log.",
+    ),
+    "custom_mcp_decided": LogEvent(
+        "info",
+        what="A custom MCP server step ({action}) on {server} by {actor} ended as {verdict} "
+        "(test result: {outcome}).",
+        why="Someone used the MCP tab; nothing there can be used by an agent until approved (ADR-041). "
+        "The same decision is kept in the audit log.",
+    ),
+    "mcp_tools_listed": LogEvent(
+        "info",
+        what="A custom MCP server listed {tools} tools ({skipped} left out for unusable names) "
+        "in {duration_ms} ms.",
+        why="The Chairman pressed Test: we asked only for its tool list, sent none of our keys or text, "
+        "and called no tool.",
+    ),
+    "mcp_test_failed": LogEvent(
+        "warning",
+        what="A custom MCP server's test did not list its tools (http {status}) after {duration_ms} ms.",
+        explains="code",
     ),
     "passkey_decided": LogEvent(
         "info",

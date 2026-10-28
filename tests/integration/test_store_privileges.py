@@ -131,6 +131,7 @@ def test_app_privileges_are_exactly_what_it_needs(test_db: ScratchDb) -> None:
         "bookmarks": mirror,  # moved with a run's end; removed only with the workspace (F11 slice 4)
         "chat_conversations": read_add,  # plus UPDATE on last use and how it ended (column grants, F19)
         "chat_turns": read_add,  # a question and its answer, never changed; old ones go by the owner function
+        "custom_mcp_servers": read_add,  # plus UPDATE on status and the test columns only (ADR-041)
     }
 
 

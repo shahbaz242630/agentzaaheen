@@ -61,6 +61,7 @@ from agentzaaheen.core.policy.claude_key import (
     ClaudeKeyVerdict,
     key_problem,
 )
+from agentzaaheen.core.policy.custom_mcp import RESERVED_NAMES, CustomMcpControl, McpVerdict
 from agentzaaheen.core.policy.gate import (
     MAX_TOOLS_PER_AGENT,
     AgentPolicy,
@@ -109,6 +110,7 @@ __all__ = [
     "MAX_TOOLS_PER_AGENT",
     "OUTSIDE_KINDS",
     "REDUCES_RISK",
+    "RESERVED_NAMES",
     "SKIPPED_REASONS",
     "STALE_AFTER",
     "STEP_UP_MAX_AGE",
@@ -128,6 +130,7 @@ __all__ = [
     "ClaudeKeyControl",
     "ClaudeKeyStatus",
     "ClaudeKeyVerdict",
+    "CustomMcpControl",
     "Decision",
     "DenyReason",
     "Effect",
@@ -135,6 +138,7 @@ __all__ = [
     "KillSwitches",
     "Ledger",
     "LifecycleVerdict",
+    "McpVerdict",
     "ModelKeyControl",
     "ModelKeyStatus",
     "ModelKeyVerdict",

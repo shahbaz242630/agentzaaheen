@@ -70,6 +70,10 @@ class Operation(StrEnum):
     RESTORE_WORKSPACE = "restore_workspace"
     ERASE_WORKSPACE = "erase_workspace"  # delete an archived workspace's data for good
     ASK_SCOUT = "ask_scout"  # read a workspace's repository and write advice; nothing switches on
+    # Custom MCP servers (ADR-041 slice 1): adding is only a request, a test only lists tools.
+    ADD_CUSTOM_MCP = "add_custom_mcp"
+    TEST_CUSTOM_MCP = "test_custom_mcp"
+    REMOVE_CUSTOM_MCP = "remove_custom_mcp"
 
 
 REDUCES_RISK = frozenset(
@@ -92,6 +96,11 @@ REDUCES_RISK = frozenset(
         Operation.ADD_WORKSPACE,
         # The scout only reads and advises: its advice switches nothing on (ADR-039, slice 5b-2).
         Operation.ASK_SCOUT,
+        # A custom MCP server added is a request nothing can use; a test sends none of our keys or text and
+        # only lists its tools; removing takes power away (ADR-041). Approving one will need a passkey.
+        Operation.ADD_CUSTOM_MCP,
+        Operation.TEST_CUSTOM_MCP,
+        Operation.REMOVE_CUSTOM_MCP,
     }
 )
 INCREASES_RISK = frozenset(set(Operation) - REDUCES_RISK)

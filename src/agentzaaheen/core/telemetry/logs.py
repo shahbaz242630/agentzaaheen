@@ -108,6 +108,12 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "checks",
         # F11 slice 5b: how many end dates could not be read (never the names)
         "unread",
+        # ADR-041 slice 1: a custom MCP server's name (checked: lowercase letters, digits, - and _, 32 at
+        # most)
+        # and how many tools its test listed or left out (never their names or words)
+        "server",
+        "tools",
+        "skipped",
     }
 )
 
