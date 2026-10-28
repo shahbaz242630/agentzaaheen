@@ -2,10 +2,11 @@
 
 It reads the project (its state), its services' health (asking once more
 about any that looked unhealthy, so a passing blip does not show red), its disk
-utilisation and the last day's API counts, through the ``JsonReader`` the
-core hands it, so it holds no token and opens no socket itself. The state is
-required; disk and usage are extras: if either cannot be read, the card says
-"unknown" for it instead of failing the whole project.
+utilisation (not for a paused project, which has neither) and the last day's
+API counts, through the ``JsonReader`` the core hands it, so it holds no token
+and opens no socket itself. The state is required; disk and usage are extras:
+if either cannot be read, the card says "unknown" for it instead of failing the
+whole project.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from agentzaaheen.core.sdk import (
     PROJECT_REF,
     BackendHealth,
     JsonReader,
+    ProjectState,
     ServiceHealth,
     SourceError,
     SourceErrorCode,
@@ -75,15 +77,19 @@ class SupabaseSource:
         """State, service health, disk and the last day's API requests, as of ``now``."""
         base = f"/v1/projects/{self._ref}"
         state = mapping.state(await self._http.get_json(base, {}))
-        health = await self._http.get_json_list(f"{base}/health", {"services": ",".join(self._services)})
-        services = await self._confirmed(base, mapping.services(health, self._services))
+        services: tuple[ServiceHealth, ...] = ()
         used: int | None = None
         size: int | None = None
-        try:
-            used, size = mapping.disk(await self._http.get_json(f"{base}/config/disk/util", {}))
-        except SourceError as exc:
-            if exc.code is SourceErrorCode.AUTH:
-                raise
+        # A paused project has no services or disk to ask about: Supabase refuses both (seen live 28 Oct 2026,
+        # "No active services available"), which read as "could not read" instead of "paused".
+        if state is not ProjectState.PAUSED:
+            health = await self._http.get_json_list(f"{base}/health", {"services": ",".join(self._services)})
+            services = await self._confirmed(base, mapping.services(health, self._services))
+            try:
+                used, size = mapping.disk(await self._http.get_json(f"{base}/config/disk/util", {}))
+            except SourceError as exc:
+                if exc.code is SourceErrorCode.AUTH:
+                    raise
         requests: int | None = None
         try:
             usage = await self._http.get_json(

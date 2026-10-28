@@ -43,10 +43,12 @@ def backend_card(health: BackendHealth, *, source_label: str, schedule: timedelt
     disk_bp = health.disk_basis_points
     size_gb = health.disk_size_bytes / _GB if health.disk_size_bytes else None
     numbers = (
-        Metric(
+        Metric(  # none asked about (a paused project): unknown, never "0 of 0"
             label=LABELS[0],
-            value=Count(value=health.healthy_services),
-            detail=f"of {len(health.services)} services",
+            value=Count(value=health.healthy_services)
+            if health.services
+            else NotKnown(reason="source.unavailable"),
+            detail=f"of {len(health.services)} services" if health.services else None,
         ),
         Metric(
             label=LABELS[1],
