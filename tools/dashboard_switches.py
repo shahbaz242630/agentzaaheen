@@ -24,6 +24,7 @@ from uuid import UUID, uuid4
 from pydantic import SecretStr
 
 from agentzaaheen.core.api.agents import DashboardAgents, RoleChoice, SwitchIn, WorkspaceAgentsOut
+from agentzaaheen.core.api.custom_mcp import DashboardCustomMcp
 from agentzaaheen.core.api.registry import DashboardSwitches, PasskeyStatus, RegistryPage, Use
 from agentzaaheen.core.api.removal import DashboardRemoval
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
@@ -38,6 +39,7 @@ from agentzaaheen.core.llm_gateway import (
     StoreNames,
     claude_lines,
 )
+from agentzaaheen.core.net import check_mcp_url, list_tools
 from agentzaaheen.core.policy import (
     Added,
     AgentControl,
@@ -49,8 +51,10 @@ from agentzaaheen.core.policy import (
     ClaudeKeyControl,
     ClaudeKeyStatus,
     ClaudeKeyVerdict,
+    CustomMcpControl,
     Ledger,
     LifecycleVerdict,
+    McpVerdict,
     ModelKeyControl,
     ModelKeyStatus,
     ModelKeyVerdict,
@@ -76,6 +80,7 @@ from agentzaaheen.core.sdk import ToolSpec
 from agentzaaheen.core.store import (
     AgentRow,
     AllNamePrints,
+    CustomMcpRow,
     Database,
     DatabaseSettings,
     EngagedSwitch,
@@ -167,6 +172,7 @@ class LaptopSwitches:
         self._claude_key: ClaudeKeyControl | None = None
         self._server_token: ServerTokenControl | None = None
         self._model_key: ModelKeyControl | None = None
+        self._custom_mcp: DashboardCustomMcp | None = None
         self._keyring = keyring
         self._site = site
         self._enrol_code = enrol_code
@@ -224,6 +230,15 @@ class LaptopSwitches:
                     passkeys=passkeys,
                     clock=self._clock,
                 )
+                # A custom MCP server may not take the id of anything the registry already has (ADR-041).
+                taken = [
+                    item.id for group in (self._registry.connectors, self._registry.skills) for item in group
+                ]
+                taken += [plugin.id for plugin in self._registry.plugins]
+                mcp = CustomMcpControl(
+                    db, LAPTOP_TENANT, taken=taken, check_address=check_mcp_url, tester=list_tools
+                )
+                self._custom_mcp = DashboardCustomMcp(mcp, self._clock)
         return self._switches
 
     async def _agents_now(self) -> DashboardAgents:
@@ -375,6 +390,15 @@ class LaptopSwitches:
     async def model_key(self) -> SecretStr:
         """The key for one call to our server's model; raises ``SourceError`` when it cannot be opened."""
         return await (await self.model_key_control()).key_source()()
+
+    # ---- custom MCP servers (ADR-041 slice 1): added as requests, tested by listing tools, never used
+
+    async def custom_mcp(self) -> DashboardCustomMcp:
+        """The MCP tab's actions (opens the database on first use)."""
+        await self._open()
+        if self._custom_mcp is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._custom_mcp
 
     async def claude_lines(self, now: datetime) -> tuple[str, ...]:
         """The briefing's Claude lines: runs that did not run in the day before ``now``, caps at 80%."""
@@ -559,3 +583,26 @@ class LaptopModelKeys:
     async def save(self, key: SecretStr, credential: dict[str, Any] | None) -> ModelKeyVerdict:
         """Seal the key once this exact save is signed."""
         return await (await self._switches.model_key_control()).save(key, credential)
+
+
+class LaptopCustomMcp:
+    """The MCP tab's view of the laptop database (its own object, like the keys')."""
+
+    def __init__(self, switches: LaptopSwitches) -> None:
+        self._switches = switches
+
+    async def servers(self) -> list[CustomMcpRow]:
+        """Every server added and not removed."""
+        return await (await self._switches.custom_mcp()).servers()
+
+    async def add(self, name: str, url: str) -> tuple[McpVerdict, str | None]:
+        """Add a server as a request (nothing calls it)."""
+        return await (await self._switches.custom_mcp()).add(name, url)
+
+    async def test(self, name: str) -> McpVerdict:
+        """List one server's tools and keep what was found."""
+        return await (await self._switches.custom_mcp()).test(name)
+
+    async def remove(self, name: str) -> McpVerdict:
+        """Remove one server."""
+        return await (await self._switches.custom_mcp()).remove(name)

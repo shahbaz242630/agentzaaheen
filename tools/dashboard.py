@@ -138,6 +138,7 @@ from tools.dashboard_summaries import AlertLog, LaptopSummaries
 from tools.dashboard_supabase import SupabaseProject, supabase_list, supabase_portfolio
 from tools.dashboard_switches import (
     LaptopClaudeKeys,
+    LaptopCustomMcp,
     LaptopModelKeys,
     LaptopServerTokens,
     LaptopSwitches,
@@ -611,6 +612,7 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
         server_token=LaptopServerTokens(switches) if switches is not None else None,
         model_key=LaptopModelKeys(switches) if switches is not None else None,
         chats=switches,
+        custom_mcp=LaptopCustomMcp(switches) if switches is not None else None,
         on_start=_starter(summaries, monitoring, sweep),
         on_close=_closer(switches, scout, summaries, monitoring, sweep),
     )

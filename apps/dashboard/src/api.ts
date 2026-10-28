@@ -436,22 +436,54 @@ export type ServerTokenStatus = ClaudeKeyStatus;
 export const ModelKeyStatus = ClaudeKeyStatus;
 export type ModelKeyStatus = ClaudeKeyStatus;
 
+// Custom MCP servers (ADR-041 slice 1): added as requests, tested by listing their tools; nothing can use them.
+// Tool names and descriptions are the server's own words: shown as plain text, marked as not checked.
+export const McpTool = z.strictObject({ name: z.string(), description: z.string() });
+export type McpTool = z.infer<typeof McpTool>;
+export const McpTest = z.strictObject({
+  at: time,
+  outcome: code,
+  server_name: z.string().nullable(),
+  tools: z.array(McpTool).nullable(),
+  skipped: z.number().int().nonnegative().nullable(),
+  fingerprint: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
+});
+export type McpTest = z.infer<typeof McpTest>;
+export const McpServer = z.strictObject({
+  name: z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/),
+  url: z.string(),
+  status: z.literal("requested"),
+  added_at: time,
+  test: McpTest.nullable(),
+});
+export type McpServer = z.infer<typeof McpServer>;
+export const McpPage = z.strictObject({ available: z.boolean(), servers: z.array(McpServer) });
+export type McpPage = z.infer<typeof McpPage>;
+
 // WebAuthn options as JSON, handed straight to the browser's own parser (it checks them).
 const PasskeyOptions = z.strictObject({ options: z.record(z.string(), z.unknown()) });
 
 export class ApiError extends Error {
-  constructor(readonly path: string, readonly status: number | null, readonly code: string | null = null) {
+  constructor(
+    readonly path: string,
+    readonly status: number | null,
+    readonly code: string | null = null,
+    readonly why: string | null = null, // our own words for a broken rule, when the server sent them
+  ) {
     super(status === null ? `${path}: the answer did not match the contract` : `${path}: HTTP ${status}`);
   }
 }
 
-// The server's error code ("chat.busy", "net.timeout"), if it sent one.
-async function errorCode(response: Response): Promise<string | null> {
+// The server's error code ("chat.busy", "net.timeout"), if it sent one, and why in plain words if it said.
+const Detail = z.object({ detail: z.union([code, z.object({ code, why: z.string().max(200).nullable() })]) });
+async function errorDetail(response: Response): Promise<[string | null, string | null]> {
   try {
-    const parsed = z.object({ detail: code }).safeParse(await response.json());
-    return parsed.success ? parsed.data.detail : null;
+    const parsed = Detail.safeParse(await response.json());
+    if (!parsed.success) return [null, null];
+    const { detail } = parsed.data;
+    return typeof detail === "string" ? [detail, null] : [detail.code, detail.why];
   } catch {
-    return null;
+    return [null, null];
   }
 }
 
@@ -463,7 +495,7 @@ async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): P
     headers: { Accept: "application/json", "Content-Type": "application/json", "X-AgentZaaheen-Request": "1" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new ApiError(path, response.status, await errorCode(response));
+  if (!response.ok) throw new ApiError(path, response.status, ...(await errorDetail(response)));
   const parsed = schema.safeParse(await response.json());
   if (!parsed.success) throw new ApiError(path, null);
   return parsed.data;
@@ -563,6 +595,11 @@ export const api = {
     postJson("/api/model-key", { key, credential }, ModelKeyStatus),
   modelKeyOptions: async (key: string) =>
     (await postJson("/api/model-key/options", { key }, PasskeyOptions)).options,
+  // Custom MCP servers: adding is a request and a test only lists tools, so neither needs Windows Hello.
+  mcp: () => getJson("/api/mcp", McpPage),
+  addMcp: (name: string, url: string) => postJson("/api/mcp", { name, url }, McpPage),
+  testMcp: (name: string) => postJson(`/api/mcp/${encodeURIComponent(name)}/test`, {}, McpPage),
+  removeMcp: (name: string) => postJson(`/api/mcp/${encodeURIComponent(name)}/remove`, {}, McpPage),
   enrolOptions: async (code: string) =>
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),

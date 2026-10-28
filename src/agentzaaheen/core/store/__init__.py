@@ -12,7 +12,8 @@ What it does:
     Claude call cost, and our customers' names as keyed fingerprints only),
     and each workspace's agents, switch and cap with
     the frozen role versions they run (ADR-039), and each agent run's start
-    (F11). Every table has a ``tenant_id`` and sits
+    (F11), and the custom MCP servers the Chairman added with their last
+    test (ADR-041). Every table has a ``tenant_id`` and sits
     behind a database wall (row-level security, forced): each transaction
     names its tenant, and for project-level tables its workspace, through
     :meth:`Database.scoped`; one that names none is refused. The app connects
@@ -46,6 +47,7 @@ from agentzaaheen.core.store.agents import (
 from agentzaaheen.core.store.audit import AuditRow, AuditRows
 from agentzaaheen.core.store.bookmarks import MAX_BOOKMARKS, Bookmarks
 from agentzaaheen.core.store.chats import MAX_TURNS, ChatRows, ChatThread, KeptTurn, SealedTurn, Sealer
+from agentzaaheen.core.store.custom_mcp import MAX_SERVERS, CustomMcpRow, CustomMcpRows, McpTest, McpToolRow
 from agentzaaheen.core.store.db import Database, DatabaseSettings, Scoped
 from agentzaaheen.core.store.errors import StoreError, StoreErrorCode
 from agentzaaheen.core.store.migrations import LATEST_VERSION, MIGRATIONS, Migration, check_schema, migrate
@@ -95,6 +97,7 @@ __all__ = [
     "MAX_BOOKMARKS",
     "MAX_PAGE",
     "MAX_ROWS",
+    "MAX_SERVERS",
     "MAX_TURNS",
     "MIGRATIONS",
     "RUN_INTERRUPTED",
@@ -116,6 +119,8 @@ __all__ = [
     "ChatRows",
     "ChatThread",
     "CredentialDates",
+    "CustomMcpRow",
+    "CustomMcpRows",
     "DailySummaries",
     "Database",
     "DatabaseSettings",
@@ -123,6 +128,8 @@ __all__ = [
     "ItemKind",
     "KeptTurn",
     "KillSwitchRows",
+    "McpTest",
+    "McpToolRow",
     "Migration",
     "MissRow",
     "MissedRun",

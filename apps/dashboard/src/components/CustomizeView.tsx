@@ -9,11 +9,13 @@ import {
   type ModelKeyStatus,
   type ItemState,
   type Kind,
+  type McpPage,
   type PasskeyStatus,
   type RegistryPage,
 } from "../api";
 import { PasskeyProblem, approveWithPasskey, onPasskeyAddress, setUpPasskey, withPasskeyIfNeeded } from "../passkey";
 import { ClaudeKeyPanel } from "./ClaudeKeyPanel";
+import { McpPanel, mcpProblem } from "./McpPanel";
 import { ServerTokenPanel } from "./ServerTokenPanel";
 import { ModelKeyPanel } from "./ModelKeyPanel";
 import { PasskeyPanel } from "./PasskeyPanel";
@@ -33,13 +35,15 @@ function explain(failure: unknown): string {
 }
 
 type Shelf = "yours" | "discover";
-// The fourth tab holds the passkey and the keys it guards (only with switches: they live in the laptop database).
-type Tab = Kind | "keys";
+// The MCP tab holds custom MCP servers (ADR-041), and the last the passkey and the keys it guards (both only
+// with switches: they live in the laptop database).
+type Tab = Kind | "mcp" | "keys";
 
 const TABS: { kind: Tab; label: string }[] = [
   { kind: "connector", label: "Connectors" },
   { kind: "skill", label: "Skills" },
   { kind: "plugin", label: "Plugins" },
+  { kind: "mcp", label: "MCP" },
   { kind: "keys", label: "Passkeys" },
 ];
 
@@ -89,6 +93,7 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
   const [claudeKey, setClaudeKey] = useState<ClaudeKeyStatus | null>(null);
   const [serverToken, setServerToken] = useState<ServerTokenStatus | null>(null);
   const [modelKey, setModelKey] = useState<ModelKeyStatus | null>(null);
+  const [mcp, setMcp] = useState<McpPage | null>(null);
 
   useEffect(() => {
     if (!page.switches) return;
@@ -125,6 +130,14 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
         if (live) setModelKey(null);
       },
     );
+    api.mcp().then(
+      (found) => {
+        if (live) setMcp(found);
+      },
+      () => {
+        if (live) setMcp(null);
+      },
+    );
     return () => {
       live = false;
     };
@@ -143,11 +156,12 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
     connector: page.connectors.filter((c) => keep(c.state)).length,
     skill: page.skills.filter((s) => keep(s.state)).length,
     plugin: page.plugins.filter((p) => keep(p.state)).length,
+    mcp: mcp?.servers.length ?? 0,
     // What is set up: the passkey, and each key saved with it.
     keys: [passkey?.enrolled, claudeKey?.saved, serverToken?.saved, modelKey?.saved].filter(Boolean).length,
   };
-  const tabs = TABS.filter(({ kind }) => kind !== "keys" || page.switches);
-  const shown = { connector: connectors.length, skill: skills.length, plugin: plugins.length, keys: 0 }[tab];
+  const tabs = TABS.filter(({ kind }) => (kind !== "keys" && kind !== "mcp") || page.switches);
+  const shown = { connector: connectors.length, skill: skills.length, plugin: plugins.length, mcp: 0, keys: 0 }[tab];
   const problems = page.problems.filter((p) => p.kind === tab);
   const canSign = passkey?.enrolled === true && onPasskeyAddress();
   // Above the tabs while it needs you (wrong address, none yet, set-up open, or just set up); else on its tab.
@@ -242,6 +256,21 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
     );
   }
 
+  function changeMcp(change: Promise<McpPage>) {
+    setBusy(true);
+    setError(null);
+    change.then(
+      (next) => {
+        setMcp(next);
+        setBusy(false);
+      },
+      (failure: unknown) => {
+        setError(mcpProblem(failure));
+        setBusy(false);
+      },
+    );
+  }
+
   function control(kind: Kind, id: string, state: ItemState) {
     if (!page.switches) return undefined;
     return (
@@ -316,7 +345,7 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
             </button>
           ))}
         </div>
-        {tab !== "keys" && (
+        {tab !== "keys" && tab !== "mcp" && (
           <div className="flex items-center gap-2">
             <div role="group" aria-label="Show" className="flex gap-1 rounded-xl bg-raised p-1">
               {(["yours", "discover"] as const).map((value) => (
@@ -350,7 +379,25 @@ export function CustomizeView({ page, projectName, onChange }: Props) {
         )}
       </div>
 
-      {tab === "keys" ? (
+      {tab === "mcp" ? (
+        mcp !== null ? (
+          <McpPanel
+            page={mcp}
+            busy={busy}
+            onAdd={(name, url) => {
+              changeMcp(api.addMcp(name, url));
+            }}
+            onTest={(name) => {
+              changeMcp(api.testMcp(name));
+            }}
+            onRemove={(name) => {
+              changeMcp(api.removeMcp(name));
+            }}
+          />
+        ) : (
+          <p className="text-muted">Custom MCP servers could not be loaded. Reload the page to try again.</p>
+        )
+      ) : tab === "keys" ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] items-start gap-4">
           {passkey !== null && !passkeyNeedsYou && (
             <PasskeyPanel status={passkey} onAddress busy={busy} onSetUp={setUp} />
