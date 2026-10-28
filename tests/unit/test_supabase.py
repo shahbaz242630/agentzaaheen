@@ -142,6 +142,33 @@ def test_odd_disk_numbers_are_refused(util: dict[str, object]) -> None:
         mapping.disk(util)
 
 
+def test_a_paused_project_reads_as_paused_without_asking_about_services_or_disk() -> None:
+    # Seen live 28 Oct 2026: Supabase answers 400 to a paused project's health and 404 to its disk.
+    api = FakeSupabaseApi(
+        healthy_api(
+            **{
+                BASE: {"status": "INACTIVE"},
+                f"{BASE}/health": SourceErrorCode.REFUSED,
+                f"{BASE}/config/disk/util": SourceErrorCode.REFUSED,
+            }
+        )
+    )
+    health = fetch(api)
+    assert health.state is ProjectState.PAUSED
+    assert (health.services, health.disk_basis_points, health.requests_24h) == ((), None, 126)
+    assert [path for path, _ in api.asked] == [BASE, f"{BASE}/analytics/endpoints/usage.api-counts"]
+    card = backend_card(health, source_label="Supabase (live)", schedule=HOUR, now=NOW)
+    assert [(m.value.kind, m.detail) for m in card.metrics][:2] == [("unknown", None), ("unknown", None)]
+    assert card_text(health) == [("The Supabase project is paused", "alert")]
+
+
+@pytest.mark.parametrize("status", ["PAUSING", "GOING_DOWN"])
+def test_a_project_going_to_pause_is_not_asked_about_services(status: str) -> None:
+    refused = SourceErrorCode.REFUSED
+    api = FakeSupabaseApi(healthy_api(**{BASE: {"status": status}, f"{BASE}/health": refused}))
+    assert fetch(api).state is ProjectState.PAUSED
+
+
 def test_missing_status_is_refused() -> None:
     with pytest.raises(SourceError):
         mapping.state({"name": "x"})
