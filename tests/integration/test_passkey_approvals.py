@@ -464,3 +464,56 @@ def test_the_store_does_not_approve_a_request_that_is_not_pending(test_db: Scrat
         return await control._rows.approve(request_id, by="user:chairman", at=NOW, step_up_at=NOW)
 
     assert session(test_db, use) is False
+
+
+# ---- signing in to the dashboard (ADR-SEC-010)
+
+
+def test_signing_in_needs_a_good_signature_for_the_sign_in_challenge_and_is_audited(
+    test_db: ScratchDb,
+) -> None:
+    device = SoftAuthenticator()
+
+    async def use(passkeys: PasskeyApprovals, _c: RegistryControl) -> list[bool]:
+        await enrol(passkeys, device)
+        options = await passkeys.sign_in_options()
+        good = device.sign(options)
+        first = await passkeys.sign_in(good)
+        replayed = await passkeys.sign_in(good)  # the challenge was used: never twice
+        stranger = await passkeys.sign_in(SoftAuthenticator().sign(await passkeys.sign_in_options()))
+        await passkeys.signed_out("session.by_button")
+        return [first, replayed, stranger]
+
+    assert session(test_db, use) == [True, False, False]
+    assert audit(test_db)[-4:] == [
+        ("session.sign_in", "allow", "session.signed_in"),
+        ("session.sign_in", "deny", "passkey.no_challenge"),
+        ("session.sign_in", "deny", "passkey.unknown"),
+        ("session.sign_out", "allow", "session.by_button"),
+    ]
+
+
+def test_without_a_passkey_no_sign_in_is_offered(test_db: ScratchDb) -> None:
+    async def use(passkeys: PasskeyApprovals, _c: RegistryControl) -> str:
+        with pytest.raises(PasskeyError) as caught:
+            await passkeys.sign_in_options()
+        return caught.value.code
+
+    assert session(test_db, use) == "registry.no_passkey"
+
+
+def test_a_counter_that_cannot_move_forward_fails_the_sign_in(test_db: ScratchDb) -> None:
+    device = SoftAuthenticator()
+
+    async def use(passkeys: PasskeyApprovals, _c: RegistryControl) -> bool:
+        await enrol(passkeys, device)
+        options = await passkeys.sign_in_options()
+
+        async def raced(*_args: object) -> bool:  # another signature moved the counter past us
+            return False
+
+        passkeys._rows.record_use = raced  # type: ignore[method-assign,assignment]
+        return await passkeys.sign_in(device.sign(options))
+
+    assert session(test_db, use) is False
+    assert audit(test_db)[-1] == ("session.sign_in", "deny", "passkey.counter_went_back")
