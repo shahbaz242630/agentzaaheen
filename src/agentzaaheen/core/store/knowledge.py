@@ -5,7 +5,9 @@ changes, all its passages are replaced in one transaction; when it leaves the
 list, they go. Search is Postgres full-text search over each passage's
 ``words``: any of the question's words may match (an "or" search, ranked by
 how well each passage matches), because a question names a few words and a
-passage rarely holds all of them; a heading's words count more. With an
+passage rarely holds all of them; a heading's words count more, and a word
+found in most of a project's passages is left out (it tells them apart too
+little). With an
 ``overview`` document (the project's first listed one), its first real
 passage always comes first, so even a vague question ("what is this for?")
 sees what the product is. Too few hits are topped up with documents' openings.
@@ -25,6 +27,7 @@ from agentzaaheen.core.store.db import Scoped, require_aware, written
 
 PRODUCTS = "products"
 MAX_RESULTS = 8
+SMALL = 8  # with fewer passages than this, every word of a question counts
 SHOWN = 3  # passages a chat question gets: ~525 tokens, about 20 s on the server's CPU model
 
 _KNOWN = """
@@ -41,15 +44,33 @@ INSERT INTO agentzaaheen.knowledge_pieces
 SELECT $1, $2, $3, $4, $5, p.position - 1, p.title, p.body, $8
 FROM unnest($6::text[], $7::text[]) WITH ORDINALITY AS p(title, body, position)
 """
-# The question's own stemmed words, joined with "or"; ``simple`` so they are not stemmed twice.
+# The question's own stemmed words, joined with "or"; ``simple`` so they are not stemmed twice. A word
+# found in more than a quarter of this project's passages ("user" in a brief about users) tells them
+# apart too little, so it is left out, unless the project is small or every word is that common.
 _SEARCH = """
-WITH asked AS (
-    SELECT to_tsquery('simple', COALESCE(string_agg(quote_literal(word), ' | '), '')) AS q
-    FROM unnest(tsvector_to_array(to_tsvector('english', $4))) AS word
-)
-SELECT source, position, title, body, read_at, ts_rank_cd(words, asked.q) AS rank
-FROM agentzaaheen.knowledge_pieces, asked
-WHERE tenant_id = $1 AND project_id = $2 AND section = $3 AND words @@ asked.q
+WITH mine AS (
+    SELECT source, position, title, body, read_at, words FROM agentzaaheen.knowledge_pieces
+    WHERE tenant_id = $1 AND project_id = $2 AND section = $3
+),
+total AS (SELECT count(*) AS n FROM mine),
+asked AS (SELECT DISTINCT word FROM unnest(tsvector_to_array(to_tsvector('english', $4))) AS word),
+spread AS (
+    SELECT a.word, (SELECT count(*) FROM mine WHERE mine.words @@ to_tsquery('simple', quote_literal(a.word)))
+        AS found_in
+    FROM asked a
+),
+telling AS (
+    SELECT word FROM spread, total WHERE total.n < $6 OR found_in * 4 <= total.n
+),
+kept AS (
+    SELECT word FROM telling
+    UNION ALL
+    SELECT word FROM spread WHERE NOT EXISTS (SELECT 1 FROM telling)
+),
+q AS (SELECT to_tsquery('simple', COALESCE(string_agg(quote_literal(word), ' | '), '')) AS q FROM kept)
+SELECT source, position, title, body, read_at, ts_rank_cd(words, q.q) AS rank
+FROM mine, q
+WHERE words @@ q.q
 ORDER BY rank DESC, source, position
 LIMIT $5
 """
@@ -123,7 +144,7 @@ class KnowledgeRows:
             first = None if overview is None else await conn.fetchrow(_OVERVIEW, *self._key, overview)
             found = [] if first is None else [_passage(first)]
             # One more than needed, in case the overview passage is among the hits.
-            for row in await conn.fetch(_SEARCH, *self._key, question[:2000], limit + 1):
+            for row in await conn.fetch(_SEARCH, *self._key, question[:2000], limit + 1, SMALL):
                 _add(found, row, limit)
             for row in await conn.fetch(_OPENINGS, *self._key, limit + 1):
                 _add(found, row, limit)

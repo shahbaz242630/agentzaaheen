@@ -446,3 +446,40 @@ def test_the_test_set_says_when_the_laptop_database_is_down(
         knowledge_check.main(["--questions", str(questions), "--knowledge", str(listed), "--min", "1"]) == 1
     )
     assert "laptop database is not running" in capsys.readouterr().out
+
+
+def test_a_word_in_most_passages_does_not_outweigh_the_telling_one(laptop_url: SecretStr) -> None:
+    async def body() -> list[str]:
+        db = await opened(laptop_url)
+        try:
+            s = rows(db, "sandoq-kin")
+            busy = [
+                (f"Flows > Step {n}", "The user taps. The user confirms. The user waits.") for n in range(9)
+            ]
+            telling = [("What we are building", "What a family needs if the user dies suddenly.")]
+            await s.replace("brief.md", SHA_A, [*busy, *telling], at=NOW)
+            return [p.title for p in await s.search("what happens if the user dies?")]
+        finally:
+            await db.close()
+
+    assert run(body())[0] == "What we are building"
+
+
+def test_in_a_small_project_or_when_every_word_is_common_all_words_still_count(laptop_url: SecretStr) -> None:
+    async def body() -> list[list[str]]:
+        db = await opened(laptop_url)
+        try:
+            z, s = rows(db, "zaaheen"), rows(db, "sandoq-kin")
+            await z.replace("a.md", SHA_A, [("A", "The user taps."), ("B", "The user waits.")], at=NOW)
+            small = [p.title for p in await z.search("user")]
+            common = [(f"Step {n}", "The user taps.") for n in range(10)]
+            await s.replace("b.md", SHA_A, common, at=NOW)
+            every = [p.title for p in await s.search("user taps")]
+            return [small, every]
+        finally:
+            await db.close()
+
+    small, every = run(body())
+    assert sorted(small) == ["A", "B"]  # 2 passages: "user" is in all of them and still counts
+    assert len(every) == 3  # every word is common: none is left out, so all still count
+    assert all(t.startswith("Step") for t in every)
