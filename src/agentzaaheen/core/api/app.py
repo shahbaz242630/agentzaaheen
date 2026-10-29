@@ -16,6 +16,9 @@ answer carries its ``traceparent``, so any error shown leads to its trace
 (ADR-032). A ``traceparent`` sent to us is ignored: every request starts its
 own trace.
 
+With a sign-in gate (ADR-SEC-010, the laptop dashboard) every ``/api`` route
+also needs a live session, except the few that get one (``api.session``).
+
 Each project is a workspace (ADR-039) with its own address,
 ``/api/workspaces/{slug}``. The workspace is chosen there, once, by the door
 (:class:`WorkspaceDirectory`), from the server's own list; no request body
@@ -58,6 +61,7 @@ from agentzaaheen.core.api.registry import (
 from agentzaaheen.core.api.removal import WorkspaceRemoval, removal_routes
 from agentzaaheen.core.api.scout import WorkspaceScout, scout_routes
 from agentzaaheen.core.api.server_token import ServerTokens, server_token_routes
+from agentzaaheen.core.api.session import SessionGate, session_routes
 from agentzaaheen.core.api.summaries import WorkspaceSummaries, summary_routes
 from agentzaaheen.core.api.views import (
     ChatAnswer,
@@ -265,8 +269,11 @@ def _registry_routes(app: FastAPI, page: RegistryPage, switches: RegistrySwitche
         return await change(lambda s: s.approve(request_id, answer.credential))
 
 
-def _passkey_routes(app: FastAPI, switches: RegistrySwitches | None) -> None:
-    """The passkey (ADR-SEC-007): its status, the one-time set-up, and options to sign one approval."""
+def _passkey_routes(app: FastAPI, switches: RegistrySwitches | None, session: SessionGate | None) -> None:
+    """The passkey (ADR-SEC-007): its status, the one-time set-up, and options to sign one approval.
+
+    A new passkey also signs this browser in (ADR-SEC-010): it is how a lost one is recovered.
+    """
 
     async def checked[T](call: Awaitable[T]) -> T:
         try:
@@ -290,8 +297,10 @@ def _passkey_routes(app: FastAPI, switches: RegistrySwitches | None) -> None:
         return PasskeyOptions(options=await checked(_ready(switches).enrol_options(body.code)))
 
     @app.post("/api/passkey/enrol", dependencies=[Depends(_refuse_foreign)])
-    async def enrol(body: EnrolAnswer) -> PasskeyStatus:
+    async def enrol(body: EnrolAnswer, request: Request, response: Response) -> PasskeyStatus:
         await checked(_ready(switches).enrol(body.code, body.credential))
+        if session is not None:
+            await session.start(request, response)
         return await _stored(_ready(switches).passkey())
 
 
@@ -388,6 +397,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     model_key: ModelKeys | None = None,
     chats: ChatRecords | None = None,
     custom_mcp: CustomMcp | None = None,
+    session: SessionGate | None = None,
     on_start: Callable[[], Awaitable[None]] | None = None,
     on_close: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
@@ -412,6 +422,8 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     is kept.
     ``custom_mcp`` is the Customize page's MCP tab (with a database, ADR-041): servers added as requests
     and tested by listing their tools; without it the tab says servers can't be added here.
+    ``session`` asks for a Windows Hello sign-in before any ``/api`` route answers (ADR-SEC-010);
+    without it (our server's copy, tests) nothing is asked.
     ``on_start`` runs once the server is up, inside its event loop (the morning job starts there);
     ``on_close`` runs when the server stops (the laptop database's pool is closed there).
 
@@ -434,7 +446,14 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
             if on_close is not None:
                 await on_close()
 
-    app = FastAPI(title="Agent Zaaheen", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    app = FastAPI(
+        title="Agent Zaaheen",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        lifespan=lifespan,
+        dependencies=[] if session is None else [Depends(session.require)],
+    )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
 
     app.middleware("http")(_with_headers)
@@ -466,7 +485,8 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
         return _connected(portfolio.models(), chat)
 
     _registry_routes(app, page, switches)
-    _passkey_routes(app, switches)
+    _passkey_routes(app, switches, session)
+    session_routes(app, session, _refuse_foreign)
     agent_routes(app, agents, _refuse_foreign)
     removal_routes(app, removal, directory, _refuse_foreign)
     adding_routes(app, adding, directory, _refuse_foreign)

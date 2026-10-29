@@ -82,6 +82,7 @@ def test_without_send_nothing_reaches_the_phone(creds: Path, config: Path) -> No
     assert options["--checker-db"] == CHECKER_DB
     assert options["--vault-key"] == str(creds / "vault_key")
     assert "--switches" in argv
+    assert "--no-sign-in" in argv  # serves no pages; answers only on 127.0.0.1 (ADR-SEC-010)
     assert "--model-url" not in options  # the summaries need no model
     assert env["SUPABASE_READ_TOKEN_SANDOQ"] == "sbp_x"
     assert "postgres_password" not in env  # only key-shaped names become environment

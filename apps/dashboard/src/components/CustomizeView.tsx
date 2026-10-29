@@ -13,7 +13,14 @@ import {
   type PasskeyStatus,
   type RegistryPage,
 } from "../api";
-import { PasskeyProblem, approveWithPasskey, onPasskeyAddress, setUpPasskey, withPasskeyIfNeeded } from "../passkey";
+import {
+  PASSKEY_PROBLEM,
+  PasskeyProblem,
+  approveWithPasskey,
+  onPasskeyAddress,
+  setUpPasskey,
+  withPasskeyIfNeeded,
+} from "../passkey";
 import { ClaudeKeyPanel } from "./ClaudeKeyPanel";
 import { McpPanel, mcpProblem } from "./McpPanel";
 import { ServerTokenPanel } from "./ServerTokenPanel";
@@ -21,13 +28,6 @@ import { ModelKeyPanel } from "./ModelKeyPanel";
 import { PasskeyPanel } from "./PasskeyPanel";
 import { ConnectorCard, PluginCard, SkillCard, skillTitle } from "./RegistryCards";
 import { RequestList, SwitchControl, reason } from "./RegistrySwitch";
-
-const PASSKEY_PROBLEM: Record<PasskeyProblem["reason"], string> = {
-  unsupported: "This browser can't use passkeys. Use Chrome or Edge (version 129 or newer).",
-  wrong_address: "Passkeys only work when the dashboard is opened at localhost.",
-  cancelled:
-    "Windows Hello was closed before confirming, so nothing changed. If Bitwarden or another password manager opened instead, choose its option to use another device.",
-};
 
 function explain(failure: unknown): string {
   if (failure instanceof PasskeyProblem) return PASSKEY_PROBLEM[failure.reason];

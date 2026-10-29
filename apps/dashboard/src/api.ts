@@ -460,6 +460,27 @@ export type McpServer = z.infer<typeof McpServer>;
 export const McpPage = z.strictObject({ available: z.boolean(), servers: z.array(McpServer) });
 export type McpPage = z.infer<typeof McpPage>;
 
+// Signing in (ADR-SEC-010): whether this dashboard asks for it, and whether this browser is signed in.
+export const SessionStatus = z.strictObject({ required: z.boolean(), signed_in: z.boolean() });
+export type SessionStatus = z.infer<typeof SessionStatus>;
+
+// Told whenever the server answers "sign in first" (401), so the page can show the sign-in screen.
+const signedOutListeners = new Set<() => void>();
+export function onSignedOut(listener: () => void): () => void {
+  signedOutListeners.add(listener);
+  return () => {
+    signedOutListeners.delete(listener);
+  };
+}
+function checkSignedIn(response: Response): void {
+  if (response.status === 401) for (const listener of signedOutListeners) listener();
+}
+
+// Marks a call as something the Chairman did, so it keeps the sign-in alive for 3 more hours.
+// Every call the page makes today follows a click, a keystroke or opening the page; an automatic
+// refresh added later must leave this header off, so an open page never keeps itself signed in.
+const ACTIVE = { "X-AgentZaaheen-Active": "1" };
+
 // WebAuthn options as JSON, handed straight to the browser's own parser (it checks them).
 const PasskeyOptions = z.strictObject({ options: z.record(z.string(), z.unknown()) });
 
@@ -492,9 +513,15 @@ async function errorDetail(response: Response): Promise<[string | null, string |
 async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json", "X-AgentZaaheen-Request": "1" },
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-AgentZaaheen-Request": "1",
+      ...ACTIVE,
+    },
     body: JSON.stringify(body),
   });
+  checkSignedIn(response);
   if (!response.ok) throw new ApiError(path, response.status, ...(await errorDetail(response)));
   const parsed = schema.safeParse(await response.json());
   if (!parsed.success) throw new ApiError(path, null);
@@ -508,7 +535,8 @@ function askChat(workspace: string | null, modelId: string, question: string): P
 }
 
 async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
-  const response = await fetch(path, { headers: { Accept: "application/json" } });
+  const response = await fetch(path, { headers: { Accept: "application/json", ...ACTIVE } });
+  checkSignedIn(response);
   if (!response.ok) throw new ApiError(path, response.status);
   const parsed = schema.safeParse(await response.json());
   if (!parsed.success) throw new ApiError(path, null);
@@ -604,4 +632,9 @@ export const api = {
     (await postJson("/api/passkey/enrol/options", { code }, PasskeyOptions)).options,
   enrol: (code: string, credential: unknown) => postJson("/api/passkey/enrol", { code, credential }, PasskeyStatus),
   ask: askChat,
+  // Signing in with Windows Hello, and out again (ADR-SEC-010).
+  session: () => getJson("/api/session", SessionStatus),
+  signInOptions: async () => (await postJson("/api/session/options", {}, PasskeyOptions)).options,
+  signIn: (credential: unknown) => postJson("/api/session", { credential }, SessionStatus),
+  signOut: () => postJson("/api/session/sign-out", {}, SessionStatus),
 };

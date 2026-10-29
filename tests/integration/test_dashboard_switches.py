@@ -79,14 +79,17 @@ def ui(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def start(ui: Path, url: SecretStr, argv: list[str] | None = None, **extra: object) -> FastAPI:
+def start(
+    ui: Path, url: SecretStr, argv: list[str] | None = None, *, sign_in: bool = False, **extra: object
+) -> FastAPI:
+    """The dashboard over ``url``; without ``sign_in`` it asks for none, so a test reaches every route."""
     apps: list[FastAPI] = []
 
     async def prepare() -> SecretStr:
         return url
 
     code = dashboard.main(
-        ["--switches", *(argv or [])],
+        ["--switches", *([] if sign_in else ["--no-sign-in"]), *(argv or [])],
         static_dir=ui,
         serve=lambda app, _h, _p: apps.append(app),
         prepare=prepare,
@@ -187,11 +190,13 @@ def test_set_up_a_passkey_then_approve_and_refuse_over_http(
     ui: Path, laptop_url: SecretStr, capsys: pytest.CaptureFixture[str]
 ) -> None:
     device = SoftAuthenticator()
-    app = start(ui, laptop_url, ["--enrol-passkey"])
+    app = start(ui, laptop_url, ["--enrol-passkey"], sign_in=True)
     out = capsys.readouterr().out
     code = out.split("The code to type on the Customize page is ")[1].split()[0]
     assert "open http://localhost:8765" in out
+    assert "sign in with Windows Hello" in out
     with TestClient(app, base_url="http://localhost:8765") as client:
+        assert client.get("/api/registry").status_code == 401  # nothing shown before signing in
         assert client.get("/api/passkey").json() == {"enrolled": False, "enrolment_open": True}
         options = client.post("/api/passkey/enrol/options", json={"code": code}, headers=HERE).json()[
             "options"
@@ -200,6 +205,7 @@ def test_set_up_a_passkey_then_approve_and_refuse_over_http(
             "/api/passkey/enrol", json={"code": code, "credential": device.register(options)}, headers=HERE
         )
         assert done.json() == {"enrolled": True, "enrolment_open": False}
+        assert client.get("/api/session").json() == {"required": True, "signed_in": True}  # set-up signs in
 
         # Off, ask, approve with Windows Hello: on again.
         request = ask_after_switching_off(client)
@@ -228,19 +234,19 @@ def test_the_server_token_and_model_key_saved_with_windows_hello_go_with_each_ca
 
     device = SoftAuthenticator()
     argv = ["--enrol-passkey", "--vault-key", str(key_file), "--model-url", "https://llm.agentzaaheen.com"]
-    app = start(ui, laptop_url, argv, transport=httpx.MockTransport(server))
+    app = start(ui, laptop_url, argv, sign_in=True, transport=httpx.MockTransport(server))
     code = capsys.readouterr().out.split("The code to type on the Customize page is ")[1].split()[0]
     token = {"client_id": "0" * 32 + ".access", "client_secret": "f" * 64}  # built here, never a real one
     model_key = {"key": "a1" * 32}  # built here, never the real one
     question = {"model_id": chat_tools.LOCAL_MODEL_ID, "question": "hi"}
     with TestClient(app, base_url="http://localhost:8765") as client:
-        before = client.post("/api/chat", json=question, headers=HERE)
         options = client.post("/api/passkey/enrol/options", json={"code": code}, headers=HERE).json()[
             "options"
         ]
         client.post(
             "/api/passkey/enrol", json={"code": code, "credential": device.register(options)}, headers=HERE
         )
+        before = client.post("/api/chat", json=question, headers=HERE)
         assert client.get("/api/server-token").json()["saved"] is False
         unsigned = client.post("/api/server-token", json=token, headers=HERE)
         sign = client.post("/api/server-token/options", json=token, headers=HERE).json()["options"]
@@ -273,6 +279,54 @@ def test_the_server_token_and_model_key_saved_with_windows_hello_go_with_each_ca
     assert call.headers["CF-Access-Client-Id"] == token["client_id"]
     assert call.headers["CF-Access-Client-Secret"] == token["client_secret"]
     assert call.headers["Authorization"] == f"Bearer {model_key['key']}"
+
+
+def test_sign_in_and_out_with_windows_hello_and_every_step_is_audited(
+    ui: Path, laptop_url: SecretStr, capsys: pytest.CaptureFixture[str]
+) -> None:
+    device = SoftAuthenticator()
+    app = start(ui, laptop_url, ["--enrol-passkey"], sign_in=True)
+    code = capsys.readouterr().out.split("The code to type on the Customize page is ")[1].split()[0]
+    with TestClient(app, base_url="http://localhost:8765") as client:
+        options = client.post("/api/passkey/enrol/options", json={"code": code}, headers=HERE).json()[
+            "options"
+        ]
+        client.post(
+            "/api/passkey/enrol", json={"code": code, "credential": device.register(options)}, headers=HERE
+        )
+        client.cookies.clear()  # as another browser: not signed in
+        refused = client.get("/api/registry")
+        sign = client.post("/api/session/options", json={}, headers=HERE).json()["options"]
+        bad = client.post("/api/session", json={"credential": SoftAuthenticator().sign(sign)}, headers=HERE)
+        still_out = client.get("/api/registry").status_code
+        sign = client.post("/api/session/options", json={}, headers=HERE).json()["options"]
+        good = client.post("/api/session", json={"credential": device.sign(sign)}, headers=HERE)
+        inside = client.get("/api/registry").status_code
+        out = client.post("/api/session/sign-out", json={}, headers=HERE)
+        after = client.get("/api/registry").status_code
+
+    assert (refused.status_code, refused.json()) == (401, {"detail": "session.needed"})
+    assert (bad.status_code, bad.json()) == (403, {"detail": "session.sign_in_failed"})
+    assert still_out == 401
+    assert good.json() == {"required": True, "signed_in": True}
+    assert "az_session" in good.headers["set-cookie"]
+    assert inside == 200
+    assert out.json() == {"required": True, "signed_in": False}
+    assert after == 401
+
+    async def audited() -> list[AuditRow]:
+        db = await Database.open(DatabaseSettings(dsn=laptop_url))
+        try:
+            return await AuditRows(db.scoped(laptop_db.LAPTOP_TENANT)).all_rows()
+        finally:
+            await db.close()
+
+    steps = [(e.action, e.reason_code) for e in run(audited()) if e.action.startswith("session.")]
+    assert steps == [
+        ("session.sign_in", "passkey.unknown"),
+        ("session.sign_in", "session.signed_in"),
+        ("session.sign_out", "session.by_button"),
+    ]
 
 
 def ask_after_switching_off(client: TestClient) -> str:
