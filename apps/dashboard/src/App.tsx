@@ -1,12 +1,13 @@
-import { LayoutGrid, ScrollText, SlidersHorizontal } from "lucide-react";
+import { LayoutGrid, LogOut, ScrollText, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { api, type ModelChoice, type ProjectDetail, type ProjectSummary, type RegistryPage } from "./api";
+import { api, onSignedOut, type ModelChoice, type ProjectDetail, type ProjectSummary, type RegistryPage } from "./api";
 import { BoardView } from "./components/BoardView";
 import { ChatPanel } from "./components/ChatPanel";
 import { CustomizeView } from "./components/CustomizeView";
 import { LogsView } from "./components/LogsView";
 import { ProjectList } from "./components/ProjectList";
+import { SignInScreen } from "./components/SignInScreen";
 import { type Tab, WorkspaceView } from "./components/WorkspaceView";
 
 type Load<T> = { state: "loading" } | { state: "ready"; data: T } | { state: "failed" };
@@ -24,7 +25,65 @@ const NAV_BUTTON = [
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
 ].join(" ");
 
+// Signing in (ADR-SEC-010). "open": no sign-in asked here (our server's copy, sample mode), or the check
+// itself failed, in which case the dashboard shows its own "could not load" and any 401 brings sign-in back.
+type Session = "checking" | "open" | "signed_in" | "signed_out" | "ended";
+
 export function App() {
+  const [session, setSession] = useState<Session>("checking");
+  // A fresh dashboard after each sign-in, so it reads everything again.
+  const [round, setRound] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    api.session().then(
+      (status) => {
+        if (live) setSession(!status.required ? "open" : status.signed_in ? "signed_in" : "signed_out");
+      },
+      () => {
+        if (live) setSession("open");
+      },
+    );
+    const stop = onSignedOut(() => {
+      setSession((now) => (now === "signed_in" || now === "open" ? "ended" : now));
+    });
+    return () => {
+      live = false;
+      stop();
+    };
+  }, []);
+
+  if (session === "checking") return null;
+  if (session === "signed_out" || session === "ended") {
+    return (
+      <SignInScreen
+        ended={session === "ended"}
+        onSignedIn={() => {
+          setRound((n) => n + 1);
+          setSession("signed_in");
+        }}
+      />
+    );
+  }
+  return (
+    <Dashboard
+      key={round}
+      onSignOut={
+        session === "signed_in"
+          ? () => {
+              // Signed out here even if the server can't be reached: the screen asks again either way.
+              const done = () => {
+                setSession("signed_out");
+              };
+              api.signOut().then(done, done);
+            }
+          : null
+      }
+    />
+  );
+}
+
+function Dashboard({ onSignOut }: { onSignOut: (() => void) | null }) {
   const [workspaces, setWorkspaces] = useState<Load<ProjectSummary[]>>({ state: "loading" });
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [view, setView] = useState<View>({ kind: "board" });
@@ -126,7 +185,19 @@ export function App() {
           <img src="/favicon.svg" alt="" className="size-7" />
           <span className="text-lg font-semibold tracking-tight text-ink">Agent Zaaheen</span>
         </div>
-        <span className="hidden text-xs text-faint sm:inline">Read-only · runs on this laptop</span>
+        <div className="flex items-center gap-3">
+          <span className="hidden text-xs text-faint sm:inline">Read-only · runs on this laptop</span>
+          {onSignOut && (
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-ink hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            >
+              <LogOut className="size-4" aria-hidden="true" />
+              Sign out
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[16rem_minmax(0,1fr)_24rem]">

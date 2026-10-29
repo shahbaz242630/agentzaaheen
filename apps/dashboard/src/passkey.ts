@@ -1,4 +1,4 @@
-// Windows Hello through the browser's own WebAuthn (ADR-SEC-007). The server
+// Windows Hello through the browser's own WebAuthn (ADR-SEC-007, ADR-SEC-010). The server
 // makes the options and checks the answers; this file only hands them over.
 // It uses the browser's JSON helpers (Chrome and Edge 129+), so no library.
 import { ApiError, api, type RegistryPage } from "./api";
@@ -8,6 +8,14 @@ export class PasskeyProblem extends Error {
     super(reason);
   }
 }
+
+// What each problem means, in the Chairman's words (Customize and the sign-in screen).
+export const PASSKEY_PROBLEM: Record<PasskeyProblem["reason"], string> = {
+  unsupported: "This browser can't use passkeys. Use Chrome or Edge (version 129 or newer).",
+  wrong_address: "Passkeys only work when the dashboard is opened at localhost.",
+  cancelled:
+    "Windows Hello was closed before confirming, so nothing changed. If Bitwarden or another password manager opened instead, choose its option to use another device.",
+};
 
 // Passkeys need a name, not an IP: the page must be opened at localhost.
 export function onPasskeyAddress(): boolean {
@@ -62,6 +70,17 @@ export async function approveWithPasskey(requestId: string): Promise<RegistryPag
   );
   const credential = await windowsHello(() => navigator.credentials.get({ publicKey }));
   return api.approve(requestId, asJson(credential));
+}
+
+// Sign in to the dashboard (ADR-SEC-010): Windows Hello signs a challenge made for signing in only.
+export async function signInWithPasskey() {
+  ready();
+  const options = await api.signInOptions();
+  const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(
+    options as unknown as PublicKeyCredentialRequestOptionsJSON,
+  );
+  const credential = await windowsHello(() => navigator.credentials.get({ publicKey }));
+  return api.signIn(asJson(credential));
 }
 
 // A change that may need the Chairman's passkey: try it; if the server says it is riskier
