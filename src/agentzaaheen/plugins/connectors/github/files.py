@@ -11,6 +11,10 @@ anyone who can push, so it is handed on as untrusted text (the SDK's
 ``GitHubRepos`` lists the repositories the read-only token covers (their
 ``full_name`` only), so the dashboard offers only repositories it can read.
 
+``GitHubDocs`` reads the product documents a local list names (F12): which
+exist on the main branch with their git blob ids (one tree call), then each
+document's text when it changed.
+
 ``GitHubProfile`` reads what a project is built with (F17 slice 5b-1): the
 languages GitHub counted (``/languages``: names and byte counts only) and the
 providers the SDK's rules find in the file tree, in a few manifests
@@ -27,7 +31,7 @@ import asyncio
 import base64
 import binascii
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import quote
@@ -51,6 +55,7 @@ from agentzaaheen.core.sdk import (
     SourceError,
     SourceErrorCode,
     detect,
+    is_doc,
     is_plain_path,
     is_secret_path,
     pick_code,
@@ -62,6 +67,8 @@ from agentzaaheen.plugins.connectors.github.mapping import Json
 
 REPOS_PER_PAGE = "100"
 AT_ONCE = 6  # files read from GitHub at the same time for a profile (well inside its limits)
+MAX_DOCS = 40  # documents read for one project's knowledge (F12)
+MAX_DOC_BYTES = 300_000  # a bigger file is not a product document we can cut sensibly
 
 
 def _bad(what: str) -> SourceError:
@@ -194,6 +201,84 @@ class GitHubRepos:
         if any(not re.fullmatch(REPO_PATTERN, n) for n in names):
             raise _bad("repository name").at("list github repositories")
         return sorted(names, key=str.lower)
+
+
+@dataclass(frozen=True)
+class DocList:
+    """The listed documents on a repository's main branch: path → git blob id, and what was not found."""
+
+    branch: str
+    found: dict[str, str]
+    missing: tuple[str, ...]
+
+
+class GitHubDocs:
+    """A project's own product documents, named in a local list, for the knowledge bank (F12). Read-only.
+
+    A listed entry is a file path, or a folder ending in ``/`` (every document file in it and below).
+    Secret files and anything not a document (``sdk.is_doc``) are never read. The text is written by
+    anyone who can push, so whoever reads a passage treats it as data.
+    """
+
+    def __init__(self, http: JsonReader, repo: str) -> None:
+        self._http = http
+        self._repo = _checked(repo)
+
+    async def listed(self, wanted: Sequence[str]) -> DocList:
+        """Which listed documents exist on the main branch, with their blob ids (one call for the tree)."""
+        try:
+            branch = mapping.branch(await _get(self._http, f"/repos/{self._repo}", {}), "default_branch")
+            tree = await _get(
+                self._http, f"/repos/{self._repo}/git/trees/{quote(branch, safe='')}", {"recursive": "1"}
+            )
+            if tree.get("truncated") is not False:
+                raise _bad("file tree (it was cut short)")
+            blobs = _blob_ids(mapping.objects(tree.get("tree"), "file tree"))
+        except ValidationError:
+            raise _bad("file list").at("read github documents") from None
+        except SourceError as exc:
+            exc.at("read github documents")
+            raise
+        found: dict[str, str] = {}
+        missing: list[str] = []
+        for entry in wanted:
+            if entry.endswith("/"):
+                inside = [p for p in blobs if p.startswith(entry)]
+            else:
+                inside = [entry] if entry in blobs else []
+            usable = [
+                p for p in inside if is_doc(p) and not is_secret_path(p) and blobs[p][0] <= MAX_DOC_BYTES
+            ]
+            if not usable:
+                missing.append(entry)
+            for path in usable[: MAX_DOCS - len(found)]:
+                found[path] = blobs[path][1]
+        return DocList(branch=branch, found=found, missing=tuple(missing))
+
+    async def text(self, path: str, branch: str) -> str | None:
+        """One document's text, or ``None`` if it is not UTF-8 text."""
+        try:
+            return await _text(self._http, self._repo, path, branch)
+        except SourceError as exc:
+            exc.at("read a github document")
+            raise
+
+
+def _blob_ids(entries: list[Json]) -> dict[str, tuple[int, str]]:
+    """Each file's path, size and git blob id. Folders and links are not files."""
+    found: dict[str, tuple[int, str]] = {}
+    for entry in entries:
+        if entry.get("type") != "blob":
+            continue
+        path, size, sha = entry.get("path"), entry.get("size"), entry.get("sha")
+        if not isinstance(path, str) or not is_plain_path(path):
+            continue
+        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+            raise _bad("file size")
+        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+            raise _bad("file id")
+        found[path] = (size, sha)
+    return found
 
 
 def _checked(repo: str) -> str:

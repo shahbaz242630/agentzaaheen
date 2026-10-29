@@ -44,6 +44,12 @@ DOORS = {
     # Chat records: the workspace comes from the API door's address, or is Agent Zaaheen's for the Board's
     # chat; the daily clean-up goes through the server's own list, one workspace at a time.
     "src/agentzaaheen/core/policy/chats.py",
+    # Product documents (F12): the workspace comes from the API door's address (the chat's search) or the
+    # server's own list (the 6-hourly update job), one workspace at a time.
+    "tools/dashboard_switches.py",
+    # The knowledge test set: the laptop's own fixed workspaces, by the project each local test question
+    # names; it only searches.
+    "tools/knowledge_check.py",
 }
 
 

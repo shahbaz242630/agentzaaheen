@@ -50,6 +50,7 @@ from agentzaaheen.core.store.chats import MAX_TURNS, ChatRows, ChatThread, KeptT
 from agentzaaheen.core.store.custom_mcp import MAX_SERVERS, CustomMcpRow, CustomMcpRows, McpTest, McpToolRow
 from agentzaaheen.core.store.db import Database, DatabaseSettings, Scoped
 from agentzaaheen.core.store.errors import StoreError, StoreErrorCode
+from agentzaaheen.core.store.knowledge import PRODUCTS, KnowledgeRows, Passage
 from agentzaaheen.core.store.migrations import LATEST_VERSION, MIGRATIONS, Migration, check_schema, migrate
 from agentzaaheen.core.store.model_call_misses import MissRow, ModelCallMisses
 from agentzaaheen.core.store.model_calls import CallRow, CallTokens, ModelCalls
@@ -100,6 +101,7 @@ __all__ = [
     "MAX_SERVERS",
     "MAX_TURNS",
     "MIGRATIONS",
+    "PRODUCTS",
     "RUN_INTERRUPTED",
     "Access",
     "AgentChange",
@@ -128,6 +130,7 @@ __all__ = [
     "ItemKind",
     "KeptTurn",
     "KillSwitchRows",
+    "KnowledgeRows",
     "McpTest",
     "McpToolRow",
     "Migration",
@@ -137,6 +140,7 @@ __all__ = [
     "ModelCalls",
     "NamePrints",
     "NewAgent",
+    "Passage",
     "PasskeyRow",
     "PasskeyRows",
     "Permission",

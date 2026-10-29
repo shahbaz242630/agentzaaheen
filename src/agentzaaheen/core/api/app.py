@@ -46,6 +46,7 @@ from agentzaaheen.core.api.agents import AgentSwitches, agent_routes
 from agentzaaheen.core.api.claude_key import ClaudeKeys, claude_key_routes
 from agentzaaheen.core.api.custom_mcp import CustomMcp, custom_mcp_routes
 from agentzaaheen.core.api.facts import portfolio_facts, project_facts, uses_sample
+from agentzaaheen.core.api.knowledge import KnowledgeSearch, document_labels, with_documents
 from agentzaaheen.core.api.logs import LogReader, log_routes
 from agentzaaheen.core.api.model_key import ModelKeys, model_key_routes
 from agentzaaheen.core.api.profile import WorkspaceProfiles, profile_routes
@@ -398,6 +399,7 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     chats: ChatRecords | None = None,
     custom_mcp: CustomMcp | None = None,
     session: SessionGate | None = None,
+    knowledge: KnowledgeSearch | None = None,
     on_start: Callable[[], Awaitable[None]] | None = None,
     on_close: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
@@ -424,6 +426,8 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     and tested by listing their tools; without it the tab says servers can't be added here.
     ``session`` asks for a Windows Hello sign-in before any ``/api`` route answers (ADR-SEC-010);
     without it (our server's copy, tests) nothing is asked.
+    ``knowledge`` finds a workspace's product documents for its chat (F12); without it the chat has
+    only the dashboard's numbers.
     ``on_start`` runs once the server is up, inside its event loop (the morning job starts there);
     ``on_close`` runs when the server stops (the laptop database's pool is closed there).
 
@@ -499,8 +503,12 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     model_key_routes(app, model_key, _refuse_foreign)
     custom_mcp_routes(app, custom_mcp, _refuse_foreign)
 
-    async def answer(
-        question: ChatQuestion, facts: str, sample: bool, workspace: WorkspaceRow | None
+    async def answer(  # the question, what it is answered from, and where it was asked
+        question: ChatQuestion,
+        facts: str,
+        sample: bool,
+        workspace: WorkspaceRow | None,
+        documents: Sequence[str] = (),
     ) -> ChatAnswer:
         if chat is None or question.model_id != chat.model_id:
             raise HTTPException(status_code=503, detail="chat.not_connected")
@@ -514,8 +522,9 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
             except SourceError as exc:
                 say(log, "chat_failed", code=exc.reason_code, status=exc.status)
                 raise HTTPException(status_code=502, detail=exc.reason_code) from None
+        used = [*reply.used, *(d for d in documents if d not in reply.used)]
         answered = ChatAnswer(
-            model_id=chat.model_id, answer=reply.answer, from_sample=sample, used=reply.used[:8]
+            model_id=chat.model_id, answer=reply.answer, from_sample=sample, used=tuple(used[:8])
         )
         if chats is not None:
             # The answer is shown even if keeping it fails: the line says it was not kept.
@@ -540,7 +549,11 @@ def create_app(  # noqa: PLR0913, PLR0915  # the portfolio, then each optional p
     @app.post("/api/workspaces/{slug}/chat", dependencies=[Depends(_refuse_foreign)])
     async def ask_a_workspace(question: ChatQuestion, workspace: InWorkspace) -> ChatAnswer:
         detail = detail_of(workspace)
-        return await answer(question, project_facts(detail), uses_sample(detail), workspace)
+        facts = project_facts(detail)
+        found = [] if knowledge is None else await knowledge.search(workspace, question.question)
+        return await answer(
+            question, with_documents(facts, found), uses_sample(detail), workspace, document_labels(found)
+        )
 
     if static_dir is not None:
         if not (static_dir / "index.html").is_file():

@@ -1,6 +1,6 @@
 id: github
 type: connector
-version: 0.4.0
+version: 0.5.0
 sdk: ">=1.12,<2"
 permissions: [read]
 egress: [api.github.com, "productionresultssa<n>.blob.core.windows.net"]
@@ -22,4 +22,4 @@ data_class: internal
 interface:
   display_name: GitHub
   category: Code
-  description: "Issue, pull request and build counts; a failed build's log on demand; the scout's files (untrusted); and a project's languages and providers, found by code."
+  description: "Issue, PR and build counts; a failed build's log on demand; the scout's files; languages and providers, found by code; listed product documents (files are untrusted)."
