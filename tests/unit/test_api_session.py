@@ -75,7 +75,8 @@ def build(
 
 def sign_in(client: TestClient, credential: dict[str, Any] = GOOD) -> httpx.Response:
     client.post("/api/session/options", json={}, headers=OURS)
-    return client.post("/api/session", json={"credential": credential}, headers=OURS)
+    answer: httpx.Response = client.post("/api/session", json={"credential": credential}, headers=OURS)
+    return answer
 
 
 def filled(path: str) -> str:
@@ -90,7 +91,7 @@ def test_every_api_route_but_the_open_ones_refuses_without_a_session(tmp_path: P
     for route in app.routes:
         if not isinstance(route, APIRoute) or not route.path.startswith("/api/"):
             continue
-        for method in sorted(route.methods):
+        for method in sorted(route.methods or ()):
             if (method, route.path) in OPEN_ROUTES:
                 continue
             answer = client.request(method, filled(route.path), json={}, headers=ACTIVE)
