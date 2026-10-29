@@ -730,6 +730,37 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         why="It stopped with an unexpected {code} problem.",
         next="It tries again in the next 5-minute round; Monitoring says when the dates are too old.",
     ),
+    # ---- the knowledge bank (ADR-037, F12): counts and names, never a document's words
+    "knowledge_synced": LogEvent(
+        "info",
+        what="Read {workspace}'s product documents: {entries} listed files found, {changes} read again "
+        "({count} passages kept), {removed} no longer listed removed.",
+        why="The knowledge bank re-reads each project's listed documents at start and every 6 hours; "
+        "a file is read again only when it changed.",
+    ),
+    "knowledge_missing": LogEvent(
+        "warning",
+        what="Some files in {workspace}'s knowledge list ({entries}) were not found on its main branch.",
+        why="They were renamed, deleted, are not a kind of document we read, or are too big.",
+        next="Check projects/knowledge.yaml against the repository and correct the paths.",
+    ),
+    "knowledge_sync_failed": LogEvent(
+        "warning",
+        what="Could not read {workspace}'s product documents ({code}).",
+        explains="code",
+    ),
+    "knowledge_sync_crashed": LogEvent(
+        "error",
+        what="Reading {workspace}'s product documents stopped with an unexpected {kind} error.",
+        why="Something in our own code went wrong; the other projects were still read.",
+        next="Read the lines just before this one; the next round is in 6 hours or at the next start.",
+    ),
+    "knowledge_search_failed": LogEvent(
+        "warning",
+        what="The chat could not search {workspace}'s product documents ({code}).",
+        why="The laptop database did not answer; the chat answered from the dashboard's numbers only.",
+        next="Check the laptop database is running.",
+    ),
     "monitoring_round_failed": LogEvent(
         "warning",
         what="One round of the Monitoring agents could not run.",

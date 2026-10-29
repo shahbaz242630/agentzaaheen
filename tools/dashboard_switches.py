@@ -86,6 +86,7 @@ from agentzaaheen.core.store import (
     EngagedSwitch,
     KeptTurn,
     KillSwitchRows,
+    KnowledgeRows,
     ModelCallMisses,
     ModelCalls,
     StoreError,
@@ -424,6 +425,13 @@ class LaptopSwitches:
         return await (await self._workspaces_now()).add(
             name, github=repo, role=Role.CHAIRMAN, channel=Channel.DASHBOARD
         )
+
+    async def knowledge(self, workspace: WorkspaceRow) -> KnowledgeRows:
+        """A workspace's product documents, behind its walls (F12)."""
+        await self._open()
+        if self._db is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return KnowledgeRows(self._db.scoped(LAPTOP_TENANT, workspace.workspace_id))
 
     async def repos_in_use(self) -> dict[str, str]:
         """The repository each active or archived workspace reads, by its address."""

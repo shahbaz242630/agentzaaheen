@@ -47,6 +47,7 @@ from agentzaaheen.core.sdk.backend import (
     ServiceHealth,
 )
 from agentzaaheen.core.sdk.code import REPO_PATTERN, BuildState, RepoHealth, RepoSource
+from agentzaaheen.core.sdk.docs import DOC_SUFFIXES, DocPiece, doc_pieces, is_doc
 from agentzaaheen.core.sdk.events import LOG_EVENTS, LogEvent, elapsed_ms, say
 from agentzaaheen.core.sdk.expiry import (
     HOST_NAME,
@@ -171,6 +172,7 @@ from agentzaaheen.core.sdk.uptime import (
 __all__ = [
     "ALLOWED_ATTRIBUTES",
     "CHECK_SLUG",
+    "DOC_SUFFIXES",
     "HOST_NAME",
     "KNOWN_CODES",
     "LOG_EVENTS",
@@ -202,6 +204,7 @@ __all__ = [
     "CertGetter",
     "CheckStatus",
     "DataClass",
+    "DocPiece",
     "Event",
     "Evidence",
     "Expect",
@@ -264,6 +267,7 @@ __all__ = [
     "contains_secret",
     "contains_sensitive",
     "detect",
+    "doc_pieces",
     "elapsed_ms",
     "error_type",
     "event",
@@ -272,6 +276,7 @@ __all__ = [
     "get_logger",
     "install_log_sink",
     "install_tracing",
+    "is_doc",
     "is_plain_path",
     "is_secret_path",
     "is_sensitive_key",

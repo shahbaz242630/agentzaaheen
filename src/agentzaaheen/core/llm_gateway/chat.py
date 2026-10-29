@@ -32,6 +32,7 @@ If the facts do not answer the question, say plainly that you don't have that in
 Never invent numbers, customers, dates or events.
 If a number is marked unknown, say it is unknown and give the reason.
 If a card is marked SAMPLE, say those numbers are made-up sample data.
+If the facts include product documents, answer from them and name the document in square brackets.
 You cannot take actions. If asked to do something, say that actions come later,
 as proposals the owner approves.
 Write short plain text (no markdown tables), at most a few sentences or a short list."""

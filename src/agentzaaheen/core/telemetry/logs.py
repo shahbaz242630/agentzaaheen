@@ -114,6 +114,7 @@ LOG_FIELDS: frozenset[str] = frozenset(
         "server",
         "tools",
         "skipped",
+        "removed",
     }
 )
 

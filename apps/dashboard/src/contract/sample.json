@@ -1075,8 +1075,8 @@
         "id": "github",
         "name": "GitHub",
         "category": "Code",
-        "description": "Issue, pull request and build counts; a failed build's log on demand; the scout's files (untrusted); and a project's languages and providers, found by code.",
-        "version": "0.4.0",
+        "description": "Issue, PR and build counts; a failed build's log on demand; the scout's files; languages and providers, found by code; listed product documents (files are untrusted).",
+        "version": "0.5.0",
         "level": "read",
         "hosts": [
           "api.github.com",
@@ -1096,7 +1096,7 @@
         "key_slots": [
           "token"
         ],
-        "fingerprint": "4d3b94b72649d91b6ec544ac54214e8d46f84953585fcb66680759c4916c51cc",
+        "fingerprint": "62264ddb33a7f2e60695daaea09c918af4b41c1673aadd83994f9881d8c5325b",
         "uses": [
           {
             "project_id": "zaaheen",

@@ -36,7 +36,14 @@ Must never:
 
 from agentzaaheen.plugins.connectors.github.adapter import ALLOWED_HOSTS, API_HEADERS, BASE_URL, GitHubSource
 from agentzaaheen.plugins.connectors.github.fake import FakeGitHubBuildLog, FakeGitHubSource
-from agentzaaheen.plugins.connectors.github.files import GitHubFiles, GitHubProfile, GitHubRepos, Head
+from agentzaaheen.plugins.connectors.github.files import (
+    DocList,
+    GitHubDocs,
+    GitHubFiles,
+    GitHubProfile,
+    GitHubRepos,
+    Head,
+)
 from agentzaaheen.plugins.connectors.github.logs import LOG_HOST, GitHubBuildLog
 from agentzaaheen.plugins.connectors.github.mapping import SOURCE
 
@@ -46,9 +53,11 @@ __all__ = [
     "BASE_URL",
     "LOG_HOST",
     "SOURCE",
+    "DocList",
     "FakeGitHubBuildLog",
     "FakeGitHubSource",
     "GitHubBuildLog",
+    "GitHubDocs",
     "GitHubFiles",
     "GitHubProfile",
     "GitHubRepos",

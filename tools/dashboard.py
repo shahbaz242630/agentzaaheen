@@ -126,6 +126,7 @@ from tools.dashboard_adding import LaptopAdding
 from tools.dashboard_chats import ChatSweep
 from tools.dashboard_expiry import cert_hosts, cert_reader, domain_reader, domains_list
 from tools.dashboard_healthchecks import HealthchecksReader, healthchecks_list, healthchecks_reader
+from tools.dashboard_knowledge import KnowledgeSync, LaptopKnowledge, knowledge_settings
 from tools.dashboard_monitoring import MONITORING_TOOLS, DatesWatch, LaptopMonitoring
 from tools.dashboard_profile import LaptopProfiles, Repos
 from tools.dashboard_reread import HourlyReads, Reread
@@ -428,6 +429,11 @@ def _parser() -> argparse.ArgumentParser:
         help="env var holding the Healthchecks ping address told after each sent briefing (needs --switches)",
     )
     parser.add_argument(
+        "--knowledge",
+        type=Path,
+        help="each project's product documents to read from its repository, for its chat (needs --switches)",
+    )
+    parser.add_argument(
         "--keys",
         type=Path,
         help="the key list (names, end dates, how to renew; no secrets): the briefing warns 14 days before",
@@ -494,6 +500,7 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
             ns.slo, projects, env, ns.checker_db_key_env, ns.checker_db, clock=clock, transport=transport
         )
         key_dates = key_dates_list(ns.keys)
+        listed_docs = knowledge_settings(ns.knowledge)
         off = off_connectors(connected.standing, registry) if connected else frozenset[str]()
         alerts = AlertLog(clock)  # the phone alerts, counted for the daily summaries
         watchers: list[UptimeLive] = []
@@ -600,6 +607,15 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
     )
     # Every chat kept 12 months (F19): old ones removed at start, then daily.
     sweep = ChatSweep(switches.forget_old_chats, directory) if switches is not None else None
+    # Each project's listed product documents, read at start and every 6 hours, for its chat (F12).
+    docs = (
+        KnowledgeSync(
+            listed_docs, directory.all, switches.repos_in_use, switches.knowledge, token=usable, clock=clock,
+            transport=transport,
+        )
+        if switches is not None and usable is not None and listed_docs
+        else None
+    )  # fmt: skip
     page = registry_for(chosen, registry=registry, uptime=uptime, backends=backends)
     app = create_app(
         chosen,
@@ -622,8 +638,11 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
         chats=switches,
         custom_mcp=LaptopCustomMcp(switches) if switches is not None else None,
         session=SessionGate(switches, clock) if switches is not None and not ns.no_sign_in else None,
-        on_start=_starter(summaries, monitoring, sweep),
-        on_close=_closer(switches, scout, summaries, monitoring, sweep),
+        knowledge=LaptopKnowledge(switches.knowledge, listed_docs)
+        if switches is not None and listed_docs
+        else None,
+        on_start=_starter(summaries, monitoring, sweep, docs),
+        on_close=_closer(switches, scout, summaries, monitoring, sweep, docs=docs),
     )
     what = f"real numbers from {' and '.join(live)}, sample data elsewhere" if live else "sample data"
     if chat is not None:
@@ -679,10 +698,13 @@ def _scout(  # noqa: PLR0913  # the model, the database, GitHub, the roles, more
 
 
 def _starter(
-    summaries: LaptopSummaries | None, monitoring: LaptopMonitoring | None, sweep: ChatSweep | None = None
+    summaries: LaptopSummaries | None,
+    monitoring: LaptopMonitoring | None,
+    sweep: ChatSweep | None = None,
+    docs: KnowledgeSync | None = None,
 ) -> Callable[[], Awaitable[None]] | None:
-    """What to start once the server is up: the morning job, the Monitoring rounds, the chat clean-up."""
-    jobs = [job for job in (summaries, monitoring, sweep) if job is not None]
+    """What to start once the server is up: the morning job, Monitoring, the chat clean-up, the documents."""
+    jobs = [job for job in (summaries, monitoring, sweep, docs) if job is not None]
     if not jobs:
         return None
 
@@ -693,18 +715,22 @@ def _starter(
     return start
 
 
-def _closer(
+def _closer(  # noqa: PLR0913  # the database, the scout, then each job
     switches: LaptopSwitches | None,
     scout: LaptopScout | None,
     summaries: LaptopSummaries | None = None,
     monitoring: LaptopMonitoring | None = None,
     sweep: ChatSweep | None = None,
+    *,
+    docs: KnowledgeSync | None = None,
 ) -> Callable[[], Awaitable[None]] | None:
     """What to close when the server stops: the jobs, the scout, then the database."""
     if switches is None:
         return None
 
     async def close() -> None:
+        if docs is not None:
+            await docs.close()
         if sweep is not None:
             await sweep.close()
         if monitoring is not None:
