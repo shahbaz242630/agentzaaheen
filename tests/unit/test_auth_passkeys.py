@@ -8,6 +8,7 @@ import pytest
 
 from agentzaaheen.core.auth import (
     CHALLENGE_TTL,
+    SIGN_IN,
     Challenges,
     KnownPasskey,
     NewPasskey,
@@ -147,6 +148,20 @@ def test_a_new_challenge_replaces_the_old_one_and_odd_purposes_are_refused() -> 
     assert old != new
     assert challenges.take("enrol") == new
     for odd in ("approve:anything", "approve:", "delete", ""):
+        with pytest.raises(ValueError, match="purpose"):
+            challenges.issue(odd)
+
+
+def test_a_sign_in_challenge_is_its_own_purpose() -> None:
+    """ADR-SEC-010: a sign-in signature fits no approval, and an approval's fits no sign-in."""
+    challenges = Challenges(Clock())
+    sign_in = challenges.issue(SIGN_IN)
+    approval = challenges.issue(PURPOSE)
+    assert sign_in != approval
+    assert challenges.take(SIGN_IN) == sign_in
+    with pytest.raises(PasskeyError):
+        challenges.take(SIGN_IN)
+    for odd in ("signin:x", "sign-in", "SIGNIN"):
         with pytest.raises(ValueError, match="purpose"):
             challenges.issue(odd)
 

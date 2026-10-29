@@ -7,8 +7,10 @@ stops working): that is how a lost passkey is recovered, by someone at this
 laptop's terminal (Chairman, 20 Oct 2026). Approving: a challenge is issued for one request only, the
 browser has Windows Hello sign it, and the signed answer is checked here with
 the stored public key. Only then is ``RegistryControl.approve`` called, with
-the time of that check as the step-up. Every set-up, approval and failed check
-is audited (never the credential, the signature or the challenge).
+the time of that check as the step-up. Signing in to the dashboard is the
+same check for the purpose ``signin`` (ADR-SEC-010). Every set-up, approval,
+sign-in, sign-out and failed check is audited (never the credential, the
+signature, the challenge or a session token).
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from agentzaaheen.core.auth import (
+    SIGN_IN,
     Challenges,
     KnownPasskey,
     PasskeyError,
@@ -155,6 +158,31 @@ class PasskeyApprovals:
             return None
         await self._audit("passkey.step_up", "passkey.step_up_ok", now, allowed=True, purpose=purpose)
         return now
+
+    async def sign_in_options(self) -> dict[str, object]:
+        """Options for Windows Hello to sign in to the dashboard (ADR-SEC-010)."""
+        known = await self._known()
+        if not known:
+            raise PasskeyError(Verdict.NO_PASSKEY.value)
+        return approve_options(self._site, self._challenges.issue(SIGN_IN), known)
+
+    async def sign_in(self, answer: dict[str, object]) -> bool:
+        """Whether ``answer`` is a good signature for the open sign-in challenge; audited either way."""
+        now = self._clock()
+        try:
+            challenge = self._challenges.take(SIGN_IN)
+            used, count = verify_approval(self._site, challenge, answer, await self._known())
+            if not await self._rows.record_use(used.credential_id, count, now):
+                raise PasskeyError("passkey.counter_went_back")
+        except PasskeyError as exc:
+            await self._audit("session.sign_in", exc.code, now, allowed=False)
+            return False
+        await self._audit("session.sign_in", "session.signed_in", now, allowed=True)
+        return True
+
+    async def signed_out(self, reason: str) -> None:
+        """Audit a session's end: ``reason`` is a fixed code (``session.by_button``, ``session.idle`` ...)."""
+        await self._audit("session.sign_out", reason, self._clock(), allowed=True)
 
     async def _audit(  # noqa: PLR0913  # what, why, when, the outcome, and what it was for
         self,

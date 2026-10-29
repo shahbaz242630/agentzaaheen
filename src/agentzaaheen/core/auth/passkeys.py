@@ -3,7 +3,7 @@
 All the cryptography is done by the ``webauthn`` library (Duo Labs, BSD-3):
 signature, origin, site name (RP id), challenge, user verification and the
 signature counter. This module only fixes the settings and keeps the
-challenges: random, bound to one purpose (``enrol`` or ``approve:<id>``),
+challenges: random, bound to one purpose (``enrol``, ``signin``, ``approve:<id>`` or ``step:...``),
 used once, valid for two minutes, in memory only.
 """
 
@@ -38,8 +38,9 @@ CHALLENGE_TTL = timedelta(minutes=2)
 MAX_ANSWER_BYTES = 16_384
 MAX_OPEN_CHALLENGES = 32
 USER_ID = b"agentzaaheen-chairman"  # one approver per tenant; the same id for every passkey
+SIGN_IN = "signin"  # the purpose of a sign-in challenge (ADR-SEC-010)
 # "step:..." names one exact change (an agent on, a cap of exactly N): a signature for it fits nothing else.
-_PURPOSE = r"^(enrol|approve:[0-9a-f-]{36}|step:[a-z0-9:._-]{1,160})$"
+_PURPOSE = r"^(enrol|signin|approve:[0-9a-f-]{36}|step:[a-z0-9:._-]{1,160})$"
 
 
 class PasskeyError(Exception):

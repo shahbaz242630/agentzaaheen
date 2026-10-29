@@ -180,6 +180,7 @@ class LaptopSwitches:
         self._uses = uses
         self._clock = clock
         self._switches: DashboardSwitches | None = None
+        self._passkeys: PasskeyApprovals | None = None
         self._ledger: Ledger | None = None
         self._opening: asyncio.Lock | None = None
         self._db: Database | None = None
@@ -192,7 +193,7 @@ class LaptopSwitches:
                 db = self._db = await Database.open(self._settings)
                 self._ledger = Ledger(db, LAPTOP_TENANT)
                 control = RegistryControl(db, LAPTOP_TENANT, self._registry)
-                passkeys = PasskeyApprovals(
+                passkeys = self._passkeys = PasskeyApprovals(
                     db, LAPTOP_TENANT, control, self._site, enrol_code=self._enrol_code, clock=self._clock
                 )
                 self._switches = DashboardSwitches(control, passkeys, self._registry, self._uses, self._clock)
@@ -520,6 +521,26 @@ class LaptopSwitches:
     async def enrol_options(self, code: str) -> dict[str, Any]:
         """Options to make the passkey (needs the start-up code)."""
         return await (await self._open()).enrol_options(code)
+
+    # ---- signing in to the dashboard (ADR-SEC-010): the same passkey
+
+    async def _passkeys_now(self) -> PasskeyApprovals:
+        await self._open()
+        if self._passkeys is None:  # pragma: no cover  # _open always sets it
+            raise RuntimeError("the laptop database is not open")
+        return self._passkeys
+
+    async def sign_in_options(self) -> dict[str, Any]:
+        """Options for Windows Hello to sign in."""
+        return await (await self._passkeys_now()).sign_in_options()
+
+    async def sign_in(self, credential: dict[str, Any]) -> bool:
+        """Whether the signed sign-in answer holds (audited)."""
+        return await (await self._passkeys_now()).sign_in(credential)
+
+    async def signed_out(self, reason: str) -> None:
+        """Audit a session's end."""
+        await (await self._passkeys_now()).signed_out(reason)
 
     async def enrol(self, code: str, credential: dict[str, Any]) -> None:
         """Keep the new passkey's public half."""

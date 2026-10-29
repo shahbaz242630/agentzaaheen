@@ -382,6 +382,36 @@ LOG_EVENTS: Mapping[str, LogEvent] = {
         what="A passkey step ({action}) ended as {verdict}.",
         why="The Chairman used Windows Hello on the Customize page; the audit log keeps the same decision.",
     ),
+    "session_started": LogEvent(
+        "info",
+        what="The Chairman signed in to the dashboard.",
+        why="Windows Hello signed the sign-in challenge (or set up a new passkey); "
+        "the audit log keeps the same.",
+    ),
+    "session_ended": LogEvent(
+        "info",
+        what="A dashboard sign-in ended ({reason}).",
+        why="Sign-ins end on Sign out, after 3 hours with nothing done, after 12 hours at most, "
+        "or when a 4th sign-in replaces the oldest.",
+    ),
+    "sign_in_failed": LogEvent(
+        "warning",
+        what="A sign-in to the dashboard failed.",
+        why="The Windows Hello answer did not check out; the audit log keeps the reason.",
+        next="If the Chairman did not just try to sign in, check what else is running on this laptop.",
+    ),
+    "sign_in_waiting": LogEvent(
+        "warning",
+        what="Sign-in to the dashboard now waits 1 minute.",
+        why="Five sign-ins failed within 10 minutes.",
+        next="If the Chairman did not make those tries, check what else is running on this laptop.",
+    ),
+    "session_audit_failed": LogEvent(
+        "warning",
+        what="A sign-out could not be written to the audit log ({code}).",
+        why="The database did not take the record; the sign-out itself still happened.",
+        next="Check the laptop database is running.",
+    ),
     "claude_key_decided": LogEvent(
         "info",
         what="Saving the Claude API key ended as {verdict}.",

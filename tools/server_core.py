@@ -100,7 +100,8 @@ def plan(
         if not creds.get(needed):
             raise NotReadyError(f"the credential {needed} is missing")
     env = {name: value for name, value in creds.items() if ENV_NAME.match(name) and value}
-    argv = ["--switches", "--vault-key", str(vault_key), "--log-dir", str(LOG_DIR)]
+    # No sign-in: this copy serves no pages and answers only on 127.0.0.1 (ADR-SEC-010).
+    argv = ["--switches", "--no-sign-in", "--vault-key", str(vault_key), "--log-dir", str(LOG_DIR)]
     for name, option in READERS.items():
         if name in env:
             argv += [option, name]

@@ -37,12 +37,16 @@ and the chat may use only what is on. Requests are approved with a Windows
 Hello passkey (ADR-SEC-007); passkeys need a name, not an IP, so the
 dashboard is opened at http://localhost (it still listens on 127.0.0.1 only).
 ``--enrol-passkey`` allows the one-time passkey set-up and prints the code
-the page asks for. ``--uptime FILE`` checks each project's public addresses
-once (status only, never the page) from the local list ``projects/uptime.yaml``
-(``tools.dashboard_uptime``) and shows them on each project's Uptime card,
-re-checking every 5 minutes; with ``--ntfy-topic-env NAME`` a site going
-down (two failed checks in a row) or coming back is pushed to the
-Chairman's phone (ADR-031). With ``--otel-token-env NAME --otel-endpoint URL
+the page asks for. With ``--switches`` the page also asks for a Windows Hello
+sign-in before it shows anything (ADR-SEC-010; 3 hours idle, 12 hours at most,
+a restart signs out); a new passkey made with the code signs in too, which is
+how a lost one is recovered. ``--no-sign-in`` turns that off (our server's
+copy, which serves no pages and answers only on 127.0.0.1). ``--uptime FILE``
+checks each project's public addresses once (status only, never the page)
+from the local list ``projects/uptime.yaml`` (``tools.dashboard_uptime``)
+and shows them on each project's Uptime card, re-checking every 5 minutes;
+with ``--ntfy-topic-env NAME`` a site going down (two failed checks in a row)
+or coming back is pushed to the Chairman's phone (ADR-031). With ``--otel-token-env NAME --otel-endpoint URL
 --otel-user ID`` every API request, outside call and database use is traced
 and sent to the trace store (``tools.dashboard_tracing``, ADR-032). With
 ``--fixes FILE`` the chat can read each project part's fix guide
@@ -93,6 +97,7 @@ from pydantic import SecretStr
 from agentzaaheen.core.api import LOCAL_HOSTS, ChatBackend, Portfolio, SamplePortfolio, create_app
 from agentzaaheen.core.api.code import CARD_ID as CODE_CARD
 from agentzaaheen.core.api.registry import RegistryPage, registry_page, uses_from_cards
+from agentzaaheen.core.api.session import SessionGate
 from agentzaaheen.core.api.uptime import CARD_ID as UPTIME_CARD
 from agentzaaheen.core.api.workspaces import WorkspaceDirectory
 from agentzaaheen.core.auth import Site
@@ -390,6 +395,9 @@ def _parser() -> argparse.ArgumentParser:
         "--enrol-passkey", action="store_true", help="allow the one-time passkey set-up (needs --switches)"
     )
     parser.add_argument(
+        "--no-sign-in", action="store_true", help="do not ask for a Windows Hello sign-in (our server's copy)"
+    )
+    parser.add_argument(
         "--uptime", type=Path, help="check the addresses in this local list (projects/uptime.yaml)"
     )
     parser.add_argument("--ntfy-topic-env", help="env var holding the secret ntfy topic for uptime alerts")
@@ -613,6 +621,7 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
         model_key=LaptopModelKeys(switches) if switches is not None else None,
         chats=switches,
         custom_mcp=LaptopCustomMcp(switches) if switches is not None else None,
+        session=SessionGate(switches, clock) if switches is not None and not ns.no_sign_in else None,
         on_start=_starter(summaries, monitoring, sweep),
         on_close=_closer(switches, scout, summaries, monitoring, sweep),
     )
@@ -622,6 +631,7 @@ def _start(  # noqa: PLR0913, PLR0915  # the parsed options and the outside worl
         what += "; chat connected to our server's model" if server else "; chat connected to the local model"
     if switches is not None:
         what += "; switches remembered in the laptop database"
+        what += "; sign-in is off" if ns.no_sign_in else "; sign in with Windows Hello"
     if summaries is not None:
         what += f"; daily summaries at 05:00 and the briefing at 07:00 ({ns.briefing_zone})"
     print(f"dashboard: open http://localhost:{ns.port} ({what}; press Ctrl+C to stop)")
