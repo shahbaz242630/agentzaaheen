@@ -30,6 +30,7 @@ from agentzaaheen.core.store import (
     CustomMcpRows,
     DailySummaries,
     KillSwitchRows,
+    KnowledgeRows,
     MissRow,
     ModelCallMisses,
     ModelCalls,
@@ -159,6 +160,7 @@ async def _fill_every_table(url: str) -> None:
         await CustomMcpRows(db.scoped(TENANT)).add(  # a custom MCP server (ADR-041)
             uuid4(), "walled", "https://mcp.example.com/", added_by=CHAIRMAN, added_at=NOW
         )
+        await KnowledgeRows(here).replace("README.md", "a" * 40, [("Walled", "A passage.")], at=NOW)  # F12
 
 
 async def _count(url: str, table: str, tenant: UUID, workspace: UUID | None) -> int:
